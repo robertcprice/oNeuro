@@ -1,6 +1,12 @@
 # oNeuro
 
+<div align="center">
+
+![oNeuro Logo](docs/assets/logo.png)
+
 **Biologically-inspired neural networks with neurogenesis, quantum effects, and reward-modulated learning.**
+
+</div>
 
 A novel fusion of four paradigms:
 - **Liquid Neural Networks** - Continuous-time dynamics with ODE-based state evolution
