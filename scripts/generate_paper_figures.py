@@ -131,14 +131,14 @@ MANUAL_DATA = {
         "n_test_rallies": 30,
     },
 
-    # Experiment 4: Arena/Doom navigation (5050 neurons)
+    # Experiment 4: Spatial Arena navigation (5050 neurons)
     "exp4_arena_navigation": {
         "quarter_success_rates": [0.23, 0.31, 0.38, 0.46],
         "quarter_labels": ["Q1\n(ep 1-12)", "Q2\n(ep 13-25)",
                            "Q3\n(ep 26-37)", "Q4\n(ep 38-50)"],
     },
 
-    # Experiment 5 (Doom drug effects): 5050 neurons, 3 seeds (42, 1042, 2042)
+    # Experiment 5 (Spatial Arena drug effects): 5050 neurons, 3 seeds (42, 1042, 2042)
     "exp5_doom_drugs": {
         "conditions": ["Baseline", "Caffeine", "Diazepam", "Amphetamine", "Meth"],
         "scores": [[-21.5, -27.35, -18.2], [-15.85, -20.05, -21.35],
@@ -491,7 +491,7 @@ def figure3_pong_drugs(
 
 
 # ---------------------------------------------------------------------------
-# Figure 4: Arena / Doom Navigation
+# Figure 4: Spatial Arena Navigation
 # ---------------------------------------------------------------------------
 
 def figure4_arena_navigation(
@@ -575,7 +575,7 @@ def figure4_arena_navigation(
 
 
 # ---------------------------------------------------------------------------
-# Figure 5: Doom Drug Effects (dual Y-axis)
+# Figure 5: Spatial Arena Drug Effects (dual Y-axis)
 # ---------------------------------------------------------------------------
 
 def figure5_doom_drugs(
@@ -605,7 +605,7 @@ def figure5_doom_drugs(
             damage_sems = None
 
     else:
-        # Doom drug data would be in a separate experiment JSON
+        # Spatial Arena drug data would be in a separate experiment JSON
         # Look for doom-specific keys or exp5 keys with score/damage
         conditions, scores, damage = [], [], []
         score_sems, damage_sems = None, None
@@ -629,7 +629,7 @@ def figure5_doom_drugs(
                     break
 
         if not conditions:
-            print("  WARNING: No Doom drug data found in JSON, skipping Figure 5")
+            print("  WARNING: No Spatial Arena drug data found in JSON, skipping Figure 5")
             plt.close(fig)
             return
 
@@ -888,8 +888,8 @@ def main() -> int:
         1: ("Pong Learning Curve", figure1_pong_learning),
         2: ("FEP vs DA vs Random", figure2_protocol_comparison),
         3: ("Pharmacological Effects on Pong", figure3_pong_drugs),
-        4: ("Arena/Doom Navigation", figure4_arena_navigation),
-        5: ("Doom Drug Effects", figure5_doom_drugs),
+        4: ("Spatial Arena Navigation", figure4_arena_navigation),
+        5: ("Spatial Arena Drug Effects", figure5_doom_drugs),
         6: ("Scale Invariance", figure6_scale_invariance),
     }
 

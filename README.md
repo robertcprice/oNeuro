@@ -212,13 +212,13 @@ oNeuro replicates and extends Cortical Labs' DishBrain (Kagan et al. 2022) — t
 | **Pharmacological Effects** | Caffeine enhances, diazepam impairs (impossible on real tissue) | PASS |
 | **Arena Navigation** | Extending DishBrain from 1D Pong to 2D grid world | PASS |
 | **Scale Invariance** | Learning at 1K → 10K neurons | PASS |
-| **Doom Arena** | 25×25 room-corridor world with enemies, health, 8-directional movement | PASS |
+| **Spatial Arena** | 25×25 room-corridor world with enemies, health, 8-directional movement (inspired by Doom's BSP dungeon generation) | PASS |
 
 ```bash
 # Run DishBrain replication
 python3 demos/demo_dishbrain_pong.py
 
-# Run Doom arena (extended spatial navigation)
+# Run Spatial Arena (extended spatial navigation)
 python3 demos/demo_doom_arena.py
 
 # Run at GPU scale with JSON output
@@ -289,7 +289,7 @@ oNeuro/
 │   └── mega_benchmark.py       # Full benchmark with consciousness
 ├── demos/
 │   ├── demo_dishbrain_pong.py      # DishBrain replication (5 experiments)
-│   ├── demo_doom_arena.py          # Doom-like spatial navigation (3 experiments)
+│   ├── demo_doom_arena.py          # Spatial Arena navigation (3 experiments, inspired by Doom's BSP level generation)
 │   ├── demo_beyond_ann.py          # Beyond ANN capabilities (23 experiments)
 │   ├── demo_emergent_cuda.py       # Emergent behaviors at GPU scale
 │   ├── demo_language_cuda.py       # Language learning at GPU scale
@@ -342,14 +342,14 @@ All demos support `--scale`, `--device cuda`, `--json`, and `--runs N` for multi
 # Medium scale, 3 seeds, JSON output
 python3 demos/demo_dishbrain_pong.py --scale medium --device cuda --runs 3 --json results.json
 
-# Large scale Doom arena
+# Large scale Spatial Arena
 python3 demos/demo_doom_arena.py --scale large --device cuda --json doom_results.json
 
 # Vast.ai deployment (provisions GPU, deploys code, runs experiments)
 bash scripts/vast_deploy.sh search          # find cheap A100s
 bash scripts/vast_deploy.sh create <offer>  # provision
 bash scripts/vast_deploy.sh dishbrain <id> medium  # run DishBrain
-bash scripts/vast_deploy.sh doom <id> medium       # run Doom arena
+bash scripts/vast_deploy.sh doom <id> medium       # run Spatial Arena
 bash scripts/vast_deploy.sh results <id>           # download JSON
 ```
 

@@ -3,7 +3,7 @@
 # Vast.ai deployment script for oNeuro dONN GPU experiments
 #
 # Deploys to an H200/A100/4090 instance and runs language learning,
-# DishBrain replication, and Doom Arena experiments at GPU scale.
+# DishBrain replication, and Spatial Arena experiments at GPU scale.
 #
 # Usage:
 #   # Step 1: Find cheapest GPU instance
@@ -18,7 +18,7 @@
 #   # Step 4: Run experiments
 #   bash scripts/vast_deploy.sh run <id> [scale]                # language learning
 #   bash scripts/vast_deploy.sh dishbrain <id> [scale] [flags]  # DishBrain Pong
-#   bash scripts/vast_deploy.sh doom <id> [scale] [flags]       # Doom Arena
+#   bash scripts/vast_deploy.sh doom <id> [scale] [flags]       # Spatial Arena
 #   bash scripts/vast_deploy.sh all <id> [scale]                # everything
 #
 #   # Step 5: Collect results and destroy
@@ -213,7 +213,7 @@ cmd_doom() {
     local scale="${2:-medium}"
     shift 2 2>/dev/null || true
     local extra_args="$*"
-    log "Running Doom Arena experiments at ${scale} scale on instance ${instance_id}..."
+    log "Running Spatial Arena experiments at ${scale} scale on instance ${instance_id}..."
 
     local ssh_url
     ssh_url=$(vastai ssh-url "${instance_id}" 2>/dev/null)
@@ -227,12 +227,12 @@ PYTHONPATH=src python3 demos/demo_doom_arena.py \\
     ${extra_args} \\
     2>&1 | tee /workspace/doom_${scale}.txt
 echo ""
-echo "=== Doom Arena results saved ==="
+echo "=== Spatial Arena results saved ==="
 echo "  Text: /workspace/doom_${scale}.txt"
 echo "  JSON: /workspace/doom_${scale}.json"
 RUNCMD
 
-    log "Doom Arena experiments complete!"
+    log "Spatial Arena experiments complete!"
 }
 
 cmd_all() {
@@ -380,7 +380,7 @@ case "${1:-help}" in
         echo "  deploy <id>                     Deploy oNeuro to instance"
         echo "  run <id> [scale]                Run language experiments (mega/100k/1m)"
         echo "  dishbrain <id> [scale] [flags]  Run DishBrain Pong experiments"
-        echo "  doom <id> [scale] [flags]       Run Doom Arena experiments"
+        echo "  doom <id> [scale] [flags]       Run Spatial Arena experiments"
         echo "  all <id> [scale]                Run benchmark + language + dishbrain + doom"
         echo "  benchmark <id>                  Run scaling benchmark"
         echo "  results <id>                    Download results (txt + json)"

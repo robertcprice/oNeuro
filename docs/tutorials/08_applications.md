@@ -12,7 +12,7 @@ This tutorial covers:
 - Brain-Computer Interfaces (demonstrated in DishBrain replication)
 - Neuromorphic engineering
 - Cognitive robotics
-- Game learning (DishBrain Pong, Doom Arena)
+- Game learning (DishBrain Pong, Spatial Arena)
 - Open research questions
 
 ## Application Areas
@@ -523,7 +523,7 @@ oNeuro's dONN replicates Cortical Labs' DishBrain (Kagan et al. 2022) — the fi
 # Replicate DishBrain Pong (5 experiments)
 python3 demos/demo_dishbrain_pong.py
 
-# Doom-like spatial navigation (3 experiments)
+# Spatial Arena navigation (3 experiments, inspired by Doom's BSP level generation)
 python3 demos/demo_doom_arena.py
 
 # Run at GPU scale with multi-seed statistical analysis
@@ -534,9 +534,9 @@ Key capabilities unique to dONN game learning:
 - **Reversible drug application**: Train a brain, apply caffeine or diazepam, test — then remove the drug. Impossible on real neurons where drugs are irreversible.
 - **Scale invariance**: Test learning at 1K, 5K, 25K, 100K neurons — far beyond what's feasible with biological tissue.
 - **Protocol comparison**: Run identical brains with FEP, DA reward, or random feedback to isolate the learning mechanism.
-- **Spatial navigation**: Extend 1D Pong to 25×25 Doom-like arenas with enemies, health pickups, and room navigation.
+- **Spatial navigation**: Extend 1D Pong to 25×25 Spatial Arenas (inspired by Doom's BSP level generation) with enemies, health pickups, and room navigation.
 
-See `demos/demo_dishbrain_pong.py` and `demos/demo_doom_arena.py` for full implementations, and Tutorial 9 for the Doom Arena walkthrough.
+See `demos/demo_dishbrain_pong.py` and `demos/demo_doom_arena.py` for full implementations, and Tutorial 9 for the Spatial Arena walkthrough.
 
 ## Open Research Questions
 

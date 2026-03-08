@@ -1,8 +1,8 @@
-# Tutorial 9: Doom Arena — Spatial Navigation with dONNs
+# Tutorial 9: Spatial Arena — Spatial Navigation with dONNs
 
 ## Overview
 
-This tutorial walks through oNeuro's Doom Arena demo, which extends the DishBrain Pong paradigm (Tutorial 8, Application 5) from 1D tracking to 2D spatial navigation in a procedurally generated dungeon environment. The dONN (digital Organic Neural Network) must navigate rooms and corridors to reach a goal while avoiding enemies and collecting health pickups — all learning is driven by the **Free Energy Principle**, not reward signals.
+This tutorial walks through oNeuro's Spatial Arena demo (inspired by Doom's BSP dungeon generation algorithm), which extends the DishBrain Pong paradigm (Tutorial 8, Application 5) from 1D tracking to 2D spatial navigation in a procedurally generated dungeon environment. The dONN (digital Organic Neural Network) must navigate rooms and corridors to reach a goal while avoiding enemies and collecting health pickups — all learning is driven by the **Free Energy Principle**, not reward signals.
 
 This tutorial covers:
 - The Free Energy Principle (FEP) in spatial environments
@@ -38,13 +38,13 @@ PYTHONPATH=src python3 demos/demo_doom_arena.py --runs 5 --json multi_seed.json
 
 ## The Free Energy Principle in Spatial Environments
 
-### From Pong to Doom
+### From Pong to Spatial Arena
 
 In the DishBrain Pong demo, the FEP protocol is simple:
 - **Hit** (correct paddle position): Structured pulse → low entropy → STDP strengthens active pathways
 - **Miss**: Random noise → high entropy → no systematic STDP
 
-The Doom Arena extends this to a richer set of spatial outcomes:
+The Spatial Arena extends this to a richer set of spatial outcomes:
 
 | Event | FEP Response | Entropy | Biological Analogy |
 |-------|-------------|---------|-------------------|
@@ -133,7 +133,7 @@ The BSP algorithm is seeded, so the same seed always produces the same dungeon. 
 
 ## Three Experiments
 
-### Experiment 1: Doom Navigation
+### Experiment 1: Spatial Arena Navigation
 
 **Question**: Can the dONN navigate rooms to reach a goal?
 
@@ -146,7 +146,7 @@ The BSP algorithm is seeded, so the same seed always produces the same dungeon. 
 
 **Biological analogy**: Morris water maze — rodents learn to navigate to a hidden platform using spatial cues. Hippocampal lesions impair this task.
 
-### Experiment 2: Doom Threat Avoidance
+### Experiment 2: Spatial Arena Threat Avoidance
 
 **Question**: Does the dONN learn to avoid enemies?
 
@@ -156,7 +156,7 @@ The BSP algorithm is seeded, so the same seed always produces the same dungeon. 
 
 **Biological analogy**: Conditioned place avoidance — rodents learn to avoid locations associated with aversive stimuli. The FEP noise on enemy contact creates a free-energy gradient away from enemy positions.
 
-### Experiment 3: Doom Drug Effects
+### Experiment 3: Spatial Arena Drug Effects
 
 **Question**: Does diazepam impair spatial navigation?
 
@@ -205,7 +205,7 @@ At small scale (1K neurons), expect noisy learning with many failures. At medium
 
 ## Comparison to Original DishBrain
 
-| Aspect | DishBrain (Kagan 2022) | oNeuro Pong | oNeuro Doom Arena |
+| Aspect | DishBrain (Kagan 2022) | oNeuro Pong | oNeuro Spatial Arena |
 |--------|----------------------|-------------|-------------------|
 | **Substrate** | 800K living neurons (ONN) | 1K-100K simulated (dONN) | 1K-100K simulated (dONN) |
 | **Task** | 1D Pong | 1D Pong | 25×25 dungeon navigation |
@@ -233,4 +233,4 @@ In this tutorial, you learned:
 5. **Drug Effects**: In-silico Morris water maze pharmacology (diazepam impairs spatial learning)
 6. **Scale Considerations**: Small networks need smaller grids; GPU scale enables 25×25 mazes
 
-The Doom Arena demonstrates that dONNs can handle significantly more complex spatial tasks than 1D Pong, approaching the complexity of real rodent navigation experiments — but with the ability to apply reversible drugs, control every parameter, and run thousands of trials in hours rather than months.
+The Spatial Arena demonstrates that dONNs can handle significantly more complex spatial tasks than 1D Pong, approaching the complexity of real rodent navigation experiments — but with the ability to apply reversible drugs, control every parameter, and run thousands of trials in hours rather than months.

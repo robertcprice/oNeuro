@@ -19,7 +19,7 @@ Terminology:
    1. DishBrain Pong Replication (free energy principle)
    2. Learning Speed Comparison (free energy vs DA reward vs random)
    3. Pharmacological Effects (caffeine improves, diazepam impairs — IMPOSSIBLE on real tissue)
-   4. Arena Navigation (simplified Doom: 2D grid, 4 actions)
+   4. Arena Navigation (simplified Spatial Arena: 2D grid, 4 actions)
    5. Scale Invariance (learning at 1K, 5K, 25K neurons)
 
 Key innovation: Learning via FREE ENERGY PRINCIPLE, not reward/punishment.
@@ -144,7 +144,7 @@ class SimplePong:
 
 
 class SimpleArena:
-    """2D 10x10 grid navigation — simplified Doom.
+    """2D 10x10 grid navigation — simplified Spatial Arena.
 
     Agent starts at random position, must reach a target.
     4 actions: up, down, left, right.
@@ -1034,7 +1034,7 @@ def exp_pharmacology(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Experiment 4: Arena Navigation (Simplified Doom)
+# Experiment 4: Arena Navigation (Simplified Spatial Arena)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def exp_arena_navigation(
@@ -1045,7 +1045,7 @@ def exp_arena_navigation(
 ) -> Dict[str, Any]:
     """2D grid navigation — extending DishBrain from 1D Pong to 2D world."""
     _header(
-        "Exp 4: Arena Navigation (Simplified Doom)",
+        "Exp 4: Arena Navigation (Simplified Spatial Arena)",
         "2D grid, 4 actions, free energy training — extending DishBrain to 2D"
     )
     t0 = time.perf_counter()

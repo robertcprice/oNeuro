@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""DoomArena -- Spatial Navigation and Threat Avoidance for dONN Brains.
+"""Spatial Arena -- Spatial Navigation and Threat Avoidance for dONN Brains.
 
-A Doom-inspired spatial environment for digital Organic Neural Network (dONN)
-game learning, extending the DishBrain paradigm (Kagan et al. 2022) from 1D
-Pong to a procedurally generated 2D dungeon with rooms, corridors, enemies,
-and health pickups.
+A spatial environment (inspired by Doom's BSP dungeon generation algorithm)
+for digital Organic Neural Network (dONN) game learning, extending the
+DishBrain paradigm (Kagan et al. 2022) from 1D Pong to a procedurally
+generated 2D dungeon with rooms, corridors, enemies, and health pickups.
 
 The agent perceives a 5x5 egocentric local view (mimicking retinotopic V1
 encoding) and must navigate to a goal while avoiding enemies and collecting
@@ -13,15 +13,15 @@ reward signal, no punishment -- only the contrast between structured
 (predictable) and unstructured (random) sensory feedback.
 
 3 Experiments:
-    1. Doom Navigation (50 episodes)
+    1. Spatial Arena Navigation (50 episodes)
        Can the dONN navigate procedurally generated rooms to reach a goal?
        Pass: goal rate > random AND improving over quarters.
 
-    2. Doom Threat Avoidance (80 episodes)
+    2. Spatial Arena Threat Avoidance (80 episodes)
        Does it learn to avoid enemies?
        Pass: survival rate improves AND damage taken decreases over quarters.
 
-    3. Doom Drug Effects
+    3. Spatial Arena Drug Effects
        Train 3 identical brains, test baseline / caffeine / diazepam.
        Pass: diazepam < baseline (matches Morris water maze literature --
        GABA-A enhancement impairs spatial navigation).
@@ -338,12 +338,13 @@ def generate_dungeon(
 # ============================================================================
 
 class DoomArena:
-    """Doom-inspired 25x25 grid environment with enemies and health pickups.
+    """Spatial Arena: 25x25 grid environment with enemies and health pickups.
 
-    The agent navigates procedurally generated rooms and corridors to reach
-    a goal tile while avoiding enemies and optionally collecting health
-    pickups.  The environment is fully observable but the neural interface
-    only provides a 5x5 egocentric local view (see DoomSensoryEncoder).
+    Inspired by Doom's BSP dungeon generation algorithm, the agent navigates
+    procedurally generated rooms and corridors to reach a goal tile while
+    avoiding enemies and optionally collecting health pickups.  The
+    environment is fully observable but the neural interface only provides
+    a 5x5 egocentric local view (see DoomSensoryEncoder).
 
     Biological motivation:
         This extends the DishBrain Pong paradigm from 1D tracking to 2D
@@ -932,7 +933,7 @@ def play_doom_episode(
     protocol: SpatialFEP,
     stim_steps: int = 20,
 ) -> Dict[str, Any]:
-    """Play one full DoomArena episode with FEP-based learning.
+    """Play one full Spatial Arena episode with FEP-based learning.
 
     Each step:
         1. Encode 5x5 local view onto relay neurons (pulsed).
@@ -944,7 +945,7 @@ def play_doom_episode(
 
     Args:
         rb: The regional brain.
-        arena: The DoomArena environment.
+        arena: The Spatial Arena environment.
         encoder: Sensory encoder.
         decoder: Motor decoder.
         protocol: Spatial FEP protocol.
@@ -1036,7 +1037,7 @@ def _build_doom_brain(
     seed: int,
 ) -> Tuple[CUDARegionalBrain, DoomSensoryEncoder, DoomMotorDecoder,
            SpatialFEP, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Build a brain and all neural components for DoomArena.
+    """Build a brain and all neural components for the Spatial Arena.
 
     Args:
         scale: Network scale name.
@@ -1071,7 +1072,7 @@ def _build_doom_brain(
 
 
 # ============================================================================
-# Experiment 1: Doom Navigation
+# Experiment 1: Spatial Arena Navigation
 # ============================================================================
 
 def exp_doom_navigation(
@@ -1097,7 +1098,7 @@ def exp_doom_navigation(
         in spatial learning.
     """
     _header(
-        "Exp 1: Doom Navigation",
+        "Exp 1: Spatial Arena Navigation",
         "Can the dONN navigate rooms to reach a goal via FEP?"
     )
     t0 = time.perf_counter()
@@ -1182,7 +1183,7 @@ def exp_doom_navigation(
 
 
 # ============================================================================
-# Experiment 2: Doom Threat Avoidance
+# Experiment 2: Spatial Arena Threat Avoidance
 # ============================================================================
 
 def exp_doom_threat_avoidance(
@@ -1207,7 +1208,7 @@ def exp_doom_threat_avoidance(
         energy gradient away from enemy locations.
     """
     _header(
-        "Exp 2: Doom Threat Avoidance",
+        "Exp 2: Spatial Arena Threat Avoidance",
         "Does the dONN learn to avoid enemies via FEP?"
     )
     t0 = time.perf_counter()
@@ -1275,7 +1276,7 @@ def exp_doom_threat_avoidance(
 
 
 # ============================================================================
-# Experiment 3: Doom Drug Effects
+# Experiment 3: Spatial Arena Drug Effects
 # ============================================================================
 
 def exp_doom_drug_effects(
@@ -1303,7 +1304,7 @@ def exp_doom_drug_effects(
         pharmacological findings in silico.
     """
     _header(
-        "Exp 3: Doom Drug Effects",
+        "Exp 3: Spatial Arena Drug Effects",
         "5 drugs: baseline / caffeine / diazepam / amphetamine / meth"
     )
     t0 = time.perf_counter()
@@ -1467,16 +1468,16 @@ def _run_experiment_multi(
 # ============================================================================
 
 ALL_EXPERIMENTS = {
-    1: ("Doom Navigation", exp_doom_navigation),
-    2: ("Doom Threat Avoidance", exp_doom_threat_avoidance),
-    3: ("Doom Drug Effects", exp_doom_drug_effects),
+    1: ("Spatial Arena Navigation", exp_doom_navigation),
+    2: ("Spatial Arena Threat Avoidance", exp_doom_threat_avoidance),
+    3: ("Spatial Arena Drug Effects", exp_doom_drug_effects),
 }
 
 
 def main():
-    """Main entry point for the DoomArena demo."""
+    """Main entry point for the Spatial Arena demo."""
     parser = argparse.ArgumentParser(
-        description="DoomArena -- Spatial Navigation for dONN Brains"
+        description="Spatial Arena -- Spatial Navigation for dONN Brains (inspired by Doom's BSP level generation)"
     )
     parser.add_argument(
         "--exp", type=int, nargs="*", default=None,
