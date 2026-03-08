@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oNeuro"
-version = "0.1.0"
-description = "Biologically-inspired neural networks with neurogenesis, quantum effects, and reward-modulated learning"
+version = "0.4.0"
+description = "oNeuro: Digital Organic Neural Network (dONN) platform — molecular-scale neural simulation with emergent electrophysiology, consciousness measurement, and psychopharmacology"
 readme = "README.md"
 license = {text = "CC-BY-NC-4.0"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Entropy Research", email = "research@entropy.ai"}
+    {name = "Blackweb AI", email = "bobby@blackweb.ai"}
 ]
-keywords = ["neural-networks", "neurogenesis", "quantum", "biologically-inspired", "neuromorphic", "brain"]
+keywords = ["neural-networks", "neurogenesis", "quantum", "biologically-inspired", "neuromorphic", "brain", "consciousness", "pharmacology", "hodgkin-huxley", "molecular-simulation", "dONN", "organic-neural-network", "dishbrain", "free-energy-principle"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -28,6 +28,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "black>=23.0", "mypy>=1.0"]
 viz = ["matplotlib>=3.7.0"]
+molecular = ["nqpu>=0.1.0"]
+all = ["oNeuro[molecular]", "oNeuro[viz]"]
 
 [project.urls]
 Homepage = "https://github.com/robertcprice/oNeuro"

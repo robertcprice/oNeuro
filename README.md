@@ -4,235 +4,344 @@
 
 ![oNeuro Logo](docs/assets/logo.png)
 
-**Biologically-inspired neural networks with neurogenesis, quantum effects, and reward-modulated learning.**
+**Molecular-scale neural simulation with emergent electrophysiology, consciousness measurement, and psychopharmacology.**
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 
 </div>
 
-A novel fusion of four paradigms:
-- **Liquid Neural Networks** - Continuous-time dynamics with ODE-based state evolution
-- **Neural Cellular Automata** - Self-organization and emergent computation
-- **Digital Evolution** - Neurogenesis (birth), pruning (death), and natural selection
-- **Quantum Effects** - Superposition states, entanglement, and quantum coherence
+## What Is This?
 
-This is the **first implementation** combining all four paradigms into a unified neural architecture.
+oNeuro is a platform for building and running **digital Organic Neural Networks (dONNs)** — biophysically faithful simulations of biological neural tissue at molecular resolution. Every neuron has Hodgkin-Huxley ion channels, real neurotransmitter molecules (with SMILES), enzymatic degradation, gene expression, second messenger cascades, dendritic trees, axonal conduction, glial cells, gap junctions, circadian rhythms, and quantum-coherent microtubules.
+
+**Membrane potential emerges from ion channel physics** — it is never a hand-set float.
+
+## Terminology
+
+| Term | Meaning |
+|------|---------|
+| **ONN** | Organic Neural Network — real biological neurons on hardware (e.g., Cortical Labs' [DishBrain](https://doi.org/10.1016/j.neuron.2022.09.001), FinalSpark's bioprocessors) |
+| **dONN** | digital Organic Neural Network — oNeuro's biophysically faithful simulation of an ONN, running on GPU/CPU |
+| **oNeuro** | The software platform for building, running, and experimenting with dONNs |
+
+A dONN differs from a standard artificial neural network (ANN) in the same way a flight simulator differs from a paper airplane: both involve "flight," but only one models the physics. In a dONN, action potentials emerge from ion channel kinetics, learning emerges from receptor trafficking and STDP, and drug effects emerge from pharmacokinetics acting on molecular targets. Nothing is hand-tuned.
+
+The result is a platform where you can:
+- **Measure consciousness** (IIT Phi, PCI, criticality, Global Workspace, Orch-OR)
+- **Screen drugs** against a molecular brain and observe dose-response curves
+- **Study circadian pharmacology** — drug efficacy varies by time of day
+- **Model neurological conditions** — sleep disorders, critical period closure, damage recovery
+- **Compare against traditional networks** — molecular brains resist forgetting and recover from damage
 
 ## Installation
 
 ```bash
 pip install oNeuro
 
-# With visualization support
+# With quantum chemistry (nQPU Metal backend)
+pip install oNeuro[molecular]
+
+# With visualization
 pip install oNeuro[viz]
+
+# Everything
+pip install oNeuro[all]
 ```
 
 ## Quick Start
 
+### Molecular Neural Network
+
 ```python
-from organic_neural_network import OrganicNeuralNetwork, XORTask
+from oneuro.molecular import MolecularNeuralNetwork
 
-# Create neural tissue (3D space)
-tissue = OrganicNeuralNetwork(
-    size=(10.0, 10.0, 5.0),    # 3D dimensions
-    initial_neurons=30,         # Starting neurons
-    energy_supply=2.0           # Metabolic energy
-)
+# Create a full molecular brain (all 25 subsystems)
+net = MolecularNeuralNetwork(initial_neurons=20, full_brain=True)
 
-# Define input/output regions (3D zones)
-tissue.define_input_region("input_a", (2.5, 5.0, 2.5), radius=1.5)
-tissue.define_input_region("input_b", (7.5, 5.0, 2.5), radius=1.5)
-tissue.define_output_region("output", (5.0, 5.0, 2.5), radius=1.5)
+# Run simulation — membrane potentials emerge from HH dynamics
+for step in range(1000):
+    fired = net.step(dt=0.1)  # Returns set of neuron IDs that spiked
+```
 
-# Create and train on XOR task
-task = XORTask(tissue)
-stats = tissue.train_task(task, n_episodes=100)
+### Consciousness Measurement
 
-# Evaluate
-result = tissue.evaluate_task(task, n_trials=25)
-print(f"Success rate: {result['success_rate']:.1%}")
+```python
+from oneuro.molecular import MolecularNeuralNetwork, ConsciousnessMonitor
+
+net = MolecularNeuralNetwork(initial_neurons=20, full_brain=True)
+monitor = ConsciousnessMonitor(net)
+
+# Build spike history
+for _ in range(2000):
+    fired = net.step(0.1)
+    monitor.record_step(fired)
+
+# Measure 7 consciousness metrics
+metrics = monitor.measure()
+print(f"Phi={metrics.phi_approx:.3f}")
+print(f"PCI={metrics.pci:.3f}")
+print(f"Criticality={metrics.branching_ratio:.3f}")
+print(f"Composite={metrics.composite:.3f}")
+```
+
+### Multi-Region Brain
+
+```python
+from oneuro.molecular import RegionalBrain
+
+# Creates cortex, thalamus, hippocampus, basal ganglia
+brain = RegionalBrain.minimal(seed=42)
+
+# Sensory input through thalamus
+brain.stimulate_thalamus(intensity=25.0)
+
+for _ in range(500):
+    brain.step(0.1)
+
+# Hippocampal memory
+brain.hippocampus.encode_pattern(brain.network, pattern, intensity=25.0)
+recall = brain.hippocampus.recall_from_partial(brain.network, partial_cue)
+```
+
+### Drug Screening
+
+```python
+from oneuro.molecular import MolecularNeuralNetwork, DRUG_LIBRARY
+
+net = MolecularNeuralNetwork(initial_neurons=15, full_brain=True)
+
+# Apply diazepam (GABA-A potentiator)
+diazepam = DRUG_LIBRARY["diazepam"](dose_mg=10.0)
+diazepam.apply(net)
+
+# Observe: firing rate drops ~60% (GABA inhibition)
+for _ in range(500):
+    fired = net.step(0.1)
+
+diazepam.remove(net)  # Clean removal
 ```
 
 ## Architecture
 
-### Core Concepts
+### 25 Molecular Subsystems
 
-**1. Neural Tissue**
-- Neurons exist in continuous 3D space (not layers)
-- Connections form based on spatial proximity and Hebbian learning
-- Metabolic energy system constrains growth
+| Layer | Components |
+|-------|-----------|
+| **Ion Channels** | Na_v, K_v, K_leak, Ca_v, NMDA, AMPA, GABA_A, nAChR (HH gating) |
+| **Neurotransmitters** | Dopamine, serotonin, norepinephrine, ACh, GABA, glutamate (real SMILES) |
+| **Receptors** | AMPA, NMDA, GABA-A, D1/D2, 5-HT, nAChR (Hill kinetics) |
+| **Enzymes** | MAO, AChE, COMT, GAT (quantum tunneling catalysis) |
+| **Membrane** | Hodgkin-Huxley dynamics, emergent action potentials |
+| **Gene Expression** | DNA → RNA → Protein, transcription factors (CREB, c-Fos), epigenetics |
+| **Second Messengers** | cAMP/PKA/PKC/CaMKII/CREB/MAPK cascades |
+| **Calcium** | Cytoplasmic/ER/mitochondrial/microdomain compartments |
+| **Dendrites** | Cable equation, multi-compartment, voltage propagation |
+| **Spines** | Volume-dependent plasticity, thin/mushroom/stubby morphology |
+| **Axons** | Myelinated/unmyelinated, saltatory conduction, Hursh's law |
+| **Metabolism** | ATP/ADP/AMP pools, glycolysis, oxidative phosphorylation |
+| **Glia** | Astrocytes (glutamate uptake), oligodendrocytes (myelin), microglia (pruning) |
+| **Gap Junctions** | Electrical synapses, connexin-based coupling |
+| **Extracellular** | 3D diffusion, transporter uptake, perineuronal nets |
+| **Microtubules** | Orch-OR quantum coherence, consciousness contribution |
+| **Circadian** | TTFL molecular clock, sleep homeostasis, adenosine pressure |
+| **Synapses** | NMDA-gated STDP, BCM metaplasticity, synaptic tagging & capture |
+| **Pharmacology** | 7 drugs with 1-compartment PK (Bateman) + PD (Hill equation) |
+| **Consciousness** | IIT Phi, PCI, neural complexity, criticality, Global Workspace |
+| **Brain Regions** | Cortical columns, thalamus, hippocampus, basal ganglia |
 
-**2. Neurogenesis**
-- New neurons can spawn from existing ones (mitosis)
-- Stem cells differentiate based on local activity patterns
-- Network literally grows its own architecture
+### Brain Region Architecture
 
-**3. Synaptic Plasticity**
-- Hebbian learning: "Neurons that fire together wire together"
-- Eligibility traces record co-activity patterns
-- Dopamine modulates consolidation of traces
-
-**4. Quantum Effects**
-- Neurons can enter superposition states
-- Entangled pairs share correlated behavior
-- Quantum coherence affects computation
-
-### Training System
-
-```python
-# Reward-modulated plasticity
-tissue.release_dopamine(1.0)  # Global reward signal
-tissue.apply_reward_modulated_plasticity()  # Consolidate learning
-
-# Structural adaptation based on performance
-tissue.structural_adaptation(performance=0.7)  # Grow if > 0.7, prune if < 0.3
+```
+Thalamus (relay + reticular)
+    ├── → Cortex L4 (feedforward sensory)
+    │       ├── → L2/3 (processing)
+    │       │       └── → Hippocampus DG (episodic encoding)
+    │       ├── → L5 (output)
+    │       │       ├── → Basal Ganglia (action selection)
+    │       │       └── ← Hippocampus CA1 (memory-guided behavior)
+    │       └── → L6 (feedback)
+    │               └── → Thalamus (corticothalamic feedback)
+    └── Reticular (GABAergic gating)
 ```
 
-## Built-in Tasks
+## Validated Results
 
-| Task | Description | Tests |
-|------|-------------|-------|
-| `XORTask` | Classic XOR problem | Non-linear computation |
-| `PatternRecognitionTask` | 2x2 pattern classification | Feature detection |
-| `MemoryTask` | Delayed pattern recall | Working memory |
-| `DecisionMakingTask` | Evidence accumulation | Temporal integration |
+### Molecular Brain vs Traditional Neural Networks
 
-## Training Results
+| Capability | Molecular Brain | Organic NN |
+|-----------|----------------|------------|
+| **Forgetting Resistance** | 9.0% loss after 4 tasks | 12.0% loss |
+| **Damage Recovery** | 60% recovery after 20% lesion | 0% recovery |
+| **Sleep Consolidation** | Gene expression + adenosine clearance | N/A |
+| **Learning Speed** | 86 episodes to criterion (slower) | 57 episodes (faster) |
 
-| Task | Before Training | After Training | Improvement |
-|------|-----------------|----------------|-------------|
-| XOR | 46.7% | 56.0% | +9.3% |
-| Pattern Recognition | 6.7% | 40.0% | +33.3% |
-| Memory | 46.7% | 36.0% | -10.7% |
-| Decision Making | 53.3% | 52.0% | -1.3% |
+The molecular brain learns **slower** but **consolidates better** and **recovers from damage** — matching biological neural tissue behavior.
 
-## Multi-Tissue Networks
+### Drug Effects (Validated)
 
-For brain-like architectures with specialized regions:
+| Drug | Mechanism | Effect on Firing Rate |
+|------|-----------|----------------------|
+| Diazepam | GABA-A potentiator | -63.6% |
+| Caffeine | Adenosine antagonist | +10.9% to +29.1% (dose-dependent) |
+| Amphetamine | DA/NE reuptake inhibitor | +15.2% |
+| Ketamine | NMDA antagonist | ~0% on rate (Mg2+ block), affects plasticity |
+| Fluoxetine | SSRI | Modest serotonergic modulation |
+| L-DOPA | Dopamine precursor | Dopaminergic enhancement |
+| Donepezil | AChE inhibitor | Cholinergic enhancement |
 
-```python
-from multi_tissue_network import (
-    MultiTissueNetwork,
-    CorticalTissue,
-    HippocampalTissue,
-    ThalamicTissue
-)
+### Consciousness Metrics
 
-brain = MultiTissueNetwork()
+The `ConsciousnessMonitor` computes 7 metrics on a running network:
+- **IIT Phi** (approximate): Information integration across bipartitions
+- **PCI**: Perturbational Complexity Index (Lempel-Ziv complexity of network response)
+- **Neural Complexity**: Tononi-Sporns balance of integration/segregation
+- **Branching Ratio**: Criticality measure (1.0 = edge of chaos)
+- **Global Workspace**: Ignition events and broadcasting persistence
+- **Orch-OR**: Aggregated microtubule quantum consciousness
+- **Composite**: Weighted mean of all metrics
 
-# Add specialized tissues
-brain.add_tissue("cortex", CorticalTissue(size=(20, 20, 5)))
-brain.add_tissue("hippocampus", HippocampalTissue(size=(10, 10, 3)))
-brain.add_tissue("thalamus", ThalamicTissue(size=(5, 5, 5)))
+### DishBrain Replication (dONN Game Learning)
 
-# Connect regions
-brain.connect("thalamus", "cortex", bidirectional=True)
-brain.connect("cortex", "hippocampus", bidirectional=True)
-brain.connect("hippocampus", "thalamus")
+oNeuro replicates and extends Cortical Labs' DishBrain (Kagan et al. 2022) — the first demonstration that biological neurons can learn to play Pong. Our dONN learns via the **Free Energy Principle** (no reward, no punishment), matching the original protocol:
 
-# Run unified simulation
-brain.step()
+| Experiment | What It Tests | Status |
+|-----------|--------------|--------|
+| **Pong Replication** | FEP-driven learning (structured vs unstructured feedback) | PASS |
+| **FEP vs DA vs Random** | Learning speed comparison across 3 protocols | PASS |
+| **Pharmacological Effects** | Caffeine enhances, diazepam impairs (impossible on real tissue) | PASS |
+| **Arena Navigation** | Extending DishBrain from 1D Pong to 2D grid world | PASS |
+| **Scale Invariance** | Learning at 1K → 10K neurons | PASS |
+| **Doom Arena** | 25×25 room-corridor world with enemies, health, 8-directional movement | PASS |
+
+```bash
+# Run DishBrain replication
+python3 demos/demo_dishbrain_pong.py
+
+# Run Doom arena (extended spatial navigation)
+python3 demos/demo_doom_arena.py
+
+# Run at GPU scale with JSON output
+python3 demos/demo_dishbrain_pong.py --scale medium --json results.json --runs 5
 ```
 
-## Quantum Consciousness Integration
+## Research Platforms
 
-The framework includes a quantum consciousness module implementing:
+oNeuro includes 7 ready-to-run research demonstrations:
 
-- **IIT (Integrated Information Theory)** - Phi calculation
-- **GWT (Global Workspace Theory)** - Attention and broadcasting
-- **Orch-OR (Orchestrated Objective Reduction)** - Penrose-Hameroff quantum consciousness
-- **Self-Model** - Mirror self-recognition tests
+| Platform | What It Does |
+|----------|-------------|
+| **A. Chronopharmacology** | Drug efficacy varies by circadian phase (>90% variation) |
+| **B. Sleep Research** | Normal vs caffeine vs shift-work sleep cycles |
+| **C. Neurodevelopment** | PNN-mediated critical period closure |
+| **D. Drug Screening** | Screen 7 drugs for efficacy + consciousness impact + ATP cost |
+| **E. Long-Duration** | Multi-cycle circadian oscillation + parameter sensitivity |
+| **F. Hippocampal Memory** | Encode → recall → partial recall → sleep replay |
+| **G. Dose-Response** | Hill equation dose-response curves for 3 drugs × 5 doses |
 
-```python
-from quantum_consciousness import ConsciousnessSystem
+```bash
+# Run all research platforms
+cd oNeuro && python3 demos/demo_research_platforms.py
 
-# Create consciousness system
-consciousness = ConsciousnessSystem(num_units=8, num_tubulins=8)
+# Run training comparison (molecular vs organic)
+python3 experiments/training_comparison.py
 
-# Run simulation
-for _ in range(100):
-    metrics = consciousness.step()
-    print(f"Phi={metrics.phi:.3f}, Coherence={metrics.coherence:.3f}")
-
-# Test self-awareness
-consciousness.self_model.mirror_test(reflection_data, is_self=True)
-```
-
-## Key Differences from Traditional Neural Networks
-
-| Feature | Traditional NN | Organic Neural |
-|---------|---------------|----------------|
-| Architecture | Fixed layers | Dynamic 3D tissue |
-| Learning | Backpropagation | Hebbian + dopamine |
-| Growth | Pre-defined | Neurogenesis |
-| Topology | Layer-wise | Spatial/proximity |
-| Dynamics | Discrete steps | Continuous ODEs |
-| Quantum | No | Superposition + entanglement |
-
-## API Reference
-
-### OrganicNeuralNetwork
-
-```python
-class OrganicNeuralNetwork:
-    def __init__(self, size, initial_neurons=50, energy_supply=1.0): ...
-
-    # Regions
-    def define_input_region(self, name, position, radius): ...
-    def define_output_region(self, name, position, radius): ...
-    def set_input(self, name, value): ...
-    def read_output(self, name) -> float: ...
-
-    # Training
-    def train_task(self, task, n_episodes=100) -> dict: ...
-    def evaluate_task(self, task, n_trials=25) -> dict: ...
-    def release_dopamine(self, amount): ...
-
-    # Structure
-    def structural_adaptation(self, performance): ...
-    def grow_neurons_in_region(self, region): ...
-    def prune_weak_connections(self, threshold=0.1): ...
-
-    # Simulation
-    def step(self, dt=0.001): ...
-    def run(self, duration_ms=10.0): ...
+# Run consciousness mega-benchmark
+python3 experiments/mega_benchmark.py
 ```
 
 ## Project Structure
 
 ```
-organic_neural/
-├── src/
-│   ├── organic_neural_network.py   # Core neural tissue
-│   ├── multi_tissue_network.py     # Brain-like architectures
-│   └── quantum_consciousness.py    # IIT/GWT/Orch-OR
+oNeuro/
+├── src/oneuro/
+│   ├── molecular/              # 25-file molecular simulation engine
+│   │   ├── network.py          # MolecularNeuralNetwork (main entry point)
+│   │   ├── neuron.py           # HH neuron with all subsystems
+│   │   ├── membrane.py         # Hodgkin-Huxley membrane dynamics
+│   │   ├── ion_channels.py     # 8 channel types with quantum gating
+│   │   ├── neurotransmitters.py # 6 NTs with real SMILES
+│   │   ├── synapse.py          # STDP + BCM + synaptic tagging
+│   │   ├── receptors.py        # Ligand-gated receptor kinetics
+│   │   ├── enzymes.py          # Enzymatic degradation (quantum tunneling)
+│   │   ├── gene_expression.py  # DNA→RNA→Protein + TFs + epigenetics
+│   │   ├── second_messengers.py # cAMP/PKA/PKC/CaMKII/CREB/MAPK
+│   │   ├── calcium.py          # 4-compartment Ca2+ dynamics
+│   │   ├── dendrite.py         # Cable equation dendritic tree
+│   │   ├── spine.py            # Dendritic spine plasticity
+│   │   ├── axon.py             # Myelinated/unmyelinated conduction
+│   │   ├── metabolism.py       # ATP/ADP/AMP energy system
+│   │   ├── glia.py             # Astrocytes, oligodendrocytes, microglia
+│   │   ├── gap_junction.py     # Electrical synapses
+│   │   ├── extracellular.py    # 3D diffusion + perineuronal nets
+│   │   ├── microtubules.py     # Orch-OR quantum consciousness
+│   │   ├── circadian.py        # TTFL clock + sleep homeostasis
+│   │   ├── pharmacology.py     # 7 drugs with PK/PD models
+│   │   ├── consciousness.py    # IIT Phi, PCI, criticality, GW
+│   │   ├── brain_regions.py    # Cortex, thalamus, hippocampus, BG
+│   │   ├── bio_bridge.py       # BioState → NT concentration bridge
+│   │   ├── adapters.py         # OrganicNN compatibility layer
+│   │   └── backend.py          # nQPU/numpy backend selection
+│   ├── organic_neural_network.py # Original organic neural network
+│   └── quantum_consciousness.py  # Standalone consciousness module
 ├── experiments/
-│   └── proven_experiments.py       # Demonstrations
+│   ├── training_comparison.py  # Molecular vs organic (4 experiments)
+│   └── mega_benchmark.py       # Full benchmark with consciousness
+├── demos/
+│   ├── demo_dishbrain_pong.py      # DishBrain replication (5 experiments)
+│   ├── demo_doom_arena.py          # Doom-like spatial navigation (3 experiments)
+│   ├── demo_beyond_ann.py          # Beyond ANN capabilities (23 experiments)
+│   ├── demo_emergent_cuda.py       # Emergent behaviors at GPU scale
+│   ├── demo_language_cuda.py       # Language learning at GPU scale
+│   ├── demo_language_learning.py   # Language learning (CPU)
+│   ├── demo_research_platforms.py  # 7 research platform demos
+│   ├── demo_molecular_emergence.py # 6 emergence experiments
+│   ├── demo_full_brain.py          # Full brain subsystem validation
+│   ├── psychopharmacology_demo.py  # Drug effect demonstrations
+│   └── bio_lora_molecular_demo.py  # Bio-LoRA bridge demo
 ├── tests/
+│   └── test_phase3_verification.py # 17 subsystem verification tests
 ├── docs/
+│   ├── tutorials/              # 8 tutorial documents
+│   └── assets/                 # Logo and images
 ├── pyproject.toml
+├── LICENSE                     # CC BY-NC 4.0
 └── README.md
 ```
 
+## Key Differences from Other Neural Simulators
+
+| Feature | NEURON/GENESIS | Brian2 | oNeuro |
+|---------|---------------|--------|--------|
+| Ion channels | HH equations | User-defined | HH with quantum gating |
+| Gene expression | No | No | Full DNA→RNA→Protein pipeline |
+| Second messengers | No | No | 6-pathway cascade (cAMP/PKA/PKC/CaMKII/CREB/MAPK) |
+| Glial cells | No | No | Astrocytes + oligodendrocytes + microglia |
+| Drug modeling | No | No | 7 drugs with PK/PD (Bateman + Hill) |
+| Consciousness metrics | No | No | IIT Phi + PCI + criticality + GW + Orch-OR |
+| Quantum effects | No | No | nQPU quantum tunneling + Orch-OR |
+| Brain regions | Manual setup | Manual | Built-in cortex/thalamus/hippocampus/BG |
+| Circadian rhythms | No | No | TTFL molecular clock + sleep homeostasis |
+
+## Requirements
+
+- Python 3.11+
+- NumPy >= 1.24
+- Optional: [nQPU](https://github.com/robertcprice/nqpu-metal) for quantum chemistry acceleration
+
 ## Citation
 
-If you use this in research, please cite:
-
 ```bibtex
-@software{organic_neural_2025,
-  title = {Organic Neural Network: Biologically-Inspired Neural Tissue},
-  author = {Entropy Research},
+@software{oneuro_2025,
+  title = {oNeuro: Molecular-Scale Neural Simulation with Emergent Consciousness},
+  author = {Price, Robert C.},
   year = {2025},
-  url = {https://github.com/entropy-research/organic-neural}
+  url = {https://github.com/robertcprice/oNeuro}
 }
 ```
 
 ## License
 
-MIT License - See [LICENSE](LICENSE)
+CC BY-NC 4.0 — See [LICENSE](LICENSE)
 
-## Contributing
-
-Contributions welcome! Areas of interest:
-- New training tasks
-- Visualization tools
-- Hardware acceleration (GPU/NPU)
-- Integration with other frameworks (PyTorch, JAX)
+For commercial licensing: research@entropy.ai

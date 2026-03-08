@@ -1,0 +1,127 @@
+{
+  "demo": "doom_arena",
+  "scale": "medium",
+  "device": "cuda",
+  "seed": 42,
+  "runs": 3,
+  "total_time": 9175.385974835604,
+  "experiments": {
+    "3": {
+      "passed": true,
+      "pass_rate": 0.6666666666666666,
+      "pass_count": 2,
+      "n_runs": 3,
+      "mean_time": 3058.4610514615974,
+      "individual_results": [
+        {
+          "passed": true,
+          "time": 3012.1796157360077,
+          "test_results": {
+            "baseline": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -21.5,
+              "avg_damage": 42.0
+            },
+            "caffeine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -15.85,
+              "avg_damage": 32.0
+            },
+            "diazepam": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -23.75,
+              "avg_damage": 45.0
+            },
+            "amphetamine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -15.75,
+              "avg_damage": 42.0
+            },
+            "methamphetamine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -14.95,
+              "avg_damage": 39.0
+            }
+          }
+        },
+        {
+          "passed": false,
+          "time": 3109.578986018896,
+          "test_results": {
+            "baseline": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -27.35,
+              "avg_damage": 49.0
+            },
+            "caffeine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -20.05,
+              "avg_damage": 40.0
+            },
+            "diazepam": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -12.35,
+              "avg_damage": 27.0
+            },
+            "amphetamine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -22.35,
+              "avg_damage": 45.0
+            },
+            "methamphetamine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -24.85,
+              "avg_damage": 40.0
+            }
+          }
+        },
+        {
+          "passed": true,
+          "time": 3053.624552629888,
+          "test_results": {
+            "baseline": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -18.2,
+              "avg_damage": 32.0
+            },
+            "caffeine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -21.35,
+              "avg_damage": 42.0
+            },
+            "diazepam": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -16.9,
+              "avg_damage": 34.0
+            },
+            "amphetamine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -23.15,
+              "avg_damage": 44.0
+            },
+            "methamphetamine": {
+              "goals": 0,
+              "goal_rate": 0.0,
+              "avg_score": -24.55,
+              "avg_damage": 44.0
+            }
+          }
+        }
+      ]
+    }
+  }
+}

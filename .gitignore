@@ -1,15 +1,41 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+*.egg
 dist/
 build/
 .eggs/
-*.egg
+
+# Virtual environments
 .venv/
 venv/
 .env
-*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Type checking / linting
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# Compiled extensions
+*.so
+*.dylib
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary
+/tmp/
+*.tmp
+
+# Benchmark outputs
+/tmp/*.json

@@ -10,6 +10,18 @@ This tutorial will guide you through:
 - Running your first simulation
 - Observing emergent behavior
 
+## Terminology: ONN, dONN, and oNeuro
+
+Before diving in, it helps to understand the naming conventions used throughout this project:
+
+| Term | Meaning |
+|------|---------|
+| **ONN** | **Organic Neural Network** — real biological neurons on hardware. Examples include Cortical Labs' [DishBrain](https://doi.org/10.1016/j.neuron.2022.09.001) (800K neurons on a multi-electrode array that learned Pong) and FinalSpark's bioprocessors. |
+| **dONN** | **digital Organic Neural Network** — oNeuro's biophysically faithful *simulation* of an ONN, running on GPU or CPU. Every neuron has Hodgkin-Huxley ion channels, real neurotransmitters, gene expression, and STDP — so behaviors like learning, drug response, and consciousness *emerge* from molecular dynamics rather than being programmed. |
+| **oNeuro** | The software platform you're learning in this tutorial. It's the tool for building, running, and experimenting with dONNs. |
+
+The key insight: a dONN is to an ONN what a high-fidelity flight simulator is to an airplane. Both follow the same physics; one is digital.
+
 ## Installation
 
 ### Basic Installation

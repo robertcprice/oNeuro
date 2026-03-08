@@ -1,0 +1,114 @@
+{
+  "experiment": "dishbrain_replication",
+  "scale": "medium",
+  "device": "cuda",
+  "n_runs": 3,
+  "base_seed": 42,
+  "total_time_s": 2994.72,
+  "system": {
+    "platform": "Linux-6.8.0-65-generic-x86_64-with-glibc2.35",
+    "python": "3.11.10",
+    "torch": "2.5.1+cu124",
+    "backend": "cuda",
+    "gpu": "NVIDIA A100-PCIE-40GB",
+    "gpu_memory_gb": 42.4
+  },
+  "runs": [
+    {
+      "seed": 42,
+      "experiments": {
+        "3": {
+          "passed": false,
+          "time": 1003.981628,
+          "test_results": {
+            "baseline": {
+              "hits": 9,
+              "hitrate": 0.3
+            },
+            "caffeine": {
+              "hits": 13,
+              "hitrate": 0.433333
+            },
+            "diazepam": {
+              "hits": 10,
+              "hitrate": 0.333333
+            },
+            "amphetamine": {
+              "hits": 14,
+              "hitrate": 0.466667
+            },
+            "methamphetamine": {
+              "hits": 11,
+              "hitrate": 0.366667
+            }
+          },
+          "name": "Pharmacological Effects"
+        }
+      }
+    },
+    {
+      "seed": 43,
+      "experiments": {
+        "3": {
+          "passed": true,
+          "time": 991.86809,
+          "test_results": {
+            "baseline": {
+              "hits": 14,
+              "hitrate": 0.466667
+            },
+            "caffeine": {
+              "hits": 15,
+              "hitrate": 0.5
+            },
+            "diazepam": {
+              "hits": 12,
+              "hitrate": 0.4
+            },
+            "amphetamine": {
+              "hits": 11,
+              "hitrate": 0.366667
+            },
+            "methamphetamine": {
+              "hits": 9,
+              "hitrate": 0.3
+            }
+          },
+          "name": "Pharmacological Effects"
+        }
+      }
+    },
+    {
+      "seed": 44,
+      "experiments": {
+        "3": {
+          "passed": false,
+          "time": 998.870678,
+          "test_results": {
+            "baseline": {
+              "hits": 15,
+              "hitrate": 0.5
+            },
+            "caffeine": {
+              "hits": 16,
+              "hitrate": 0.533333
+            },
+            "diazepam": {
+              "hits": 19,
+              "hitrate": 0.633333
+            },
+            "amphetamine": {
+              "hits": 14,
+              "hitrate": 0.466667
+            },
+            "methamphetamine": {
+              "hits": 13,
+              "hitrate": 0.433333
+            }
+          },
+          "name": "Pharmacological Effects"
+        }
+      }
+    }
+  ]
+}

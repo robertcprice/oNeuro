@@ -2,14 +2,17 @@
 
 ## Overview
 
-Organic Neural Networks open new possibilities for research and applications. Unlike traditional neural networks, they model development, adapt to damage, and exhibit emergent behavior. This tutorial explores practical applications and cutting-edge research directions.
+digital Organic Neural Networks (dONNs) — built with oNeuro — open new possibilities for research and applications that are impossible with standard artificial neural networks. Because dONNs simulate the full molecular machinery of biological neurons (HH ion channels, neurotransmitters, gene expression, STDP), they can model development, adapt to damage, respond to drugs, and exhibit emergent consciousness metrics.
+
+This tutorial explores practical applications and cutting-edge research directions, with emphasis on capabilities unique to the dONN paradigm.
 
 This tutorial covers:
 - Developmental neuroscience modeling
 - Neurodegenerative disease simulation
-- Brain-Computer Interfaces
+- Brain-Computer Interfaces (demonstrated in DishBrain replication)
 - Neuromorphic engineering
 - Cognitive robotics
+- Game learning (DishBrain Pong, Doom Arena)
 - Open research questions
 
 ## Application Areas
@@ -511,6 +514,29 @@ def test_neural_resilience():
 
 results = test_neural_resilience()
 ```
+
+### 5. Game Learning (DishBrain Replication)
+
+oNeuro's dONN replicates Cortical Labs' DishBrain (Kagan et al. 2022) — the first demonstration that an ONN (Organic Neural Network) can learn to play Pong via the Free Energy Principle. The dONN extends this with pharmacological experiments impossible on real tissue:
+
+```bash
+# Replicate DishBrain Pong (5 experiments)
+python3 demos/demo_dishbrain_pong.py
+
+# Doom-like spatial navigation (3 experiments)
+python3 demos/demo_doom_arena.py
+
+# Run at GPU scale with multi-seed statistical analysis
+python3 demos/demo_dishbrain_pong.py --scale medium --json results.json --runs 5
+```
+
+Key capabilities unique to dONN game learning:
+- **Reversible drug application**: Train a brain, apply caffeine or diazepam, test — then remove the drug. Impossible on real neurons where drugs are irreversible.
+- **Scale invariance**: Test learning at 1K, 5K, 25K, 100K neurons — far beyond what's feasible with biological tissue.
+- **Protocol comparison**: Run identical brains with FEP, DA reward, or random feedback to isolate the learning mechanism.
+- **Spatial navigation**: Extend 1D Pong to 25×25 Doom-like arenas with enemies, health pickups, and room navigation.
+
+See `demos/demo_dishbrain_pong.py` and `demos/demo_doom_arena.py` for full implementations, and Tutorial 9 for the Doom Arena walkthrough.
 
 ## Open Research Questions
 
