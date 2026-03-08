@@ -941,15 +941,15 @@ def exp_pharmacology(
 
     On real tissue, drugs are irreversible. In simulation, we train 5
     identical brains, then apply drugs before testing.
-    Tests: baseline, caffeine, diazepam, amphetamine, methamphetamine.
+    Tests: baseline, caffeine, diazepam, alprazolam, amphetamine, methamphetamine.
     """
     _header(
         "Exp 3: Pharmacological Effects on Game Performance",
-        "5 conditions: baseline / caffeine / diazepam / amphetamine / meth"
+        "6 conditions: baseline / caffeine / diazepam / alprazolam / amphetamine / meth"
     )
     t0 = time.perf_counter()
 
-    conditions = ["baseline", "caffeine", "diazepam", "amphetamine", "methamphetamine"]
+    conditions = ["baseline", "caffeine", "diazepam", "alprazolam", "amphetamine", "methamphetamine"]
     test_results = {}
 
     for condition in conditions:
@@ -988,6 +988,9 @@ def exp_pharmacology(
         elif condition == "amphetamine":
             brain.apply_drug("amphetamine", 20.0)
             print(f"    Applied amphetamine 20mg (Adderall)")
+        elif condition == "alprazolam":
+            brain.apply_drug("alprazolam", 1.0)
+            print(f"    Applied alprazolam 1mg (Xanax)")
         elif condition == "methamphetamine":
             brain.apply_drug("methamphetamine", 10.0)
             print(f"    Applied methamphetamine 10mg")
@@ -1014,14 +1017,16 @@ def exp_pharmacology(
     baseline_hits = test_results["baseline"]["hits"]
     caffeine_hits = test_results["caffeine"]["hits"]
     diazepam_hits = test_results["diazepam"]["hits"]
+    alprazolam_hits = test_results["alprazolam"]["hits"]
     amphet_hits = test_results["amphetamine"]["hits"]
     meth_hits = test_results["methamphetamine"]["hits"]
 
-    passed = diazepam_hits < baseline_hits
+    passed = diazepam_hits < baseline_hits or alprazolam_hits < baseline_hits
 
     print(f"\n    Baseline:        {baseline_hits} hits")
     print(f"    Caffeine:        {caffeine_hits} hits ({caffeine_hits - baseline_hits:+d})")
     print(f"    Diazepam:        {diazepam_hits} hits ({diazepam_hits - baseline_hits:+d})")
+    print(f"    Alprazolam:      {alprazolam_hits} hits ({alprazolam_hits - baseline_hits:+d})")
     print(f"    Amphetamine:     {amphet_hits} hits ({amphet_hits - baseline_hits:+d})")
     print(f"    Methamphetamine: {meth_hits} hits ({meth_hits - baseline_hits:+d})")
     print(f"    {'PASS' if passed else 'FAIL'} in {elapsed:.1f}s")

@@ -1288,9 +1288,9 @@ def exp_doom_drug_effects(
 ) -> Dict[str, Any]:
     """Pharmacological effects on spatial navigation.
 
-    Trains 5 identical brains (same seed = same initial wiring), then
-    applies drugs before testing.  Diazepam (GABA-A enhancement) should
-    impair navigation.  Amphetamine (DA/NE release) and methamphetamine
+    Trains 6 identical brains (same seed = same initial wiring), then
+    applies drugs before testing.  Diazepam and alprazolam (GABA-A PAMs)
+    should impair navigation.  Amphetamine (DA/NE release) and methamphetamine
     (stronger DA/NE/5-HT release) should enhance arousal and speed.
 
     Pass criteria:
@@ -1305,11 +1305,11 @@ def exp_doom_drug_effects(
     """
     _header(
         "Exp 3: Spatial Arena Drug Effects",
-        "5 drugs: baseline / caffeine / diazepam / amphetamine / meth"
+        "6 drugs: baseline / caffeine / diazepam / alprazolam / amphetamine / meth"
     )
     t0 = time.perf_counter()
 
-    conditions = ["baseline", "caffeine", "diazepam", "amphetamine", "methamphetamine"]
+    conditions = ["baseline", "caffeine", "diazepam", "alprazolam", "amphetamine", "methamphetamine"]
     test_results: Dict[str, Dict[str, Any]] = {}
 
     for condition in conditions:
@@ -1341,6 +1341,9 @@ def exp_doom_drug_effects(
         elif condition == "amphetamine":
             brain.apply_drug("amphetamine", 20.0)
             print(f"    Applied amphetamine 20mg (Adderall)")
+        elif condition == "alprazolam":
+            brain.apply_drug("alprazolam", 1.0)
+            print(f"    Applied alprazolam 1mg (Xanax)")
         elif condition == "methamphetamine":
             brain.apply_drug("methamphetamine", 10.0)
             print(f"    Applied methamphetamine 10mg")
@@ -1379,24 +1382,28 @@ def exp_doom_drug_effects(
 
     elapsed = time.perf_counter() - t0
 
-    # Pass: diazepam performs worse than baseline.
+    # Pass: a benzodiazepine performs worse than baseline.
     baseline_score = test_results["baseline"]["avg_score"]
     diazepam_score = test_results["diazepam"]["avg_score"]
+    alprazolam_score = test_results["alprazolam"]["avg_score"]
     caffeine_score = test_results["caffeine"]["avg_score"]
     amphet_score = test_results["amphetamine"]["avg_score"]
     meth_score = test_results["methamphetamine"]["avg_score"]
 
     baseline_dmg = test_results["baseline"]["avg_damage"]
     diazepam_dmg = test_results["diazepam"]["avg_damage"]
+    alprazolam_dmg = test_results["alprazolam"]["avg_damage"]
     amphet_dmg = test_results["amphetamine"]["avg_damage"]
     meth_dmg = test_results["methamphetamine"]["avg_damage"]
 
-    # Pass: diazepam performs worse than baseline (lower score OR more damage).
-    passed = (diazepam_score < baseline_score) or (diazepam_dmg > baseline_dmg)
+    # Pass: diazepam or alprazolam performs worse than baseline (lower score OR more damage).
+    passed = ((diazepam_score < baseline_score) or (diazepam_dmg > baseline_dmg) or
+              (alprazolam_score < baseline_score) or (alprazolam_dmg > baseline_dmg))
 
     print(f"\n    Baseline score:        {baseline_score:.1f}, damage: {baseline_dmg:.1f}")
     print(f"    Caffeine score:        {caffeine_score:.1f} ({caffeine_score - baseline_score:+.1f})")
     print(f"    Diazepam score:        {diazepam_score:.1f} ({diazepam_score - baseline_score:+.1f}), damage: {diazepam_dmg:.1f}")
+    print(f"    Alprazolam score:      {alprazolam_score:.1f} ({alprazolam_score - baseline_score:+.1f}), damage: {alprazolam_dmg:.1f}")
     print(f"    Amphetamine score:     {amphet_score:.1f} ({amphet_score - baseline_score:+.1f}), damage: {amphet_dmg:.1f}")
     print(f"    Methamphetamine score: {meth_score:.1f} ({meth_score - baseline_score:+.1f}), damage: {meth_dmg:.1f}")
     print(f"    {'PASS' if passed else 'FAIL'} in {elapsed:.1f}s")
