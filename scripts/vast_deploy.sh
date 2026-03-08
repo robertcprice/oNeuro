@@ -235,6 +235,31 @@ RUNCMD
     log "Spatial Arena experiments complete!"
 }
 
+cmd_drosophila() {
+    local instance_id="${1:?Usage: vast_deploy.sh drosophila <instance_id> [scale] [--exp N]}"
+    local scale="${2:-small}"
+    shift 2 2>/dev/null || true
+    local extra_args="$*"
+    log "Running Drosophila ecosystem experiments at ${scale} scale on instance ${instance_id}..."
+
+    local ssh_url
+    ssh_url=$(vastai ssh-url "${instance_id}" 2>/dev/null)
+
+    ssh -o StrictHostKeyChecking=no "${ssh_url}" bash -s <<RUNCMD
+set -euo pipefail
+cd /workspace/oNeuro
+PYTHONUNBUFFERED=1 PYTHONPATH=src python3 demos/demo_drosophila_ecosystem.py \\
+    --scale ${scale} --device cuda \\
+    ${extra_args} \\
+    2>&1 | tee /workspace/drosophila_${scale}.txt
+echo ""
+echo "=== Drosophila results saved ==="
+echo "  Text: /workspace/drosophila_${scale}.txt"
+RUNCMD
+
+    log "Drosophila experiments complete!"
+}
+
 cmd_all() {
     local instance_id="${1:?Usage: vast_deploy.sh all <instance_id> [scale]}"
     local scale="${2:-medium}"
@@ -244,6 +269,7 @@ cmd_all() {
     cmd_run "${instance_id}" "${scale}"
     cmd_dishbrain "${instance_id}" "${scale}" --runs 3
     cmd_doom "${instance_id}" "${scale}" --runs 3
+    cmd_drosophila "${instance_id}" "${scale}"
 
     log "All experiments complete! Fetch results with:"
     log "  bash scripts/vast_deploy.sh results ${instance_id}"
@@ -262,6 +288,7 @@ cmd_results() {
     scp -o StrictHostKeyChecking=no "${ssh_url}:/workspace/dishbrain_*.json" results/ 2>/dev/null || true
     scp -o StrictHostKeyChecking=no "${ssh_url}:/workspace/doom_*.txt" results/ 2>/dev/null || true
     scp -o StrictHostKeyChecking=no "${ssh_url}:/workspace/doom_*.json" results/ 2>/dev/null || true
+    scp -o StrictHostKeyChecking=no "${ssh_url}:/workspace/drosophila_*.txt" results/ 2>/dev/null || true
     scp -o StrictHostKeyChecking=no "${ssh_url}:/workspace/benchmark.txt" results/ 2>/dev/null || true
 
     local n_files
@@ -365,6 +392,7 @@ case "${1:-help}" in
     run)       cmd_run "${2:-}" "${3:-100k}" ;;
     dishbrain) shift; cmd_dishbrain "$@" ;;
     doom)      shift; cmd_doom "$@" ;;
+    drosophila) shift; cmd_drosophila "$@" ;;
     all)       cmd_all "${2:-}" "${3:-medium}" ;;
     results)   cmd_results "${2:-}" ;;
     destroy)   cmd_destroy "${2:-}" ;;
@@ -381,7 +409,8 @@ case "${1:-help}" in
         echo "  run <id> [scale]                Run language experiments (mega/100k/1m)"
         echo "  dishbrain <id> [scale] [flags]  Run DishBrain Pong experiments"
         echo "  doom <id> [scale] [flags]       Run Spatial Arena experiments"
-        echo "  all <id> [scale]                Run benchmark + language + dishbrain + doom"
+        echo "  drosophila <id> [scale] [flags] Run Drosophila ecosystem experiments"
+        echo "  all <id> [scale]                Run benchmark + language + dishbrain + doom + drosophila"
         echo "  benchmark <id>                  Run scaling benchmark"
         echo "  results <id>                    Download results (txt + json)"
         echo "  destroy <id>                    Destroy instance"
