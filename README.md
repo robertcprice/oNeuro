@@ -299,14 +299,58 @@ oNeuro/
 │   ├── demo_full_brain.py          # Full brain subsystem validation
 │   ├── psychopharmacology_demo.py  # Drug effect demonstrations
 │   └── bio_lora_molecular_demo.py  # Bio-LoRA bridge demo
+├── papers/
+│   ├── beyond_ann_white_paper.md    # Beyond ANN: 23 experiments
+│   ├── dishbrain_replication_paper.md # DishBrain replication paper (draft)
+│   ├── data/                        # GPU experiment JSON results
+│   └── figures/                     # Publication-ready figures (PNG/PDF)
+├── scripts/
+│   ├── generate_paper_figures.py    # Matplotlib figure generation
+│   └── vast_deploy.sh              # Vast.ai GPU deployment & benchmarking
 ├── tests/
-│   └── test_phase3_verification.py # 17 subsystem verification tests
+│   └── test_phase3_verification.py  # 17 subsystem verification tests
 ├── docs/
-│   ├── tutorials/              # 8 tutorial documents
+│   ├── tutorials/              # 9 tutorial documents
 │   └── assets/                 # Logo and images
 ├── pyproject.toml
 ├── LICENSE                     # CC BY-NC 4.0
 └── README.md
+```
+
+## CUDA Backend (GPU-Accelerated dONNs)
+
+oNeuro includes a high-performance CUDA backend for running dONNs at biologically relevant scale (5K–100K+ neurons). The entire Hodgkin-Huxley simulation, STDP, neurotransmitter dynamics, and synaptic plasticity run on GPU via PyTorch sparse tensors.
+
+```python
+from oneuro.molecular.cuda_backend import CUDARegionalBrain
+
+# 5050-neuron brain on GPU
+brain = CUDARegionalBrain(n_columns=50, device="cuda", seed=42)
+
+# Validated scale tiers
+# small:  1K neurons  (10 columns)  — seconds
+# medium: 5K neurons  (50 columns)  — minutes
+# large:  20K neurons (200 columns) — hours
+# mega:   80K neurons (800 columns) — GPU-only
+```
+
+### GPU Validation (A100)
+
+All demos support `--scale`, `--device cuda`, `--json`, and `--runs N` for multi-seed reproducibility:
+
+```bash
+# Medium scale, 3 seeds, JSON output
+python3 demos/demo_dishbrain_pong.py --scale medium --device cuda --runs 3 --json results.json
+
+# Large scale Doom arena
+python3 demos/demo_doom_arena.py --scale large --device cuda --json doom_results.json
+
+# Vast.ai deployment (provisions GPU, deploys code, runs experiments)
+bash scripts/vast_deploy.sh search          # find cheap A100s
+bash scripts/vast_deploy.sh create <offer>  # provision
+bash scripts/vast_deploy.sh dishbrain <id> medium  # run DishBrain
+bash scripts/vast_deploy.sh doom <id> medium       # run Doom arena
+bash scripts/vast_deploy.sh results <id>           # download JSON
 ```
 
 ## Key Differences from Other Neural Simulators
@@ -322,6 +366,19 @@ oNeuro/
 | Quantum effects | No | No | nQPU quantum tunneling + Orch-OR |
 | Brain regions | Manual setup | Manual | Built-in cortex/thalamus/hippocampus/BG |
 | Circadian rhythms | No | No | TTFL molecular clock + sleep homeostasis |
+
+## Papers
+
+| Paper | Status | File |
+|-------|--------|------|
+| **Beyond ANN** | 23/23 experiments PASS | `papers/beyond_ann_white_paper.md` |
+| **DishBrain Replication** | Draft (GPU validation in progress) | `papers/dishbrain_replication_paper.md` |
+
+Figures are generated from GPU experiment JSON data:
+
+```bash
+python3 scripts/generate_paper_figures.py  # regenerate all 6 figures
+```
 
 ## Requirements
 
