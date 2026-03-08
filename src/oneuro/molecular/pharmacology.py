@@ -1,6 +1,6 @@
 """Computational psychopharmacology engine.
 
-Seven drugs modeled with real pharmacokinetic (1-compartment) and
+Eight drugs modeled with real pharmacokinetic (1-compartment) and
 pharmacodynamic (Hill equation) parameters from clinical literature.
 Each drug targets specific molecular components that already exist in the
 oNeuro molecular layer — no modifications to existing files needed.
@@ -210,6 +210,53 @@ class Diazepam(Drug):
                 self._saved_state[obj_id] = ch.conductance_scale
                 # PAM: enhance existing GABA-A conductance up to 2x at full effect
                 ch.conductance_scale *= (1.0 + 1.0 * effect)
+        self._applied = True
+
+    def remove(self, network) -> None:
+        if not self._applied:
+            return
+        for neuron in network._molecular_neurons.values():
+            ch = neuron.membrane.channels.get_channel(IonChannelType.GABA_A)
+            if ch is not None:
+                obj_id = id(ch)
+                if obj_id in self._saved_state:
+                    ch.conductance_scale = self._saved_state[obj_id]
+        self._saved_state.clear()
+        self._applied = False
+
+
+@dataclass
+class Alprazolam(Drug):
+    """Triazolobenzodiazepine — high-potency, short-acting GABA-A PAM.
+
+    Mechanism: Enhances GABA-A conductance (same as diazepam) but ~2x potency
+    and much shorter duration. The triazo ring confers higher binding affinity.
+    Clinical: Xanax, anxiolytic — most prescribed psychiatric medication in US.
+    Comparison: alprazolam 0.5mg ≈ diazepam 5mg (10:1 potency ratio).
+    """
+
+    name: str = "Alprazolam"
+    generic_name: str = "alprazolam"
+    drug_class: str = "Benzodiazepine"
+    dose_mg: float = 1.0  # Standard anxiolytic dose
+    EC50_nM: float = 12.0  # Ki ~12 nM at BZ site (higher affinity than diazepam)
+    hill_coefficient: float = 1.5
+    half_life_hours: float = 11.2  # Much shorter than diazepam's 40h
+    tmax_hours: float = 1.5
+    bioavailability: float = 0.88
+    volume_of_distribution_L: float = 77.0  # ~1.1 L/kg for 70kg
+
+    def apply(self, network) -> None:
+        if self._applied:
+            return
+        effect = self.effect_strength(self.plasma_concentration(self.tmax_hours))
+        for neuron in network._molecular_neurons.values():
+            ch = neuron.membrane.channels.get_channel(IonChannelType.GABA_A)
+            if ch is not None:
+                obj_id = id(ch)
+                self._saved_state[obj_id] = ch.conductance_scale
+                # PAM: higher potency than diazepam — up to 2.5x at full effect
+                ch.conductance_scale *= (1.0 + 1.5 * effect)
         self._applied = True
 
     def remove(self, network) -> None:
@@ -503,6 +550,7 @@ class DrugCocktail:
 DRUG_LIBRARY: Dict[str, Type[Drug]] = {
     "fluoxetine": Fluoxetine,
     "diazepam": Diazepam,
+    "alprazolam": Alprazolam,
     "caffeine": Caffeine,
     "amphetamine": Amphetamine,
     "l-dopa": LDOPA,

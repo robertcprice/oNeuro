@@ -4,7 +4,7 @@
 A. Chronopharmacology: drug efficacy varies with circadian phase
 B. Sleep Research: disorders & caffeine effects on sleep-wake cycle
 C. Neurodevelopmental Modeling: critical periods from PNN dynamics
-D. In-Silico Drug Screening: screen 7 drugs for efficacy, consciousness,
+D. In-Silico Drug Screening: screen 8 drugs for efficacy, consciousness,
    and metabolic impact
 E. Long-Duration Circadian + Parameter Sensitivity
 
@@ -334,7 +334,7 @@ def platform_c_neurodevelopment():
 # ---------------------------------------------------------------------------
 
 def platform_d_drug_screening():
-    """Screen all 7 drugs for firing rate, consciousness, and metabolism."""
+    """Screen all 8 drugs for firing rate, consciousness, and metabolism."""
     print("\n" + "=" * 70)
     print("  Platform D: In-Silico Drug Screening")
     print("=" * 70)
@@ -407,8 +407,8 @@ def platform_d_drug_screening():
         print(f"  {drug_name:<15s} {dose:>6.0f}mg {fr_change:>+9.1f}% "
               f"{consc_change:>+9.1f}% {atp_change:>+9.1f}%")
 
-    passed = len(results) == 7
-    print(f"\n  PASS: {passed} (all {len(results)}/7 drugs screened)")
+    passed = len(results) == len(drug_names)
+    print(f"\n  PASS: {passed} (all {len(results)}/{len(drug_names)} drugs screened)")
 
     return {"name": "drug_screening", "results": results, "passed": passed}
 

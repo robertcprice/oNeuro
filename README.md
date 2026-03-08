@@ -146,7 +146,7 @@ diazepam.remove(net)  # Clean removal
 | **Microtubules** | Orch-OR quantum coherence, consciousness contribution |
 | **Circadian** | TTFL molecular clock, sleep homeostasis, adenosine pressure |
 | **Synapses** | NMDA-gated STDP, BCM metaplasticity, synaptic tagging & capture |
-| **Pharmacology** | 7 drugs with 1-compartment PK (Bateman) + PD (Hill equation) |
+| **Pharmacology** | 8 drugs with 1-compartment PK (Bateman) + PD (Hill equation) |
 | **Consciousness** | IIT Phi, PCI, neural complexity, criticality, Global Workspace |
 | **Brain Regions** | Cortical columns, thalamus, hippocampus, basal ganglia |
 
@@ -234,7 +234,7 @@ oNeuro includes 7 ready-to-run research demonstrations:
 | **A. Chronopharmacology** | Drug efficacy varies by circadian phase (>90% variation) |
 | **B. Sleep Research** | Normal vs caffeine vs shift-work sleep cycles |
 | **C. Neurodevelopment** | PNN-mediated critical period closure |
-| **D. Drug Screening** | Screen 7 drugs for efficacy + consciousness impact + ATP cost |
+| **D. Drug Screening** | Screen 8 drugs for efficacy + consciousness impact + ATP cost |
 | **E. Long-Duration** | Multi-cycle circadian oscillation + parameter sensitivity |
 | **F. Hippocampal Memory** | Encode → recall → partial recall → sleep replay |
 | **G. Dose-Response** | Hill equation dose-response curves for 3 drugs × 5 doses |
@@ -276,7 +276,7 @@ oNeuro/
 │   │   ├── extracellular.py    # 3D diffusion + perineuronal nets
 │   │   ├── microtubules.py     # Orch-OR quantum consciousness
 │   │   ├── circadian.py        # TTFL clock + sleep homeostasis
-│   │   ├── pharmacology.py     # 7 drugs with PK/PD models
+│   │   ├── pharmacology.py     # 8 drugs with PK/PD models
 │   │   ├── consciousness.py    # IIT Phi, PCI, criticality, GW
 │   │   ├── brain_regions.py    # Cortex, thalamus, hippocampus, BG
 │   │   ├── bio_bridge.py       # BioState → NT concentration bridge
@@ -361,7 +361,7 @@ bash scripts/vast_deploy.sh results <id>           # download JSON
 | Gene expression | No | No | Full DNA→RNA→Protein pipeline |
 | Second messengers | No | No | 6-pathway cascade (cAMP/PKA/PKC/CaMKII/CREB/MAPK) |
 | Glial cells | No | No | Astrocytes + oligodendrocytes + microglia |
-| Drug modeling | No | No | 7 drugs with PK/PD (Bateman + Hill) |
+| Drug modeling | No | No | 8 drugs with PK/PD (Bateman + Hill) |
 | Consciousness metrics | No | No | IIT Phi + PCI + criticality + GW + Orch-OR |
 | Quantum effects | No | No | nQPU quantum tunneling + Orch-OR |
 | Brain regions | Manual setup | Manual | Built-in cortex/thalamus/hippocampus/BG |

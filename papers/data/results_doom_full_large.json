@@ -1,0 +1,1236 @@
+{
+  "demo": "doom_arena",
+  "scale": "large",
+  "device": "cuda",
+  "seed": 42,
+  "runs": 1,
+  "total_time": 14700.31496898603,
+  "experiments": {
+    "1": {
+      "passed": true,
+      "time": 1967.0482949129655,
+      "q1_goal_rate": 0.0,
+      "q4_goal_rate": 0.0,
+      "total_goal_rate": 0.0,
+      "total_goals": 0,
+      "episode_results": [
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 48,
+          "hp": 0,
+          "score": -48.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 20,
+          "score": -80.0,
+          "pickups": 0,
+          "damage": 80,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 47,
+          "hp": 0,
+          "score": -47.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 32,
+          "hp": 0,
+          "score": -32.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 17,
+          "hp": 0,
+          "score": -17.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 97,
+          "hp": 0,
+          "score": -97.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 83,
+          "hp": 0,
+          "score": -83.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 26,
+          "hp": 0,
+          "score": -26.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 97,
+          "hp": 0,
+          "score": -97.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 25,
+          "hp": 0,
+          "score": -25.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 34,
+          "hp": 0,
+          "score": -34.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 103,
+          "hp": 20,
+          "score": -83.0,
+          "pickups": 0,
+          "damage": 80,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 20,
+          "score": -80.0,
+          "pickups": 0,
+          "damage": 80,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 31,
+          "hp": 0,
+          "score": -31.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 47,
+          "hp": 0,
+          "score": -47.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 52,
+          "hp": 0,
+          "score": -52.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 20.0,
+          "pickups": 2,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 59,
+          "hp": 0,
+          "score": -49.0,
+          "pickups": 1,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 52,
+          "hp": 0,
+          "score": -52.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 41,
+          "hp": 0,
+          "score": -41.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 36,
+          "hp": 0,
+          "score": -36.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 56,
+          "hp": 0,
+          "score": -56.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 51,
+          "hp": 0,
+          "score": -41.0,
+          "pickups": 1,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        }
+      ]
+    },
+    "2": {
+      "passed": true,
+      "time": 2908.604860409978,
+      "q1_survival": 0.45,
+      "q4_survival": 0.4,
+      "q1_damage": 63.0,
+      "q4_damage": 62.0,
+      "episode_results": [
+        {
+          "outcome": "dead",
+          "steps": 71,
+          "hp": 0,
+          "score": -71.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 89,
+          "hp": 0,
+          "score": -89.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 59,
+          "hp": 0,
+          "score": -59.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 65,
+          "hp": 0,
+          "score": -65.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 52,
+          "hp": 0,
+          "score": -52.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 40,
+          "hp": 0,
+          "score": -40.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 101,
+          "hp": 20,
+          "score": -71.0,
+          "pickups": 1,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 37,
+          "hp": 0,
+          "score": -37.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 28,
+          "hp": 0,
+          "score": -28.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 82,
+          "hp": 0,
+          "score": -82.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 43,
+          "hp": 0,
+          "score": -43.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 40,
+          "score": -60.0,
+          "pickups": 0,
+          "damage": 60,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 95,
+          "hp": 0,
+          "score": -95.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 71,
+          "hp": 0,
+          "score": -71.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 30,
+          "hp": 0,
+          "score": -30.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 38,
+          "hp": 0,
+          "score": -38.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 78,
+          "hp": 0,
+          "score": -78.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 56,
+          "hp": 0,
+          "score": -56.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 23,
+          "hp": 0,
+          "score": -23.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 50,
+          "hp": 0,
+          "score": -50.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 34,
+          "hp": 0,
+          "score": -34.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 28,
+          "hp": 0,
+          "score": -28.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 90,
+          "hp": 0,
+          "score": -90.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 65,
+          "hp": 0,
+          "score": -65.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 42,
+          "hp": 0,
+          "score": -42.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 27,
+          "hp": 0,
+          "score": -27.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 39,
+          "hp": 0,
+          "score": -39.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 37,
+          "hp": 0,
+          "score": -37.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 20,
+          "score": -80.0,
+          "pickups": 0,
+          "damage": 80,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 52,
+          "hp": 0,
+          "score": -52.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 32,
+          "hp": 0,
+          "score": -22.0,
+          "pickups": 1,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 52,
+          "hp": 0,
+          "score": -52.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 10.0,
+          "pickups": 1,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 31,
+          "hp": 0,
+          "score": -31.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 94,
+          "hp": 0,
+          "score": -94.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 84,
+          "hp": 0,
+          "score": -84.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 46,
+          "hp": 0,
+          "score": -46.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 96,
+          "hp": 0,
+          "score": -86.0,
+          "pickups": 1,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 82,
+          "hp": 0,
+          "score": -72.0,
+          "pickups": 1,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 23,
+          "hp": 0,
+          "score": -23.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 101,
+          "hp": 60,
+          "score": -41.0,
+          "pickups": 0,
+          "damage": 40,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 24,
+          "hp": 0,
+          "score": -24.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 64,
+          "hp": 0,
+          "score": -64.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 28,
+          "hp": 0,
+          "score": -28.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 35,
+          "hp": 0,
+          "score": -35.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 34,
+          "hp": 0,
+          "score": -34.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 63,
+          "hp": 0,
+          "score": -63.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 28,
+          "hp": 0,
+          "score": -28.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 45,
+          "hp": 0,
+          "score": -45.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "dead",
+          "steps": 45,
+          "hp": 0,
+          "score": -45.0,
+          "pickups": 0,
+          "damage": 100,
+          "reached_goal": false
+        },
+        {
+          "outcome": "timeout",
+          "steps": 100,
+          "hp": 100,
+          "score": 0.0,
+          "pickups": 0,
+          "damage": 0,
+          "reached_goal": false
+        }
+      ]
+    },
+    "3": {
+      "passed": true,
+      "time": 9824.655789361044,
+      "test_results": {
+        "baseline": {
+          "goals": 0,
+          "goal_rate": 0.0,
+          "avg_score": -15.4,
+          "avg_damage": 35.0
+        },
+        "caffeine": {
+          "goals": 0,
+          "goal_rate": 0.0,
+          "avg_score": -20.95,
+          "avg_damage": 46.0
+        },
+        "diazepam": {
+          "goals": 0,
+          "goal_rate": 0.0,
+          "avg_score": -25.0,
+          "avg_damage": 48.0
+        },
+        "amphetamine": {
+          "goals": 0,
+          "goal_rate": 0.0,
+          "avg_score": -21.7,
+          "avg_damage": 46.0
+        },
+        "methamphetamine": {
+          "goals": 0,
+          "goal_rate": 0.0,
+          "avg_score": -16.75,
+          "avg_damage": 40.0
+        }
+      }
+    }
+  }
+}

@@ -927,6 +927,11 @@ class CUDAMolecularBrain:
             effect = dose_mg / (dose_mg + 10.0)
             self.conductance_scale[:, CH_GABAA] *= (1.0 + 4.0 * effect)
 
+        elif drug_name in ("alprazolam", "xanax"):
+            # High-potency benzodiazepine: stronger GABA-A PAM, lower ED50
+            effect = dose_mg / (dose_mg + 1.0)  # ~10x more potent than diazepam
+            self.conductance_scale[:, CH_GABAA] *= (1.0 + 5.0 * effect)
+
         elif drug_name == "caffeine":
             # Adenosine antagonist → reduced inhibition, PDE inhibitor → increased cAMP
             effect = dose_mg / (dose_mg + 100.0)

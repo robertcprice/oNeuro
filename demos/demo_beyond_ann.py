@@ -651,7 +651,7 @@ def exp5_drug_selectivity(
     """
     _header(
         "EXPERIMENT 5: Drug Selectivity Profiles",
-        "7 drugs produce 7 distinct behavioral fingerprints",
+        "8 drugs produce 8 distinct behavioral fingerprints",
     )
     _why_ann_cant(
         "In standard ANNs, there are no molecular drug targets. A\n"
@@ -663,6 +663,7 @@ def exp5_drug_selectivity(
         ("Control", None, 0),
         ("Fluoxetine 20mg", "fluoxetine", 20.0),
         ("Diazepam 5mg", "diazepam", 5.0),
+        ("Alprazolam 1mg", "alprazolam", 1.0),
         ("Caffeine 100mg", "caffeine", 100.0),
         ("Amphetamine 10mg", "amphetamine", 10.0),
         ("Ketamine 35mg", "ketamine", 35.0),
