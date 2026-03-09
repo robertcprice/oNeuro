@@ -1020,7 +1020,7 @@ def exp_learning_speed(
         dev = brain.device
 
         n_l5 = len(l5_ids)
-        delta = 1.5 * max(1.0, (n_l5 / 200) ** 0.3)
+        delta = 5.0 * max(1.0, (n_l5 / 200) ** 0.3)
 
         # Create protocol with scale-appropriate step counts
         if condition == "free_energy":
@@ -1147,7 +1147,7 @@ def exp_pharmacology(
         dev = brain.device
 
         n_l5 = len(l5_ids)
-        delta = 1.5 * max(1.0, (n_l5 / 200) ** 0.3)
+        delta = 5.0 * max(1.0, (n_l5 / 200) ** 0.3)
 
         protocol = DoomFEPProtocol(
             cortex_ids, relay_ids, l5_ids, device=dev,
