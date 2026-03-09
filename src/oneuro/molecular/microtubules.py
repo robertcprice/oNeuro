@@ -32,9 +32,9 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
-from oneuro.molecular.backend import HAS_NQPU, get_nqpu_metal
+import numpy as np
 
 # Attempt to import the Rust-backed Orch-OR simulator.
 # This is behind nqpu_metal's "experimental" feature flag and may not
@@ -261,7 +261,11 @@ class Microtubule:
     # Objective reduction (Diosi-Penrose collapse)
     # -----------------------------------------------------------------
 
-    def check_collapse(self) -> bool:
+    def check_collapse(
+        self,
+        rng: Optional[np.random.Generator] = None,
+        collapse_jitter_std: float = 0.0,
+    ) -> bool:
         """Check whether Diosi-Penrose objective reduction has occurred.
 
         The collapse criterion is:
@@ -292,14 +296,22 @@ class Microtubule:
         # Time in superposition (seconds)
         t_s = self._elapsed_since_superposition_ms * 1e-3
 
+        threshold = HBAR / 2.0
+        if rng is not None and collapse_jitter_std > 0.0:
+            threshold_scale = max(
+                0.1,
+                1.0 + float(rng.normal(0.0, collapse_jitter_std)),
+            )
+            threshold *= threshold_scale
+
         # Diosi-Penrose threshold: E_G * t >= hbar / 2
-        if e_g * t_s >= HBAR / 2.0:
-            self._collapse()
+        if e_g * t_s >= threshold:
+            self._collapse(rng=rng)
             return True
 
         return False
 
-    def _collapse(self) -> None:
+    def _collapse(self, rng: Optional[np.random.Generator] = None) -> None:
         """Collapse all superposed tubulins to definite conformations.
 
         After objective reduction, each tubulin in superposition is
@@ -315,7 +327,14 @@ class Microtubule:
         for i, t in enumerate(self.tubulins):
             if t.superposition:
                 phase = math.sin(i * 0.618033988749895 + self._coherence_level * 3.14159)
-                t.conformation = "alpha" if phase >= 0.0 else "beta"
+                if rng is None:
+                    t.conformation = "alpha" if phase >= 0.0 else "beta"
+                else:
+                    alpha_prob = max(
+                        0.0,
+                        min(1.0, 0.5 + 0.5 * self._coherence_level * phase),
+                    )
+                    t.conformation = "alpha" if float(rng.random()) < alpha_prob else "beta"
                 t.superposition = False
 
         self._n_superposed_cache = 0
@@ -327,7 +346,11 @@ class Microtubule:
     # Consciousness event
     # -----------------------------------------------------------------
 
-    def consciousness_event(self) -> bool:
+    def consciousness_event(
+        self,
+        rng: Optional[np.random.Generator] = None,
+        collapse_jitter_std: float = 0.0,
+    ) -> bool:
         """Check whether an Orch-OR consciousness event has occurred.
 
         A consciousness event requires BOTH:
@@ -349,7 +372,7 @@ class Microtubule:
         pre_collapse_coherence = self._coherence_level
         integration_threshold = 0.1
 
-        if self.check_collapse():
+        if self.check_collapse(rng=rng, collapse_jitter_std=collapse_jitter_std):
             return pre_collapse_coherence > integration_threshold
 
         return False
@@ -542,7 +565,13 @@ class Cytoskeleton:
     # Main evolution
     # -----------------------------------------------------------------
 
-    def step(self, dt: float, ca_nM: float = 50.0) -> None:
+    def step(
+        self,
+        dt: float,
+        ca_nM: float = 50.0,
+        rng: Optional[np.random.Generator] = None,
+        collapse_jitter_std: float = 0.0,
+    ) -> None:
         """Evolve the entire cytoskeleton for one timestep.
 
         This is the main update loop that:
@@ -587,7 +616,10 @@ class Cytoskeleton:
             mt.evolve(dt)
 
             # ---- 5. Check for OR events ----
-            if mt.consciousness_event():
+            if mt.consciousness_event(
+                rng=rng,
+                collapse_jitter_std=collapse_jitter_std,
+            ):
                 self._or_count += 1
 
             # Restore base coherence time (orchestration may have modified it)

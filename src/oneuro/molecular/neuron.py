@@ -13,19 +13,18 @@ with abstract energy — fully backward compatible with Phase 2 code.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 
 import numpy as np
 
-from oneuro.molecular.membrane import MolecularMembrane
 from oneuro.molecular.gene_expression import (
-    GeneExpressionPipeline, TranscriptionFactorType,
+    GeneExpressionPipeline,
 )
-from oneuro.molecular.receptors import ReceptorType
 from oneuro.molecular.ion_channels import IonChannelType
+from oneuro.molecular.membrane import MolecularMembrane
+from oneuro.molecular.receptors import ReceptorType
 
 
 class NeuronArchetype(Enum):
@@ -36,7 +35,21 @@ class NeuronArchetype(Enum):
     PURKINJE = "purkinje"  # Cerebellar, complex spikes
     GRANULE = "granule"  # Small excitatory
     MEDIUM_SPINY = "medium_spiny"  # Striatal, dopamine-sensitive
+    D1_MSN = "d1_msn"  # Direct-pathway striatal MSN
+    D2_MSN = "d2_msn"  # Indirect-pathway striatal MSN
     MOTONEURON = "motoneuron"  # Cholinergic output
+
+
+def _make_medium_spiny_membrane(
+    d1_count: int,
+    d2_count: int,
+) -> MolecularMembrane:
+    """Create a striatal MSN membrane with explicit dopamine-receptor bias."""
+    m = MolecularMembrane.excitatory()
+    m.add_receptor(ReceptorType.D1, count=d1_count)
+    m.add_receptor(ReceptorType.D2, count=d2_count)
+    m.add_receptor(ReceptorType.GABA_A, count=35)
+    return m
 
 
 def _make_membrane(archetype: NeuronArchetype) -> MolecularMembrane:
@@ -61,11 +74,11 @@ def _make_membrane(archetype: NeuronArchetype) -> MolecularMembrane:
         m = MolecularMembrane.excitatory()
         return m
     elif archetype == NeuronArchetype.MEDIUM_SPINY:
-        m = MolecularMembrane.excitatory()
-        m.add_receptor(ReceptorType.D1, count=20)
-        m.add_receptor(ReceptorType.D2, count=15)
-        m.add_receptor(ReceptorType.GABA_A, count=30)
-        return m
+        return _make_medium_spiny_membrane(d1_count=20, d2_count=15)
+    elif archetype == NeuronArchetype.D1_MSN:
+        return _make_medium_spiny_membrane(d1_count=30, d2_count=4)
+    elif archetype == NeuronArchetype.D2_MSN:
+        return _make_medium_spiny_membrane(d1_count=4, d2_count=30)
     elif archetype == NeuronArchetype.MOTONEURON:
         m = MolecularMembrane.cholinergic()
         return m
@@ -75,7 +88,12 @@ def _make_membrane(archetype: NeuronArchetype) -> MolecularMembrane:
 
 def _make_gene_pipeline(archetype: NeuronArchetype) -> GeneExpressionPipeline:
     """Create gene expression pipeline for a neuron archetype."""
-    if archetype in (NeuronArchetype.INTERNEURON,):
+    if archetype in (
+        NeuronArchetype.INTERNEURON,
+        NeuronArchetype.MEDIUM_SPINY,
+        NeuronArchetype.D1_MSN,
+        NeuronArchetype.D2_MSN,
+    ):
         return GeneExpressionPipeline.inhibitory_neuron()
     return GeneExpressionPipeline.excitatory_neuron()
 
@@ -175,6 +193,8 @@ class MolecularNeuron:
         dt: float = 0.1,
         skip_slow_subsystems: bool = False,
         step_count: int = 0,
+        runtime_rng: Optional[np.random.Generator] = None,
+        microtubule_collapse_jitter_std: float = 0.0,
     ) -> bool:
         """Update neuron for one timestep.
 
@@ -186,6 +206,9 @@ class MolecularNeuron:
             step_count: Global step counter for interval-gated subsystem updates.
                        When >0, gene expression runs every 100 steps, metabolism
                        every 10 steps, cytoskeleton every 10 steps (but always on fire).
+            runtime_rng: Optional runtime entropy-backed generator for ongoing dynamics.
+            microtubule_collapse_jitter_std: Relative jitter applied to Orch-OR
+                       collapse threshold when runtime entropy is enabled.
 
         Returns:
             True if neuron fired an action potential.
@@ -228,8 +251,12 @@ class MolecularNeuron:
         # Cytoskeleton: microtubule quantum evolution + structural dynamics
         if run_cyto and self.cytoskeleton is not None:
             ca = self.membrane.ca_internal
-            self.cytoskeleton.step(dt * (10 if use_intervals and not fired else 1),
-                                   ca_nM=ca)
+            self.cytoskeleton.step(
+                dt * (10 if use_intervals and not fired else 1),
+                ca_nM=ca,
+                rng=runtime_rng,
+                collapse_jitter_std=microtubule_collapse_jitter_std,
+            )
 
         # Metabolism: ATP production and consumption
         if run_metab and self.metabolism is not None:

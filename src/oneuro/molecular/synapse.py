@@ -18,8 +18,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from oneuro.molecular.neurotransmitters import NeurotransmitterMolecule, NEUROTRANSMITTER_LIBRARY
-from oneuro.molecular.enzymes import SynapticEnzyme, ENZYME_LIBRARY
+from oneuro.molecular.enzymes import ENZYME_LIBRARY, SynapticEnzyme
 from oneuro.molecular.receptors import ReceptorType
 
 
@@ -51,17 +50,29 @@ class VesiclePool:
     # Release probability
     base_release_prob: float = 0.3  # Per spike, fraction of RRP released
 
-    def release(self, ca_level_nM: float = 1000.0) -> float:
+    def release(
+        self,
+        ca_level_nM: float = 1000.0,
+        rng: np.random.Generator | None = None,
+    ) -> float:
         """Release vesicles. Returns NT concentration (nM) released into cleft.
 
         Ca²⁺ modulates release probability.
         """
         # Ca-dependent release probability
         ca_factor = min(2.0, ca_level_nM / 500.0)
-        release_prob = self.base_release_prob * ca_factor
+        release_prob = min(1.0, self.base_release_prob * ca_factor)
 
-        vesicles_released = self.rrp * release_prob
-        vesicles_released = min(vesicles_released, self.rrp)
+        if rng is None:
+            vesicles_released = self.rrp * release_prob
+            vesicles_released = min(vesicles_released, self.rrp)
+        else:
+            whole_vesicles = int(self.rrp)
+            fractional_vesicle = self.rrp - whole_vesicles
+            released = rng.binomial(whole_vesicles, release_prob)
+            if fractional_vesicle > 0.0 and rng.random() < (fractional_vesicle * release_prob):
+                released += 1
+            vesicles_released = min(float(released), self.rrp)
 
         self.rrp -= vesicles_released
         nt_released = vesicles_released * self.nt_per_vesicle_nM
@@ -250,18 +261,35 @@ class MolecularSynapse:
         """Backwards-compatible weight for OrganicSynapse integration."""
         return self.weight
 
+    @staticmethod
+    def _quantize_receptor_delta(delta: float) -> int:
+        """Convert a continuous trafficking request into an integer receptor count."""
+        if delta == 0.0:
+            return 0
+        return int(
+            math.copysign(
+                math.floor(abs(delta) + 0.5),
+                delta,
+            )
+        )
+
     @property
     def receptor_count(self) -> Dict[ReceptorType, int]:
         return dict(self._postsynaptic_receptor_count)
 
-    def presynaptic_spike(self, time: float, ca_level_nM: float = 1000.0) -> None:
+    def presynaptic_spike(
+        self,
+        time: float,
+        ca_level_nM: float = 1000.0,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         """Handle presynaptic action potential.
 
         1. Ca²⁺ influx triggers vesicle fusion
         2. NT released into cleft (after delay)
         """
         self.last_pre_spike = time
-        nt_released = self.vesicle_pool.release(ca_level_nM)
+        nt_released = self.vesicle_pool.release(ca_level_nM, rng=rng)
         # Buffer the release with synaptic delay
         self._delay_buffer.append((time + self.delay, nt_released))
 
@@ -336,10 +364,12 @@ class MolecularSynapse:
             if 0 < dt_spike < 20.0:
                 # Anti-causal: post fired recently before pre → LTD
                 ltd_strength = math.exp(-dt_spike / 20.0) * 0.5 * pf
-                self._remove_receptors(int(max(1, ltd_strength * 3)))
-                # Structural LTD: shrink spine
-                if self.spine is not None:
-                    self.spine.structural_ltd(ltd_strength)
+                receptors_to_remove = self._quantize_receptor_delta(ltd_strength * 3.0)
+                if receptors_to_remove > 0:
+                    self._remove_receptors(receptors_to_remove)
+                    # Structural LTD: shrink spine
+                    if self.spine is not None:
+                        self.spine.structural_ltd(ltd_strength)
 
         if post_fired and self.last_pre_spike > 0:
             dt_spike = time - self.last_pre_spike
@@ -360,10 +390,10 @@ class MolecularSynapse:
                 else:
                     ltp_strength = raw_ltp * nmda_gate * bcm_gate * pf
 
-                receptors_to_insert = int(max(1, ltp_strength * 3))
+                receptors_to_insert = self._quantize_receptor_delta(ltp_strength * 3.0)
 
                 # Clamp to spine AMPA capacity if spine exists
-                if self.spine is not None:
+                if receptors_to_insert > 0 and self.spine is not None:
                     current_ampa = self._postsynaptic_receptor_count.get(
                         ReceptorType.AMPA, 0
                     )
@@ -432,26 +462,56 @@ class MolecularSynapse:
     ) -> None:
         """Update eligibility trace for reward-modulated learning."""
         alpha = 1.0 - self.eligibility_decay
-        self.pre_activity_avg = self.eligibility_decay * self.pre_activity_avg + alpha * pre_active
-        self.post_activity_avg = self.eligibility_decay * self.post_activity_avg + alpha * post_active
+        self.pre_activity_avg = (
+            self.eligibility_decay * self.pre_activity_avg + alpha * pre_active
+        )
+        self.post_activity_avg = (
+            self.eligibility_decay * self.post_activity_avg + alpha * post_active
+        )
         hebbian = self.pre_activity_avg * self.post_activity_avg
         self.eligibility_trace = self.eligibility_decay * self.eligibility_trace + (
             1.0 - self.eligibility_decay
         ) * hebbian
 
-    def apply_reward(self, reward: float, learning_rate: float = 0.1) -> None:
+    def apply_reward(
+        self,
+        reward: float,
+        learning_rate: float = 0.1,
+        modulation_factor: float = 1.0,
+    ) -> None:
         """Apply reward-modulated plasticity via receptor trafficking."""
-        delta_receptors = int(learning_rate * reward * self.eligibility_trace * 10)
+        # This reward rule models dopamine-gated AMPA trafficking at excitatory
+        # synapses. Synapses without an AMPA compartment should be unaffected.
+        if ReceptorType.AMPA not in self._postsynaptic_receptor_count:
+            return
+
+        effective_reward = reward * modulation_factor
+
+        # Reward capture should depend on both the eligible synapse state and
+        # the local NMDA/tagging context that created that eligibility.
+        nmda_gate = max(0.0, min(1.0, self._nmda_scale))
+        tag_gate = 0.25 + (1.25 * self._tag_strength if self._tagged else 0.0)
+        plasticity_drive = (
+            learning_rate
+            * effective_reward
+            * self.eligibility_trace
+            * nmda_gate
+            * nmda_gate
+            * tag_gate
+            * 20.0
+        )
+        delta_receptors = self._quantize_receptor_delta(plasticity_drive)
         if delta_receptors > 0:
             self._insert_receptors(delta_receptors)
         elif delta_receptors < 0:
             self._remove_receptors(abs(delta_receptors))
 
-        # Update synaptic health
-        if reward > 0:
-            self.strength = min(1.0, self.strength + 0.01)
-        else:
-            self.strength = max(0.1, self.strength - 0.01)
+        # Keep abstract synaptic health aligned with actual receptor traffic so
+        # blocked or ineligible synapses do not change effective weight.
+        if delta_receptors > 0:
+            self.strength = min(1.0, self.strength + 0.01 * max(nmda_gate, tag_gate))
+        elif delta_receptors < 0:
+            self.strength = max(0.1, self.strength - 0.01 * max(nmda_gate, tag_gate))
 
     def should_prune(self) -> bool:
         """Check if synapse should be removed (matching OrganicSynapse)."""

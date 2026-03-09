@@ -21,14 +21,18 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
-from oneuro.molecular.neuron import MolecularNeuron, NeuronArchetype
-from oneuro.molecular.synapse import MolecularSynapse
 from oneuro.molecular.adapters import MolecularNeuronAdapter, MolecularSynapseAdapter
 from oneuro.molecular.ion_channels import (
-    IonChannelType, BatchIonChannelState,
-    _alpha_m_vec, _beta_m_vec, _alpha_h_vec, _beta_h_vec,
-    _alpha_n_vec, _beta_n_vec,
+    BatchIonChannelState,
+    IonChannelType,
 )
+from oneuro.molecular.neuron import MolecularNeuron, NeuronArchetype
+from oneuro.molecular.receptors import ReceptorType
+from oneuro.molecular.runtime_entropy import (
+    RuntimeEntropyController,
+    RuntimeEntropySettings,
+)
+from oneuro.molecular.synapse import MolecularSynapse
 
 
 @dataclass
@@ -56,19 +60,37 @@ class MolecularNeuralNetwork:
     # Convenience: enable ALL subsystems at once
     full_brain: bool = False
 
+    # Short benchmarks should not accumulate structural side effects mid-assay.
+    benchmark_safe_mode: bool = False
+
     # Postsynaptic current scale (µA/cm²) per synapse weight unit.
     # Compensates for small-network NT pathway underestimation.
     psc_scale: float = 30.0
 
     # Internal state
-    neurons: Dict[int, MolecularNeuronAdapter] = field(init=False, default_factory=dict)
-    synapses: Dict[Tuple[int, int], MolecularSynapseAdapter] = field(init=False, default_factory=dict)
-    _molecular_neurons: Dict[int, MolecularNeuron] = field(init=False, default_factory=dict)
-    _molecular_synapses: Dict[Tuple[int, int], MolecularSynapse] = field(init=False, default_factory=dict)
+    neurons: Dict[int, MolecularNeuronAdapter] = field(
+        init=False,
+        default_factory=dict,
+    )
+    synapses: Dict[Tuple[int, int], MolecularSynapseAdapter] = field(
+        init=False,
+        default_factory=dict,
+    )
+    _molecular_neurons: Dict[int, MolecularNeuron] = field(
+        init=False,
+        default_factory=dict,
+    )
+    _molecular_synapses: Dict[Tuple[int, int], MolecularSynapse] = field(
+        init=False,
+        default_factory=dict,
+    )
 
     # Pre-indexed outgoing synapse lookup: pre_id → [(post_id, synapse), ...]
     # Turns O(fired × total_synapses) → O(fired × avg_outgoing_degree)
-    _outgoing: Dict[int, List[Tuple[int, MolecularSynapse]]] = field(init=False, default_factory=dict)
+    _outgoing: Dict[int, List[Tuple[int, MolecularSynapse]]] = field(
+        init=False,
+        default_factory=dict,
+    )
 
     # Active synapses: keys of synapses with non-zero cleft concentration.
     # Only these need per-step updates; inactive ones have zero cleft and idle vesicles.
@@ -78,7 +100,10 @@ class MolecularNeuralNetwork:
     _neuron_last_fired: Dict[int, int] = field(init=False, default_factory=dict)
 
     # Per-step ECS concentration cache: voxel (ix,iy,iz) → {nt_name: conc}
-    _ecs_cache: Dict[Tuple[int, int, int], Dict[str, float]] = field(init=False, default_factory=dict)
+    _ecs_cache: Dict[Tuple[int, int, int], Dict[str, float]] = field(
+        init=False,
+        default_factory=dict,
+    )
 
     # Simulation state
     time: float = field(init=False, default=0.0)
@@ -130,11 +155,82 @@ class MolecularNeuralNetwork:
 
     # Last set of neurons that fired (for ConsciousnessMonitor)
     _last_fired: Set[int] = field(init=False, default_factory=set)
+    _runtime_entropy: Optional[RuntimeEntropyController] = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
+    _runtime_entropy_settings: RuntimeEntropySettings = field(
+        init=False,
+        default_factory=RuntimeEntropySettings,
+        repr=False,
+    )
 
     @property
     def last_fired(self) -> Set[int]:
         """Neurons that fired on the most recent step (read-only)."""
         return self._last_fired
+
+    def set_runtime_entropy(
+        self,
+        controller: Optional[RuntimeEntropyController],
+        settings: Optional[RuntimeEntropySettings] = None,
+    ) -> None:
+        """Attach or clear a runtime entropy controller for step-time stochasticity."""
+        self._runtime_entropy = controller
+        self._runtime_entropy_settings = settings or RuntimeEntropySettings()
+
+    def _runtime_refresh(self) -> None:
+        if self._runtime_entropy is not None:
+            self._runtime_entropy.maybe_refresh(self._step_count)
+
+    def _runtime_random(self) -> float:
+        if self._runtime_entropy is None:
+            return float(np.random.random())
+        return self._runtime_entropy.random()
+
+    def _runtime_normal(
+        self,
+        loc: float = 0.0,
+        scale: float = 1.0,
+        size: int | tuple[int, ...] | None = None,
+    ):
+        if self._runtime_entropy is None:
+            return np.random.normal(loc=loc, scale=scale, size=size)
+        return self._runtime_entropy.normal(loc=loc, scale=scale, size=size)
+
+    def _runtime_choice(
+        self,
+        values: list[int] | np.ndarray,
+        size: int | tuple[int, ...] | None = None,
+        replace: bool = True,
+    ):
+        if self._runtime_entropy is None:
+            return np.random.choice(values, size=size, replace=replace)
+        return self._runtime_entropy.choice(values, size=size, replace=replace)
+
+    def dopamine_plasticity_factor(self, neuron_id: int) -> float:
+        """Map postsynaptic pathway identity to dopamine-plasticity sign."""
+        neuron = self._molecular_neurons.get(neuron_id)
+        if neuron is None:
+            return 1.0
+
+        if neuron.archetype == NeuronArchetype.D1_MSN:
+            return 1.0
+        if neuron.archetype == NeuronArchetype.D2_MSN:
+            return -1.0
+        if neuron.archetype != NeuronArchetype.MEDIUM_SPINY:
+            return 1.0
+
+        d1_count = neuron.membrane.receptor_count(ReceptorType.D1)
+        d2_count = neuron.membrane.receptor_count(ReceptorType.D2)
+        total = d1_count + d2_count
+        if total <= 0:
+            return 1.0
+        bias = (d1_count - d2_count) / total
+        if abs(bias) < 0.05:
+            return 1.0
+        return float(np.clip(bias, -1.0, 1.0))
 
     def __post_init__(self):
         # full_brain=True enables all subsystems
@@ -172,7 +268,7 @@ class MolecularNeuralNetwork:
     def _init_glia(self) -> None:
         """Create initial glial cells."""
         try:
-            from oneuro.molecular.glia import Astrocyte, Oligodendrocyte, Microglia
+            from oneuro.molecular.glia import Astrocyte, Microglia, Oligodendrocyte
             n_synapses = len(self._molecular_synapses)
 
             # ~1 astrocyte per 5 synapses
@@ -258,9 +354,9 @@ class MolecularNeuralNetwork:
         """Attach calcium, second messengers, metabolism, cytoskeleton to a neuron."""
         try:
             from oneuro.molecular.calcium import CalciumSystem
-            from oneuro.molecular.second_messengers import SecondMessengerSystem
             from oneuro.molecular.metabolism import CellularMetabolism
-            from oneuro.molecular.microtubules import Cytoskeleton, Microtubule
+            from oneuro.molecular.microtubules import Cytoskeleton
+            from oneuro.molecular.second_messengers import SecondMessengerSystem
 
             # Orch-OR network scale: our N neurons represent a cortical column
             # of ~100k neurons.  E_G uses N^2 scaling for coherent superposition.
@@ -373,6 +469,7 @@ class MolecularNeuralNetwork:
         self.time += dt
         self._step_count += 1
         self._ecs_cache.clear()
+        self._runtime_refresh()
 
         # 0. Circadian modulation (TTFL ODE → modulation factors)
         circadian_mod = self._circadian_step(dt)
@@ -442,6 +539,7 @@ class MolecularNeuralNetwork:
 
         fired_neurons: Set[int] = set()
         step_count = self._step_count
+        runtime_rng = self._runtime_entropy.generator if self._runtime_entropy is not None else None
         for nid, mol_neuron in self._molecular_neurons.items():
             if not mol_neuron.alive:
                 continue
@@ -466,6 +564,13 @@ class MolecularNeuralNetwork:
             ext_current = self._get_external_current(nid)
             ext_current += gap_currents.get(nid, 0.0)
             ext_current += excitability_bias
+            if self._runtime_entropy_settings.current_noise_std > 0.0:
+                ext_current += float(
+                    self._runtime_normal(
+                        0.0,
+                        self._runtime_entropy_settings.current_noise_std,
+                    )
+                )
 
             # Skip slow subsystems for neurons inactive >50 steps
             skip_slow = (step_count - self._neuron_last_fired.get(nid, 0)) > 50
@@ -474,8 +579,17 @@ class MolecularNeuralNetwork:
             if not skip_slow and mol_neuron.cytoskeleton is not None:
                 ext_current += mol_neuron.cytoskeleton.consciousness_measure * 0.5
 
-            if mol_neuron.update(nt_concentrations=nt_concs, external_current=ext_current, dt=dt,
-                                 skip_slow_subsystems=skip_slow, step_count=step_count):
+            if mol_neuron.update(
+                nt_concentrations=nt_concs,
+                external_current=ext_current,
+                dt=dt,
+                skip_slow_subsystems=skip_slow,
+                step_count=step_count,
+                runtime_rng=runtime_rng,
+                microtubule_collapse_jitter_std=(
+                    self._runtime_entropy_settings.microtubule_collapse_jitter_std
+                ),
+            ):
                 fired_neurons.add(nid)
                 self._neuron_last_fired[nid] = step_count
                 self.spike_count += 1
@@ -488,7 +602,7 @@ class MolecularNeuralNetwork:
             pre_n = self._molecular_neurons[nid]
             ca = pre_n.membrane.ca_internal
             for post, mol_syn in self._outgoing.get(nid, []):
-                mol_syn.presynaptic_spike(self.time, ca_level_nM=ca)
+                mol_syn.presynaptic_spike(self.time, ca_level_nM=ca, rng=runtime_rng)
                 # Mark synapse as active (has cleft NT to process)
                 self._active_synapses.add((nid, post))
                 # Vesicle recycling ATP cost (1 release event per spike)
@@ -515,7 +629,7 @@ class MolecularNeuralNetwork:
                 self.global_nt_concentrations[nt_name] /= nt_synth_mod
 
         # 8. Spontaneous synaptogenesis (1% chance)
-        if np.random.random() < 0.01:
+        if not self.benchmark_safe_mode and self._runtime_random() < 0.01:
             self._spontaneous_synaptogenesis()
 
         # 9. Cleanup dead neurons and prunable synapses
@@ -526,6 +640,7 @@ class MolecularNeuralNetwork:
         self.time += dt
         self._step_count += 1
         self._ecs_cache.clear()
+        self._runtime_refresh()
 
         # 0. Circadian (TTFL ODE → modulation factors)
         circadian_mod = self._circadian_step(dt)
@@ -634,6 +749,7 @@ class MolecularNeuralNetwork:
 
         fired_neurons: Set[int] = set()
         step_count = self._step_count
+        runtime_rng = self._runtime_entropy.generator if self._runtime_entropy is not None else None
         for nid, mol_neuron in zip(alive_ids, alive_neurons):
             # Pass ATP state to membrane
             if mol_neuron.metabolism is not None:
@@ -653,6 +769,13 @@ class MolecularNeuralNetwork:
             ext_current = self._get_external_current(nid)
             ext_current += gap_currents.get(nid, 0.0)
             ext_current += excitability_bias
+            if self._runtime_entropy_settings.current_noise_std > 0.0:
+                ext_current += float(
+                    self._runtime_normal(
+                        0.0,
+                        self._runtime_entropy_settings.current_noise_std,
+                    )
+                )
 
             # Skip slow subsystems for neurons inactive >50 steps
             skip_slow = (step_count - self._neuron_last_fired.get(nid, 0)) > 50
@@ -662,8 +785,15 @@ class MolecularNeuralNetwork:
                 ext_current += mol_neuron.cytoskeleton.consciousness_measure * 0.5
 
             if mol_neuron.update(
-                nt_concentrations=nt_concs, external_current=ext_current, dt=dt,
-                skip_slow_subsystems=skip_slow, step_count=step_count,
+                nt_concentrations=nt_concs,
+                external_current=ext_current,
+                dt=dt,
+                skip_slow_subsystems=skip_slow,
+                step_count=step_count,
+                runtime_rng=runtime_rng,
+                microtubule_collapse_jitter_std=(
+                    self._runtime_entropy_settings.microtubule_collapse_jitter_std
+                ),
             ):
                 fired_neurons.add(nid)
                 self._neuron_last_fired[nid] = step_count
@@ -677,7 +807,7 @@ class MolecularNeuralNetwork:
             pre_n = self._molecular_neurons[nid]
             ca = pre_n.membrane.ca_internal
             for post, mol_syn in self._outgoing.get(nid, []):
-                mol_syn.presynaptic_spike(self.time, ca_level_nM=ca)
+                mol_syn.presynaptic_spike(self.time, ca_level_nM=ca, rng=runtime_rng)
                 self._active_synapses.add((nid, post))
                 if pre_n.metabolism is not None:
                     pre_n.metabolism.vesicle_recycling_cost(0.1, 1.0)
@@ -698,7 +828,7 @@ class MolecularNeuralNetwork:
             for nt_name in self.global_nt_concentrations:
                 self.global_nt_concentrations[nt_name] /= nt_synth_mod
 
-        if np.random.random() < 0.01:
+        if not self.benchmark_safe_mode and self._runtime_random() < 0.01:
             self._spontaneous_synaptogenesis()
         self._cleanup()
 
@@ -771,23 +901,29 @@ class MolecularNeuralNetwork:
 
             micro.step(dt, local_damage_signal=damage)
 
-            # Prune tagged synapses
-            pruned = micro.prune_tagged()
-            for key in pruned:
-                if key in self._molecular_synapses:
-                    pre, post = key
-                    del self._molecular_synapses[key]
-                    if key in self.synapses:
-                        del self.synapses[key]
-                    self._active_synapses.discard(key)
-                    if pre in self._outgoing:
-                        self._outgoing[pre] = [
-                            (p, s) for p, s in self._outgoing[pre] if p != post
-                        ]
-                    self.pruning_events += 1
+            if not self.benchmark_safe_mode:
+                # Prune tagged synapses
+                pruned = micro.prune_tagged()
+                for key in pruned:
+                    if key in self._molecular_synapses:
+                        pre, post = key
+                        del self._molecular_synapses[key]
+                        if key in self.synapses:
+                            del self.synapses[key]
+                        self._active_synapses.discard(key)
+                        if pre in self._outgoing:
+                            self._outgoing[pre] = [
+                                (p, s) for p, s in self._outgoing[pre] if p != post
+                            ]
+                        self.pruning_events += 1
 
         # Oligodendrocytes: activity-dependent myelination (every 100 steps)
-        if self._oligodendrocytes and self._axons and self._step_count % 100 == 0:
+        if (
+            not self.benchmark_safe_mode
+            and self._oligodendrocytes
+            and self._axons
+            and self._step_count % 100 == 0
+        ):
             self._update_oligodendrocyte_myelination(dt * 100.0, fired_neurons)
 
     def _deliver_lactate_to_nearby_neurons(
@@ -870,11 +1006,11 @@ class MolecularNeuralNetwork:
 
             v_pre = pre_n.membrane.voltage
             v_post = post_n.membrane.voltage
-            I = gj.compute_current(v_pre, v_post)
+            current = gj.compute_current(v_pre, v_post)
 
             # Bidirectional: current flows into lower-voltage cell
-            currents[gj.pre_id] = currents.get(gj.pre_id, 0.0) - I * 0.001  # nA → µA/cm² scaling
-            currents[gj.post_id] = currents.get(gj.post_id, 0.0) + I * 0.001
+            currents[gj.pre_id] = currents.get(gj.pre_id, 0.0) - current * 0.001
+            currents[gj.post_id] = currents.get(gj.post_id, 0.0) + current * 0.001
 
             gj.step(dt, v_pre, v_post)
 
@@ -1026,7 +1162,7 @@ class MolecularNeuralNetwork:
         ids = [nid for nid, n in self._molecular_neurons.items() if n.alive]
         if len(ids) < 2:
             return
-        a, b = np.random.choice(ids, 2, replace=False)
+        a, b = self._runtime_choice(ids, size=2, replace=False)
         na, nb = self._molecular_neurons[a], self._molecular_neurons[b]
         dist = math.sqrt((na.x - nb.x) ** 2 + (na.y - nb.y) ** 2 + (na.z - nb.z) ** 2)
         if dist < np.linalg.norm(self._size) * 0.4:
@@ -1042,25 +1178,26 @@ class MolecularNeuralNetwork:
             self._outgoing.pop(nid, None)
 
         # Remove prunable synapses
-        to_prune = [k for k, s in self._molecular_synapses.items() if s.should_prune()]
-        for key in to_prune:
-            pre, post = key
-            del self._molecular_synapses[key]
-            del self.synapses[key]
-            self._active_synapses.discard(key)
-            # Remove from outgoing index
-            if pre in self._outgoing:
-                self._outgoing[pre] = [
-                    (p, s) for p, s in self._outgoing[pre] if p != post
-                ]
-            if pre in self._molecular_neurons:
-                self._molecular_neurons[pre].outputs.discard(post)
-            if post in self._molecular_neurons:
-                self._molecular_neurons[post].inputs.discard(pre)
-            self.pruning_events += 1
+        if not self.benchmark_safe_mode:
+            to_prune = [k for k, s in self._molecular_synapses.items() if s.should_prune()]
+            for key in to_prune:
+                pre, post = key
+                del self._molecular_synapses[key]
+                del self.synapses[key]
+                self._active_synapses.discard(key)
+                # Remove from outgoing index
+                if pre in self._outgoing:
+                    self._outgoing[pre] = [
+                        (p, s) for p, s in self._outgoing[pre] if p != post
+                    ]
+                if pre in self._molecular_neurons:
+                    self._molecular_neurons[pre].outputs.discard(post)
+                if post in self._molecular_neurons:
+                    self._molecular_neurons[post].inputs.discard(pre)
+                self.pruning_events += 1
 
         # PNN auto-population: mature, stable neurons get wrapped
-        if self._perineuronal_net is not None:
+        if self._perineuronal_net is not None and not self.benchmark_safe_mode:
             for nid, mol_n in self._molecular_neurons.items():
                 if (mol_n.age > 500.0
                         and mol_n.spike_count > 100
@@ -1073,10 +1210,19 @@ class MolecularNeuralNetwork:
                          connexin_type: str = "Cx36", conductance_nS: float = 0.5) -> None:
         """Add a gap junction (electrical synapse) between two cells."""
         try:
-            from oneuro.molecular.gap_junction import GapJunction, ConnexinType
-            cx_map = {"Cx36": ConnexinType.Cx36, "Cx43": ConnexinType.Cx43, "Cx32": ConnexinType.Cx32}
+            from oneuro.molecular.gap_junction import ConnexinType, GapJunction
+            cx_map = {
+                "Cx36": ConnexinType.Cx36,
+                "Cx43": ConnexinType.Cx43,
+                "Cx32": ConnexinType.Cx32,
+            }
             cx = cx_map.get(connexin_type, ConnexinType.Cx36)
-            gj = GapJunction(connexin=cx, pre_id=pre_id, post_id=post_id, conductance_nS=conductance_nS)
+            gj = GapJunction(
+                connexin=cx,
+                pre_id=pre_id,
+                post_id=post_id,
+                conductance_nS=conductance_nS,
+            )
             self._gap_junctions.append(gj)
             self.enable_gap_junctions = True
         except ImportError:
@@ -1155,8 +1301,12 @@ class MolecularNeuralNetwork:
             )
 
     def apply_reward_modulated_plasticity(self) -> None:
-        for mol_syn in self._molecular_synapses.values():
-            mol_syn.apply_reward(self.dopamine_level, self.learning_rate)
+        for (_, post_id), mol_syn in self._molecular_synapses.items():
+            mol_syn.apply_reward(
+                self.dopamine_level,
+                self.learning_rate,
+                modulation_factor=self.dopamine_plasticity_factor(post_id),
+            )
         self.dopamine_level *= self.dopamine_decay
         da = self.global_nt_concentrations.get("dopamine", 20.0)
         self.global_nt_concentrations["dopamine"] = 20.0 + (da - 20.0) * 0.95
@@ -1172,7 +1322,7 @@ class MolecularNeuralNetwork:
 
     def structural_adaptation(self, performance: float) -> None:
         if performance > self.performance_threshold_grow:
-            if np.random.random() < 0.1:
+            if self._runtime_random() < 0.1:
                 for name in self.output_regions:
                     self.grow_neurons_in_region(name, n=1)
         elif performance < self.performance_threshold_prune:
@@ -1189,7 +1339,7 @@ class MolecularNeuralNetwork:
         for _ in range(n):
             if len(self._molecular_neurons) >= 100:
                 return
-            offset = np.random.normal(0, radius * 0.5, 3)
+            offset = self._runtime_normal(0, radius * 0.5, 3)
             new_pos = np.array(pos) + offset
             new_pos = np.clip(new_pos, [0, 0, 0], self._size)
             nid = self._add_neuron(new_pos[0], new_pos[1], new_pos[2])
@@ -1203,9 +1353,9 @@ class MolecularNeuralNetwork:
                     + (new_pos[1] - other_n.y) ** 2
                     + (new_pos[2] - other_n.z) ** 2
                 )
-                if dist < radius * 1.5 and np.random.random() < 0.3:
+                if dist < radius * 1.5 and self._runtime_random() < 0.3:
                     self._add_synapse(other_id, nid)
-                    if np.random.random() < 0.3:
+                    if self._runtime_random() < 0.3:
                         self._add_synapse(nid, other_id)
 
     def _prune_weak_connections(self, threshold: float = 0.1) -> None:
