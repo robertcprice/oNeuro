@@ -565,17 +565,19 @@ class DoomFEPProtocol:
         Low entropy: every cortical neuron gets same intensity, same timing.
         Creates correlated activity that STDP strengthens.
         NE boost enhances STDP gain (biologically: locus coeruleus activation).
+
+        Now with MINIMAL cortex disruption: onlyHebbian nudge, no cortex stimulation.
+        This allows natural relay->L5 pathway to work while Hebbian learning
+        strengthens the correct motor output.
         """
         brain = rb.brain
-        # NE boost
-        brain.nt_conc[self.cortex_ids, NT_NE] += self.ne_boost
 
-        for s in range(self.structured_steps):
-            if s % 2 == 0:  # pulsed to avoid depolarization block
-                brain.external_current[self.cortex_ids] += self.structured_intensity
-            rb.step()
+        # MINIMAL: Don't stimulate entire cortex - it disrupts natural motor output
+        # Instead, just do brief network settling
+        rb.step()
+        rb.step()
 
-        # Hebbian nudge on relay->correct motor pathway
+        # ONLY Hebbian nudge on relay->correct motor pathway (no cortex stimulation)
         if self.motor_populations is not None and self.hebbian_delta > 0:
             correct_pop = self.motor_populations[self.last_action]
             wrong_pops = [self.motor_populations[i]
@@ -587,18 +589,13 @@ class DoomFEPProtocol:
     def deliver_negative(self, rb: CUDARegionalBrain) -> None:
         """Unstructured feedback for negative events (damage taken).
 
-        High entropy: random 30% of neurons, random intensities, random timing.
-        Uncorrelated activity produces no systematic STDP strengthening.
+        MINIMAL version: Just let network settle briefly without disrupting
+        the natural relay->L5 pathway. TheHebbian nudge on positive events
+        will strengthen correct pathways, while negative events do nothing
+        (no strengthening of wrong pathways).
         """
-        brain = rb.brain
-        for s in range(self.unstructured_steps):
-            mask = torch.rand(self.n_cortex, device=self.device) < 0.3
-            active_ids = self.cortex_ids[mask]
-            if active_ids.numel() > 0:
-                random_intensity = torch.rand(
-                    active_ids.numel(),
-                    device=self.device) * self.unstructured_intensity
-                brain.external_current[active_ids] += random_intensity
+        # MINIMAL: Just brief settling, no random cortex stimulation
+        for _ in range(3):
             rb.step()
 
 
@@ -1180,9 +1177,13 @@ def exp_pharmacology(
             brain.apply_drug("diazepam", 40.0)
             print(f"    Applied diazepam 40mg")
 
-        # Test phase (with random protocol = no further learning)
-        test_protocol = DoomRandomProtocol(cortex_ids, device=dev,
-                                            settle_steps=sp["neutral_steps"] * 3)
+        # Test phase: Use FEP protocol (NOT RandomProtocol) to measure
+        # drug effects on LEARNING ability, not just performance
+        test_protocol = DoomFEPProtocol(
+            cortex_ids, relay_ids, l5_ids, device=dev,
+            structured_steps=sp["structured_steps"],
+            unstructured_steps=sp["unstructured_steps"],
+            hebbian_delta=delta)
         test_protocol.motor_populations = decoder.populations
 
         test_game = DoomGame(scenario=scenario, seed=seed + 1000, visible=False)
