@@ -492,6 +492,7 @@ class RegionalBrain:
 
     Inter-region projections:
       - Thalamus relay → Cortex L4 (feedforward sensory)
+      - Thalamus relay → Cortex L5 (fast sensorimotor shortcut)
       - Cortex L6 → Thalamus relay (corticothalamic feedback)
       - Cortex L5 → Basal Ganglia D1 (action commands)
       - Cortex L2/3 → Hippocampus DG (episodic encoding)
@@ -764,6 +765,11 @@ class RegionalBrain:
         thal_relay = self.thalamus.get_ids("relay")
         cortex_l4 = self.cortex.get_ids("L4")
         _connect_layers(net, thal_relay, cortex_l4, p=0.3, nt="glutamate")
+
+        # Thalamus relay → Cortex L5 (fast sensorimotor shortcut for motor output)
+        # This provides a direct pathway for retina→relay→L5→motor without waiting
+        # for the full L4→L2/3→L5 cascade (critical for real-time action)
+        _connect_layers(net, thal_relay, cortex_l5, p=0.15, nt="glutamate")
 
         # Cortex L6 → Thalamus relay (corticothalamic feedback)
         cortex_l6 = self.cortex.get_ids("L6")
