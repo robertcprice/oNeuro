@@ -540,10 +540,10 @@ class DoomFEPProtocol:
     def __init__(self, cortex_ids: torch.Tensor, relay_ids: torch.Tensor,
                  l5_ids: torch.Tensor, device: str = "cpu",
                  structured_steps: int = 50, unstructured_steps: int = 100,
-                 structured_intensity: float = 40.0,
-                 unstructured_intensity: float = 40.0,
-                 ne_boost: float = 200.0,
-                 hebbian_delta: float = 0.8):
+                 structured_intensity: float = 5.0,
+                 unstructured_intensity: float = 5.0,
+                 ne_boost: float = 50.0,
+                 hebbian_delta: float = 1.5):
         self.cortex_ids = cortex_ids
         self.relay_ids = relay_ids
         self.l5_ids = l5_ids
@@ -611,7 +611,7 @@ class DoomDAProtocol:
 
     def __init__(self, cortex_ids: torch.Tensor, l5_ids: torch.Tensor,
                  device: str = "cpu",
-                 reward_steps: int = 50, da_amount: float = 300.0,
+                 reward_steps: int = 50, da_amount: float = 50.0,
                  settle_steps: int = 15):
         self.cortex_ids = cortex_ids
         self.l5_ids = l5_ids
@@ -629,7 +629,7 @@ class DoomDAProtocol:
             if s % 3 == 0:
                 brain.nt_conc[self.l5_ids, NT_DA] += self.da_amount
             if s % 2 == 0:
-                brain.external_current[self.cortex_ids] += 20.0
+                brain.external_current[self.cortex_ids] += 5.0
             rb.step()
 
     def deliver_negative(self, rb: CUDARegionalBrain) -> None:
@@ -1023,7 +1023,7 @@ def exp_learning_speed(
         dev = brain.device
 
         n_l5 = len(l5_ids)
-        delta = 0.8 * max(1.0, (n_l5 / 200) ** 0.3)
+        delta = 1.5 * max(1.0, (n_l5 / 200) ** 0.3)
 
         # Create protocol with scale-appropriate step counts
         if condition == "free_energy":
@@ -1150,7 +1150,7 @@ def exp_pharmacology(
         dev = brain.device
 
         n_l5 = len(l5_ids)
-        delta = 0.8 * max(1.0, (n_l5 / 200) ** 0.3)
+        delta = 1.5 * max(1.0, (n_l5 / 200) ** 0.3)
 
         protocol = DoomFEPProtocol(
             cortex_ids, relay_ids, l5_ids, device=dev,
