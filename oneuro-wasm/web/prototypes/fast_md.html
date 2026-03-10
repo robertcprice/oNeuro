@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Fast MD Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #030306;
+            color: #d0d0d8;
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        canvas { display: block; }
+
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .panel {
+            background: rgba(6, 10, 18, 0.94);
+            border: 1px solid rgba(70, 180, 255, 0.12);
+            border-radius: 12px;
+            padding: 14px;
+            backdrop-filter: blur(20px);
+        }
+
+        #stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 220px;
+            pointer-events: auto;
+        }
+
+        #controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 220px;
+            pointer-events: auto;
+        }
+
+        h2 {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #46b4ff;
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(70, 180, 255, 0.15);
+            padding-bottom: 6px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 6px 0;
+            font-size: 11px;
+        }
+
+        .stat-label { color: #606878; }
+        .stat-value { color: #00ff88; font-weight: 600; }
+
+        button {
+            background: rgba(70, 180, 255, 0.1);
+            border: 1px solid rgba(70, 180, 255, 0.25);
+            color: #46b4ff;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+            margin: 2px;
+        }
+
+        button:hover { background: rgba(70, 180, 255, 0.2); }
+        button.active { background: rgba(0, 255, 136, 0.15); border-color: #00ff88; color: #00ff88; }
+
+        .slider-wrap { margin: 8px 0; }
+        .slider-header { display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 4px; color: #707888; }
+        input[type="range"] { width: 100%; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; outline: none; -webkit-appearance: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: #46b4ff; border-radius: 50%; cursor: pointer; }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #030306;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.4s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(70, 180, 255, 0.1);
+            border-top-color: #46b4ff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading-text { margin-top: 14px; color: #46b4ff; font-size: 11px; letter-spacing: 4px; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="loader"></div>
+        <div id="loading-text">LOADING</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+        <div id="stats-panel" class="panel">
+            <h2>Simulation</h2>
+            <div class="stat-row"><span class="stat-label">Particles</span><span class="stat-value" id="stat-particles">0</span></div>
+            <div class="stat-row"><span class="stat-label">Temperature</span><span class="stat-value" id="stat-temp">0 K</span></div>
+            <div class="stat-row"><span class="stat-label">FPS</span><span class="stat-value" id="stat-fps">0</span></div>
+            <div class="stat-row"><span class="stat-label">Step</span><span class="stat-value" id="stat-step">0</span></div>
+        </div>
+
+        <div id="controls-panel" class="panel">
+            <h2>Controls</h2>
+            <div>
+                <button id="btn-play" class="active">Play</button>
+                <button id="btn-reset">Reset</button>
+                <button id="btn-food">Food</button>
+            </div>
+            <div class="slider-wrap">
+                <div class="slider-header"><span>Speed</span><span id="val-speed">1x</span></div>
+                <input type="range" id="slider-speed" min="0.5" max="5" step="0.5" value="1">
+            </div>
+            <div class="slider-wrap">
+                <div class="slider-header"><span>Particles</span><span id="val-particles">2000</span></div>
+                <input type="range" id="slider-particles" min="500" max="5000" step="500" value="2000">
+            </div>
+            <div class="slider-wrap">
+                <div class="slider-header"><span>Attraction</span><span id="val-attract">0.5</span></div>
+                <input type="range" id="slider-attract" min="0" max="2" step="0.1" value="0.5">
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ============================================================
+        // OPTIMIZED CONFIG - Reduced for speed
+        // ============================================================
+        const CONFIG = {
+            maxParticles: 2000,
+            boxSize: 40,
+            dt: 0.016,
+            gridSize: 4,  // Spatial grid cell size
+            cutoff: 4,    // Force cutoff distance
+        };
+
+        // ============================================================
+        // GLOBAL STATE
+        // ============================================================
+        let scene, camera, renderer;
+        let particles, particleGeo, particleMat;
+        let foodMarkers = [];
+        let positions, velocities, grid;
+        let nParticles = CONFIG.maxParticles;
+        let isPlaying = true;
+        let simSpeed = 1;
+        let attraction = 0.5;
+        let step = 0;
+        let lastTime = performance.now();
+        let fps = 60, frameCount = 0;
+
+        // ============================================================
+        // INITIALIZATION
+        // ============================================================
+        async function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x030306);
+            scene.fog = new THREE.FogExp2(0x030306, 0.012);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
+            camera.position.set(0, 30, 50);
+
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Simple camera control
+            let isDragging = false, prevMouse = {x:0, y:0};
+            renderer.domElement.addEventListener('mousedown', e => { isDragging = true; prevMouse = {x:e.clientX, y:e.clientY}; });
+            renderer.domElement.addEventListener('mouseup', () => isDragging = false);
+            renderer.domElement.addEventListener('mousemove', e => {
+                if(!isDragging) return;
+                const dx = e.clientX - prevMouse.x;
+                camera.position.x += dx * 0.1;
+                camera.lookAt(CONFIG.boxSize/2, 0, CONFIG.boxSize/2);
+                prevMouse = {x:e.clientX, y:e.clientY};
+            });
+            camera.lookAt(CONFIG.boxSize/2, 0, CONFIG.boxSize/2);
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x303050, 0.6));
+            const light = new THREE.DirectionalLight(0xffffff, 0.5);
+            light.position.set(20, 30, 20);
+            scene.add(light);
+
+            // Grid
+            const grid = new THREE.GridHelper(CONFIG.boxSize * 2, 20, 0x101015, 0x080810);
+            grid.position.set(CONFIG.boxSize/2, -0.5, CONFIG.boxSize/2);
+            scene.add(grid);
+
+            // Initialize particles
+            initParticles(nParticles);
+            initFood();
+
+            initControls();
+            window.addEventListener('resize', onResize);
+
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 300);
+
+            animate();
+        }
+
+        function initParticles(count) {
+            nParticles = count;
+
+            // Remove old
+            if(particles) scene.remove(particles);
+
+            // Instanced mesh for performance
+            particleGeo = new THREE.SphereGeometry(0.15, 4, 3);
+            particleMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+            particles = new THREE.InstancedMesh(particleGeo, particleMat, count);
+
+            // Initialize arrays
+            positions = new Float32Array(count * 3);
+            velocities = new Float32Array(count * 3);
+
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+
+            for(let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                positions[i3] = Math.random() * CONFIG.boxSize;
+                positions[i3+1] = Math.random() * 6 + 1;
+                positions[i3+2] = Math.random() * CONFIG.boxSize;
+
+                velocities[i3] = (Math.random() - 0.5) * 0.1;
+                velocities[i3+1] = (Math.random() - 0.5) * 0.1;
+                velocities[i3+2] = (Math.random() - 0.5) * 0.1;
+
+                dummy.position.set(positions[i3], positions[i3+1], positions[i3+2]);
+                dummy.updateMatrix();
+                particles.setMatrixAt(i, dummy.matrix);
+
+                color.setHSL(0.4 + Math.random() * 0.1, 0.8, 0.5);
+                particles.setColorAt(i, color);
+            }
+
+            particles.instanceMatrix.needsUpdate = true;
+            particles.instanceColor.needsUpdate = true;
+            scene.add(particles);
+
+            document.getElementById('stat-particles').textContent = count;
+        }
+
+        function initFood() {
+            addFood(12, 12, 1.0);
+            addFood(30, 28, 0.8);
+        }
+
+        function addFood(x, z, strength) {
+            const r = 2;
+            const geo = new THREE.SphereGeometry(r, 8, 6);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, r * 0.5, z);
+            scene.add(mesh);
+
+            foodMarkers.push({ x, z, r, strength, mesh });
+        }
+
+        function initControls() {
+            document.getElementById('btn-play').onclick = () => {
+                isPlaying = !isPlaying;
+                document.getElementById('btn-play').textContent = isPlaying ? 'Pause' : 'Play';
+                document.getElementById('btn-play').classList.toggle('active', isPlaying);
+            };
+
+            document.getElementById('btn-reset').onclick = () => {
+                initParticles(nParticles);
+                step = 0;
+            };
+
+            document.getElementById('btn-food').onclick = () => {
+                addFood(Math.random() * CONFIG.boxSize, Math.random() * CONFIG.boxSize, 0.5 + Math.random() * 0.5);
+            };
+
+            document.getElementById('slider-speed').oninput = e => {
+                simSpeed = parseFloat(e.target.value);
+                document.getElementById('val-speed').textContent = simSpeed + 'x';
+            };
+
+            document.getElementById('slider-particles').oninput = e => {
+                const n = parseInt(e.target.value);
+                document.getElementById('val-particles').textContent = n;
+                initParticles(n);
+                step = 0;
+            };
+
+            document.getElementById('slider-attract').oninput = e => {
+                attraction = parseFloat(e.target.value);
+                document.getElementById('val-attract').textContent = attraction.toFixed(1);
+            };
+
+            document.getElementById('btn-play').classList.add('active');
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ============================================================
+        // FAST SIMULATION - Grid-based O(N)
+        // ============================================================
+        function simulate() {
+            if(!isPlaying) return;
+
+            const dt = CONFIG.dt * simSpeed;
+            const box = CONFIG.boxSize;
+            const cutoffSq = CONFIG.cutoff * CONFIG.cutoff;
+
+            // Build spatial grid (for O(N) neighbor lookup)
+            const cellSize = CONFIG.gridSize;
+            const gridDim = Math.ceil(box / cellSize);
+            const grid = new Array(gridDim * gridDim);
+
+            // Reset grid
+            for(let i = 0; i < grid.length; i++) grid[i] = [];
+
+            // Assign particles to grid
+            for(let i = 0; i < nParticles; i++) {
+                const i3 = i * 3;
+                const cx = Math.floor(positions[i3] / cellSize) % gridDim;
+                const cz = Math.floor(positions[i3+2] / cellSize) % gridDim;
+                if(cx >= 0 && cz >= 0) {
+                    grid[cz * gridDim + cx].push(i);
+                }
+            }
+
+            // Update particles
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+
+            for(let i = 0; i < nParticles; i++) {
+                const i3 = i * 3;
+
+                // Get neighbors from nearby cells
+                const cx = Math.floor(positions[i3] / cellSize);
+                const cz = Math.floor(positions[i3+2] / cellSize);
+
+                let fx = 0, fy = 0, fz = 0;
+
+                // Check 3x3 neighbor cells
+                for(let dz = -1; dz <= 1; dz++) {
+                    for(let dx = -1; dx <= 1; dx++) {
+                        const nx = (cx + dx + gridDim) % gridDim;
+                        const nz = (cz + dz + gridDim) % gridDim;
+                        const cell = grid[nz * gridDim + nx];
+                        if(!cell) continue;
+
+                        for(const j of cell) {
+                            if(j <= i) continue;
+                            const j3 = j * 3;
+
+                            let dx = positions[j3] - positions[i3];
+                            let dz = positions[j3+2] - positions[i3+2];
+
+                            // PBC
+                            dx -= box * Math.round(dx / box);
+                            dz -= box * Math.round(dz / box);
+
+                            const r2 = dx*dx + dz*dz;
+                            if(r2 < cutoffSq && r2 > 0.01) {
+                                const r = Math.sqrt(r2);
+                                const force = 0.3 * (1 - r / CONFIG.cutoff);
+                                fx += dx / r * force;
+                                fz += dz / r * force;
+                            }
+                        }
+                    }
+                }
+
+                // Attraction to food
+                for(const food of foodMarkers) {
+                    const dx = food.x - positions[i3];
+                    const dz = food.z - positions[i3+2];
+                    const dist = Math.sqrt(dx*dx + dz*dz);
+                    if(dist < 15 && dist > 1) {
+                        const f = attraction * food.strength / (dist + 1);
+                        fx += dx / dist * f;
+                        fz += dz / dist * f;
+                    }
+                }
+
+                // Random motion (temperature)
+                const noise = 0.02;
+                fx += (Math.random() - 0.5) * noise;
+                fy += (Math.random() - 0.5) * noise - 0.002; // slight gravity
+                fz += (Math.random() - 0.5) * noise;
+
+                // Update velocity
+                velocities[i3] += fx * dt;
+                velocities[i3+1] += fy * dt;
+                velocities[i3+2] += fz * dt;
+
+                // Damping
+                const damp = 0.98;
+                velocities[i3] *= damp;
+                velocities[i3+1] *= damp;
+                velocities[i3+2] *= damp;
+
+                // Update position
+                positions[i3] += velocities[i3];
+                positions[i3+1] += velocities[i3+1];
+                positions[i3+2] += velocities[i3+2];
+
+                // PBC
+                positions[i3] = (positions[i3] + box) % box;
+                positions[i3+1] = Math.max(0.5, Math.min(10, positions[i3+1]));
+                positions[i3+2] = (positions[i3+2] + box) % box;
+
+                // Update mesh
+                dummy.position.set(positions[i3], positions[i3+1], positions[i3+2]);
+                const vel = Math.sqrt(velocities[i3]**2 + velocities[i3+1]**2 + velocities[i3+2]**2);
+                dummy.scale.setScalar(0.5 + Math.min(vel * 2, 1));
+                dummy.updateMatrix();
+                particles.setMatrixAt(i, dummy.matrix);
+
+                // Color by velocity
+                color.setHSL(0.4 - Math.min(vel * 0.15, 0.25), 0.8, 0.5);
+                particles.setColorAt(i, color);
+            }
+
+            particles.instanceMatrix.needsUpdate = true;
+            particles.instanceColor.needsUpdate = true;
+
+            step++;
+        }
+
+        // ============================================================
+        // ANIMATION LOOP
+        // ============================================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // FPS
+            frameCount++;
+            const now = performance.now();
+            if(now - lastTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastTime = now;
+                document.getElementById('stat-fps').textContent = fps;
+                document.getElementById('stat-step').textContent = step;
+            }
+
+            simulate();
+
+            // Animate food
+            const t = now * 0.001;
+            foodMarkers.forEach((f, i) => {
+                const pulse = 1 + Math.sin(t * 3 + i) * 0.1;
+                f.mesh.scale.setScalar(pulse);
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Full Neural Molecular Integration</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #030306;
+            color: #d0d0d8;
+            font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        canvas { display: block; }
+
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .panel {
+            background: rgba(6, 10, 18, 0.94);
+            border: 1px solid rgba(70, 180, 255, 0.12);
+            border-radius: 14px;
+            padding: 18px;
+            backdrop-filter: blur(24px);
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        #title-panel {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
+        }
+
+        #title-panel h1 {
+            font-size: 18px;
+            font-weight: 300;
+            letter-spacing: 8px;
+            color: #46b4ff;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        #title-panel .subtitle {
+            font-size: 9px;
+            letter-spacing: 4px;
+            color: #505868;
+            text-transform: uppercase;
+        }
+
+        #brain-panel {
+            position: absolute;
+            top: 90px;
+            left: 20px;
+            width: 200px;
+            pointer-events: auto;
+        }
+
+        #neural-panel {
+            position: absolute;
+            top: 90px;
+            right: 20px;
+            width: 200px;
+            pointer-events: auto;
+        }
+
+        #stats-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 200px;
+            pointer-events: auto;
+        }
+
+        #behavior-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 280px;
+            pointer-events: auto;
+        }
+
+        #connect-panel {
+            position: absolute;
+            top: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 320px;
+            pointer-events: auto;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #46b4ff;
+            margin-bottom: 14px;
+            border-bottom: 1px solid rgba(70, 180, 255, 0.15);
+            padding-bottom: 8px;
+        }
+
+        .region-row {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+            font-size: 9px;
+        }
+
+        .region-name {
+            width: 50px;
+            color: #606878;
+            font-weight: 500;
+        }
+
+        .region-bar-wrap {
+            flex: 1;
+            height: 5px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 0 6px;
+        }
+
+        .region-bar {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.05s;
+        }
+
+        .region-val {
+            width: 30px;
+            text-align: right;
+            font-size: 8px;
+            color: #00ff88;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 6px 0;
+            font-size: 10px;
+        }
+
+        .stat-label { color: #505868; }
+        .stat-value { color: #00ff88; font-weight: 600; }
+
+        .neuron-view {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            margin-top: 10px;
+        }
+
+        .neuron {
+            aspect-ratio: 1;
+            border-radius: 50%;
+            background: #101018;
+            transition: background 0.05s;
+        }
+
+        .neuron.firing {
+            background: #00ff88;
+            box-shadow: 0 0 6px #00ff88;
+        }
+
+        .neuron.inhibited {
+            background: #ff4466;
+        }
+
+        button {
+            background: rgba(70, 180, 255, 0.08);
+            border: 1px solid rgba(70, 180, 255, 0.25);
+            color: #46b4ff;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+            margin: 2px;
+        }
+
+        button:hover {
+            background: rgba(70, 180, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        button.active {
+            background: rgba(0, 255, 136, 0.12);
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+
+        .slider-wrap {
+            margin: 8px 0;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            margin-bottom: 4px;
+            color: #707888;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 3px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #46b4ff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .behavior-viz {
+            display: flex;
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .motor-indicator {
+            flex: 1;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .motor-label {
+            font-size: 8px;
+            color: #505868;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .motor-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #00ff88;
+            margin-top: 4px;
+        }
+
+        .motor-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .motor-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.1s;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #030306;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+
+        .loader {
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(70, 180, 255, 0.1);
+            border-top-color: #46b4ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #loading-text {
+            margin-top: 20px;
+            color: #46b4ff;
+            font-size: 12px;
+            letter-spacing: 6px;
+        }
+
+        #loading-sub {
+            margin-top: 8px;
+            color: #404858;
+            font-size: 10px;
+        }
+
+        .flow-viz {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin: 12px 0;
+        }
+
+        .flow-arrow {
+            width: 30px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #46b4ff, transparent);
+            position: relative;
+        }
+
+        .flow-arrow::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -3px;
+            border: 4px solid transparent;
+            border-left-color: #46b4ff;
+        }
+
+        .flow-box {
+            background: rgba(70, 180, 255, 0.1);
+            border: 1px solid rgba(70, 180, 255, 0.2);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 8px;
+            color: #46b4ff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #00ff88;
+            margin-right: 6px;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .connection-line {
+            position: absolute;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(70,180,255,0.3), transparent);
+            transform-origin: left center;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="loader"></div>
+        <div id="loading-text">oNeuro</div>
+        <div id="loading-sub">Initializing Neural-Molecular Engine...</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+        <div id="title-panel" class="panel">
+            <h1>oNeuro</h1>
+            <div class="subtitle">Neural Molecular Dynamics</div>
+        </div>
+
+        <div id="brain-panel" class="panel">
+            <h2>Brain Regions</h2>
+            <div id="brain-regions"></div>
+            <div class="flow-viz">
+                <div class="flow-box">Sensory</div>
+                <div class="flow-arrow"></div>
+                <div class="flow-box">Motor</div>
+            </div>
+        </div>
+
+        <div id="neural-panel" class="panel">
+            <h2>Neuron Activity <span class="status-dot"></span></h2>
+            <div class="neuron-view" id="neuron-grid"></div>
+            <div style="margin-top: 12px; font-size: 9px; color: #505868;">
+                <span id="firing-count">0</span> neurons firing
+            </div>
+        </div>
+
+        <div id="connect-panel" class="panel">
+            <h2>Signal Flow</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin: 16px 0;">
+                <div style="text-align: center;">
+                    <div style="font-size: 20px; color: #00ff88;" id="odor-strength">0%</div>
+                    <div style="font-size: 8px; color: #505868; margin-top: 4px;">ODOR</div>
+                </div>
+                <div class="flow-arrow" style="width: 60px;"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 20px; color: #46b4ff;" id="al-activity">0%</div>
+                    <div style="font-size: 8px; color: #505868; margin-top: 4px;">AL</div>
+                </div>
+                <div class="flow-arrow" style="width: 60px;"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 20px; color: #ff66aa;" id="mb-activity">0%</div>
+                    <div style="font-size: 8px; color: #505868; margin-top: 4px;">MB</div>
+                </div>
+                <div class="flow-arrow" style="width: 60px;"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 20px; color: #ffaa00;" id="cx-activity">0%</div>
+                    <div style="font-size: 8px; color: #505868; margin-top: 4px;">CX</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="stats-panel" class="panel">
+            <h2>Simulation</h2>
+            <div class="stat-row">
+                <span class="stat-label">Particles</span>
+                <span class="stat-value" id="stat-particles">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Temperature</span>
+                <span class="stat-value" id="stat-temp">0 K</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Energy</span>
+                <span class="stat-value" id="stat-energy">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">FPS</span>
+                <span class="stat-value" id="stat-fps">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Step</span>
+                <span class="stat-value" id="stat-step">0</span>
+            </div>
+            <div style="margin-top: 12px;">
+                <button id="btn-play" class="active">Run</button>
+                <button id="btn-reset">Reset</button>
+                <button id="btn-food">Food</button>
+            </div>
+        </div>
+
+        <div id="behavior-panel" class="panel">
+            <h2>Motor Output</h2>
+            <div class="behavior-viz">
+                <div class="motor-indicator">
+                    <div class="motor-label">Speed</div>
+                    <div class="motor-value" id="motor-speed">0.0</div>
+                    <div class="motor-bar"><div class="motor-bar-fill" id="speed-bar" style="width: 0%; background: #00ff88;"></div></div>
+                </div>
+                <div class="motor-indicator">
+                    <div class="motor-label">Turn</div>
+                    <div class="motor-value" id="motor-turn">0.0</div>
+                    <div class="motor-bar"><div class="motor-bar-fill" id="turn-bar" style="width: 50%; background: #46b4ff;"></div></div>
+                </div>
+            </div>
+            <div class="slider-wrap">
+                <div class="slider-header"><span>Speed</span><span id="val-speed">1x</span></div>
+                <input type="range" id="slider-speed" min="0.1" max="5" step="0.1" value="1">
+            </div>
+            <div class="slider-wrap">
+                <div class="slider-header"><span>Temperature</span><span id="val-temp">300K</span></div>
+                <input type="range" id="slider-temp" min="100" max="500" step="10" value="300">
+            </div>
+            <div class="slider-wrap">
+                <div class="slider-header"><span>Neurons</span><span id="val-neurons">64</span></div>
+                <input type="range" id="slider-neurons" min="16" max="256" step="16" value="64">
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================================================
+        // Configuration
+        // ============================================================
+        const CONFIG = {
+            particleCount: 8000,
+            boxSize: 50,
+            dt: 0.016,
+            cutoff: 10,
+            temperature: 300,
+            nNeurons: 64,
+        };
+
+        const BRAIN_REGIONS = [
+            { name: 'AL', color: '#00ff88', desc: 'Antennal Lobe' },
+            { name: 'MB', color: '#46b4ff', desc: 'Mushroom Body' },
+            { name: 'CX', color: '#ff66aa', desc: 'Central Complex' },
+            { name: 'VNC', color: '#ffaa00', desc: 'Motor Control' },
+            { name: 'OL', color: '#aa66ff', desc: 'Optic Lobe' },
+        ];
+
+        // ============================================================
+        // Neural Brain Simulation (Hodgkin-Huxley)
+        // ============================================================
+        class NeuralBrain {
+            constructor(nNeurons) {
+                this.nNeurons = nNeurons;
+                this.reset();
+            }
+
+            reset() {
+                // Membrane potential
+                this.v = new Float32Array(this.nNeurons).fill(-65);
+                this.prevV = new Float32Array(this.nNeurons).fill(-65);
+
+                // HH gating variables
+                this.m = new Float32Array(this.nNeurons).fill(0.05);
+                this.h = new Float32Array(this.nNeurons).fill(0.6);
+                this.n = new Float32Array(this.nNeurons).fill(0.32);
+
+                // Spike tracking
+                this.fired = new Uint8Array(this.nNeurons);
+                this.spikeCount = new Float32Array(this.nNeurons);
+                this.lastSpike = new Float32Array(this.nNeurons).fill(-100);
+
+                // Input current
+                this.inputCurrent = new Float32Array(this.nNeurons).fill(0);
+
+                // Region assignment
+                this.region = new Uint8Array(this.nNeurons);
+                for (let i = 0; i < this.nNeurons; i++) {
+                    this.region[i] = Math.floor(Math.random() * BRAIN_REGIONS.length);
+                }
+            }
+
+            // Rate functions
+            alphaM(v) { return 0.1 * (v + 40) / (1 - Math.exp(-(v + 40) / 10)); }
+            betaM(v) { return 4 * Math.exp(-(v + 65) / 18); }
+            alphaH(v) { return 0.07 * Math.exp(-(v + 65) / 20); }
+            betaH(v) { return 1 / (1 + Math.exp(-(v + 35) / 10)); }
+            alphaN(v) { return 0.01 * (v + 55) / (1 - Math.exp(-(v + 55) / 10)); }
+            betaN(v) { return 0.125 * Math.exp(-(v + 65) / 80); }
+
+            // Step simulation
+            step(dt, odorInput) {
+                // Apply odor input to AL neurons
+                if (odorInput > 0) {
+                    for (let i = 0; i < this.nNeurons; i++) {
+                        if (this.region[i] === 0) { // AL
+                            this.inputCurrent[i] = odorInput * 20;
+                        }
+                    }
+                }
+
+                let firingCount = 0;
+
+                for (let i = 0; i < this.nNeurons; i++) {
+                    const v = this.v[i];
+
+                    // Update gating variables
+                    const am = this.alphaM(v);
+                    const bm = this.betaM(v);
+                    const ah = this.alphaH(v);
+                    const bh = this.betaH(v);
+                    const an = this.alphaN(v);
+                    const bn = this.betaN(v);
+
+                    this.m[i] += (am * (1 - this.m[i]) - bm * this.m[i]) * dt;
+                    this.h[i] += (ah * (1 - this.h[i]) - bh * this.h[i]) * dt;
+                    this.n[i] += (an * (1 - this.n[i]) - bn * this.n[i]) * dt;
+
+                    // Clamp
+                    this.m[i] = Math.max(0, Math.min(1, this.m[i]));
+                    this.h[i] = Math.max(0, Math.min(1, this.h[i]));
+                    this.n[i] = Math.max(0, Math.min(1, this.n[i]));
+
+                    // Membrane equation
+                    const gNa = 120;
+                    const gK = 36;
+                    const gL = 0.3;
+                    const ENa = 50;
+                    const EK = -77;
+                    const EL = -54.387;
+
+                    const iNa = gNa * this.m[i] ** 3 * this.h[i] * (v - ENa);
+                    const iK = gK * this.n[i] ** 4 * (v - EK);
+                    const iL = gL * (v - EL);
+
+                    // Input drives AL -> MB -> CX -> VNC
+                    let input = this.inputCurrent[i];
+
+                    // Recurrent excitation based on region
+                    if (this.region[i] === 1 && this.spikeCount[i] > 0) { // MB
+                        input += this.spikeCount[i] * 2;
+                    }
+                    if (this.region[i] === 2) { // CX
+                        input += this.spikeCount[Math.max(0, i-1)] * 1.5; // From MB
+                    }
+                    if (this.region[i] === 3) { // VNC
+                        input += this.spikeCount[Math.max(0, i-2)] * 1.0; // From CX
+                    }
+
+                    // Update voltage
+                    this.prevV[i] = this.v[i];
+                    this.v[i] += (input - iNa - iK - iL) * dt;
+
+                    // Spike detection
+                    if (this.prevV[i] < 30 && this.v[i] >= 30 && !this.fired[i]) {
+                        this.fired[i] = 1;
+                        this.spikeCount[i]++;
+                        this.lastSpike[i] = 0;
+                        firingCount++;
+                    } else {
+                        this.fired[i] = 0;
+                    }
+
+                    // Refractory
+                    this.lastSpike[i] += dt;
+                    if (this.lastSpike[i] < 2) {
+                        this.v[i] = -65;
+                    }
+
+                    // Decay input
+                    this.inputCurrent[i] *= 0.9;
+                }
+
+                // Decay spike counts
+                for (let i = 0; i < this.nNeurons; i++) {
+                    this.spikeCount[i] *= 0.95;
+                }
+
+                return firingCount;
+            }
+
+            // Get motor output (from VNC region)
+            getMotorOutput() {
+                let speed = 0;
+                let turn = 0;
+                let count = 0;
+
+                for (let i = 0; i < this.nNeurons; i++) {
+                    if (this.region[i] === 3) { // VNC
+                        speed += this.spikeCount[i];
+                        if (i % 2 === 0) turn += this.spikeCount[i];
+                        else turn -= this.spikeCount[i];
+                        count++;
+                    }
+                }
+
+                if (count > 0) {
+                    speed = Math.min(1, speed / count * 2);
+                    turn = Math.max(-1, Math.min(1, turn / count));
+                }
+
+                return { speed, turn };
+            }
+
+            // Get region activities
+            getRegionActivities() {
+                const activities = new Array(BRAIN_REGIONS.length).fill(0);
+                const counts = new Array(BRAIN_REGIONS.length).fill(0);
+
+                for (let i = 0; i < this.nNeurons; i++) {
+                    const r = this.region[i];
+                    activities[r] += this.spikeCount[i];
+                    counts[r]++;
+                }
+
+                return activities.map((a, i) => counts[i] > 0 ? a / counts[i] : 0);
+            }
+        }
+
+        // ============================================================
+        // Global State
+        // ============================================================
+        let scene, camera, renderer, controls;
+        let particles, particleMaterial;
+        let foodMarkers = [];
+        let flyAgent = null;
+        let flyMesh = null;
+        let brain = null;
+
+        let simState = {
+            positions: null,
+            velocities: null,
+            temperature: CONFIG.temperature,
+            step: 0,
+        };
+
+        let isPlaying = true;
+        let simSpeed = 1;
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fps = 60;
+
+        // ============================================================
+        // Initialize
+        // ============================================================
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x030306);
+            scene.fog = new THREE.FogExp2(0x030306, 0.008);
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+            camera.position.set(0, 40, 70);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(CONFIG.boxSize/2, 0, CONFIG.boxSize/2);
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x202040, 0.5));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(30, 40, 30);
+            scene.add(dirLight);
+
+            // Grid
+            const grid = new THREE.GridHelper(CONFIG.boxSize * 2, 30, 0x101015, 0x080810);
+            grid.position.set(CONFIG.boxSize/2, -0.5, CONFIG.boxSize/2);
+            scene.add(grid);
+
+            // Initialize
+            initParticles(CONFIG.particleCount);
+            initFly();
+            initBrain(CONFIG.nNeurons);
+            addFood(15, 15, 1.0);
+            addFood(38, 35, 0.8);
+
+            initUI();
+            initControls();
+
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+            }, 800);
+
+            animate();
+        }
+
+        // ============================================================
+        // Particles
+        // ============================================================
+        function initParticles(count) {
+            const geometry = new THREE.SphereGeometry(0.2, 5, 4);
+            particleMaterial = new THREE.MeshPhongMaterial({
+                color: 0x00ff88,
+                emissive: 0x002211,
+                shininess: 60,
+                transparent: true,
+                opacity: 0.85,
+            });
+
+            particles = new THREE.InstancedMesh(geometry, particleMaterial, count);
+            simState.positions = new Float32Array(count * 3);
+            simState.velocities = new Float32Array(count * 3);
+
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+
+            for (let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                simState.positions[i3] = Math.random() * CONFIG.boxSize;
+                simState.positions[i3 + 1] = Math.random() * 8 + 1;
+                simState.positions[i3 + 2] = Math.random() * CONFIG.boxSize;
+
+                simState.velocities[i3] = (Math.random() - 0.5) * 0.1;
+                simState.velocities[i3 + 1] = (Math.random() - 0.5) * 0.1;
+                simState.velocities[i3 + 2] = (Math.random() - 0.5) * 0.1;
+
+                dummy.position.set(simState.positions[i3], simState.positions[i3+1], simState.positions[i3+2]);
+                dummy.updateMatrix();
+                particles.setMatrixAt(i, dummy.matrix);
+
+                color.setHSL(0.4 + Math.random() * 0.1, 0.8, 0.5);
+                particles.setColorAt(i, color);
+            }
+
+            particles.instanceMatrix.needsUpdate = true;
+            particles.instanceColor.needsUpdate = true;
+            scene.add(particles);
+        }
+
+        // ============================================================
+        // Fly Agent
+        // ============================================================
+        function initFly() {
+            // Body
+            const bodyGeo = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8);
+            const bodyMat = new THREE.MeshPhongMaterial({ color: 0x202030, shininess: 30 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.rotation.x = Math.PI / 2;
+
+            // Wings
+            const wingGeo = new THREE.PlaneGeometry(0.8, 0.3);
+            const wingMat = new THREE.MeshPhongMaterial({
+                color: 0x88aacc,
+                transparent: true,
+                opacity: 0.4,
+                side: THREE.DoubleSide
+            });
+
+            const leftWing = new THREE.Mesh(wingGeo, wingMat);
+            leftWing.position.set(0, 0.2, 0.3);
+            leftWing.rotation.x = -0.3;
+
+            const rightWing = new THREE.Mesh(wingGeo, wingMat);
+            rightWing.position.set(0, 0.2, -0.3);
+            rightWing.rotation.x = 0.3;
+
+            flyMesh = new THREE.Group();
+            flyMesh.add(body, leftWing, rightWing);
+            flyMesh.position.set(CONFIG.boxSize/2, 3, CONFIG.boxSize/2);
+            scene.add(flyMesh);
+
+            flyAgent = {
+                x: CONFIG.boxSize / 2,
+                y: 3,
+                z: CONFIG.boxSize / 2,
+                heading: 0,
+                speed: 0,
+                wingPhase: 0,
+            };
+        }
+
+        // ============================================================
+        // Brain
+        // ============================================================
+        function initBrain(nNeurons) {
+            brain = new NeuralBrain(nNeurons);
+            renderNeuronGrid();
+        }
+
+        function renderNeuronGrid() {
+            const grid = document.getElementById('neuron-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < brain.nNeurons; i++) {
+                const div = document.createElement('div');
+                div.className = 'neuron';
+                div.id = `neuron-${i}`;
+                grid.appendChild(div);
+            }
+
+            document.getElementById('val-neurons').textContent = brain.nNeurons;
+        }
+
+        // ============================================================
+        // Food
+        // ============================================================
+        function addFood(x, z, strength) {
+            const r = 2.5 + Math.random();
+
+            const geo = new THREE.SphereGeometry(r, 12, 10);
+            const mat = new THREE.MeshPhongMaterial({
+                color: 0xff4422,
+                emissive: 0x220808,
+                shininess: 50,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, r * 0.5, z);
+            scene.add(mesh);
+
+            const glowGeo = new THREE.SphereGeometry(r * 2, 8, 6);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xff2211,
+                transparent: true,
+                opacity: 0.12,
+            });
+            const glow = new THREE.Mesh(glowGeo, glowMat);
+            glow.position.copy(mesh.position);
+            scene.add(glow);
+
+            foodMarkers.push({ x, z, r, strength, mesh, glow });
+        }
+
+        // ============================================================
+        // UI
+        // ============================================================
+        function initUI() {
+            const container = document.getElementById('brain-regions');
+            container.innerHTML = '';
+
+            BRAIN_REGIONS.forEach((region, i) => {
+                const div = document.createElement('div');
+                div.className = 'region-row';
+                div.innerHTML = `
+                    <span class="region-name">${region.name}</span>
+                    <div class="region-bar-wrap">
+                        <div class="region-bar" id="region-bar-${i}" style="width: 0%; background: ${region.color};"></div>
+                    </div>
+                    <span class="region-val" id="region-val-${i}">0.0</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function initControls() {
+            document.getElementById('btn-play').onclick = () => {
+                isPlaying = !isPlaying;
+                document.getElementById('btn-play').textContent = isPlaying ? 'Pause' : 'Run';
+                document.getElementById('btn-play').classList.toggle('active', isPlaying);
+            };
+
+            document.getElementById('btn-reset').onclick = () => {
+                brain.reset();
+                simState.step = 0;
+                resetParticles();
+            };
+
+            document.getElementById('btn-food').onclick = () => {
+                addFood(
+                    Math.random() * CONFIG.boxSize,
+                    Math.random() * CONFIG.boxSize,
+                    0.5 + Math.random() * 0.5
+                );
+            };
+
+            document.getElementById('slider-speed').oninput = e => {
+                simSpeed = parseFloat(e.target.value);
+                document.getElementById('val-speed').textContent = simSpeed.toFixed(1) + 'x';
+            };
+
+            document.getElementById('slider-temp').oninput = e => {
+                CONFIG.temperature = parseFloat(e.target.value);
+                document.getElementById('val-temp').textContent = CONFIG.temperature + 'K';
+            };
+
+            document.getElementById('slider-neurons').oninput = e => {
+                CONFIG.nNeurons = parseInt(e.target.value);
+                initBrain(CONFIG.nNeurons);
+            };
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function resetParticles() {
+            const count = simState.positions.length / 3;
+            for (let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                simState.positions[i3] = Math.random() * CONFIG.boxSize;
+                simState.positions[i3 + 1] = Math.random() * 8 + 1;
+                simState.positions[i3 + 2] = Math.random() * CONFIG.boxSize;
+                simState.velocities[i3] = (Math.random() - 0.5) * 0.1;
+                simState.velocities[i3 + 1] = (Math.random() - 0.5) * 0.1;
+                simState.velocities[i3 + 2] = (Math.random() - 0.5) * 0.1;
+            }
+        }
+
+        // ============================================================
+        // Simulation
+        // ============================================================
+        function simulateStep() {
+            if (!isPlaying) return;
+
+            const dt = CONFIG.dt * simSpeed;
+            const count = simState.positions.length / 3;
+            const kb = 0.001987;
+            const gamma = 1.0;
+            const cutoffSq = CONFIG.cutoff * CONFIG.cutoff;
+            const box = CONFIG.boxSize;
+
+            // === NEURAL STEP ===
+            // Compute odor strength at fly position
+            let odorStrength = 0;
+            for (const food of foodMarkers) {
+                const dx = food.x - flyAgent.x;
+                const dz = food.z - flyAgent.z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                if (dist < 15) {
+                    odorStrength += food.strength * Math.exp(-dist / 5);
+                }
+            }
+            odorStrength = Math.min(1, odorStrength);
+
+            // Step brain
+            const firingCount = brain.step(dt * 10, odorStrength);
+
+            // Get motor output
+            const motor = brain.getMotorOutput();
+            flyAgent.speed = flyAgent.speed * 0.9 + motor.speed * 0.1;
+            flyAgent.heading += motor.turn * dt * 2;
+            flyAgent.heading = flyAgent.heading % (Math.PI * 2);
+
+            // Move fly
+            flyAgent.x += Math.cos(flyAgent.heading) * flyAgent.speed * dt * 20;
+            flyAgent.z += Math.sin(flyAgent.heading) * flyAgent.speed * dt * 20;
+            flyAgent.x = (flyAgent.x + box) % box;
+            flyAgent.z = (flyAgent.z + box) % box;
+
+            // Wing animation
+            flyAgent.wingPhase += flyAgent.speed * dt * 50;
+
+            // === MOLECULAR DYNAMICS ===
+            // Clear forces
+            const forces = new Float32Array(count * 3);
+
+            // LJ forces (simplified)
+            for (let i = 0; i < count; i++) {
+                const i3 = i * 3;
+
+                for (let j = i + 1; j < count; j++) {
+                    const j3 = j * 3;
+
+                    let dx = simState.positions[j3] - simState.positions[i3];
+                    let dy = simState.positions[j3+1] - simState.positions[i3+1];
+                    let dz = simState.positions[j3+2] - simState.positions[i3+2];
+
+                    dx -= box * Math.round(dx / box);
+                    dy -= box * Math.round(dy / box);
+                    dz -= box * Math.round(dz / box);
+
+                    const r2 = dx*dx + dy*dy + dz*dz;
+
+                    if (r2 < cutoffSq && r2 > 0.01) {
+                        const r = Math.sqrt(r2);
+                        const force = 0.1 * (3.4/r)**12 - 0.05 * (3.4/r)**6;
+                        const fx = force * dx / r;
+                        const fy = force * dy / r;
+                        const fz = force * dz / r;
+
+                        forces[i3] += fx; forces[i3+1] += fy; forces[i3+2] += fz;
+                        forces[j3] -= fx; forces[j3+1] -= fy; forces[j3+2] -= fz;
+                    }
+                }
+
+                // Attraction to food
+                for (const food of foodMarkers) {
+                    const dx = food.x - simState.positions[i3];
+                    const dz = food.z - simState.positions[i3+2];
+                    const dist = Math.sqrt(dx*dx + dz*dz);
+                    if (dist < 12 && dist > 0.5) {
+                        const force = food.strength * 0.3 / (dist + 1);
+                        forces[i3] += dx * force / dist;
+                        forces[i3+2] += dz * force / dist;
+                    }
+                }
+
+                // Attraction to fly (pheromone trail)
+                const fdx = flyAgent.x - simState.positions[i3];
+                const fdz = flyAgent.z - simState.positions[i3+2];
+                const fdist = Math.sqrt(fdx*fdx + fdz*fdz);
+                if (fdist < 8 && fdist > 0.5) {
+                    const ff = 0.1 / (fdist + 1);
+                    forces[i3] += fdx * ff / fdist;
+                    forces[i3+2] += fdz * ff / fdist;
+                }
+            }
+
+            // Integration
+            const sqrtKBT = Math.sqrt(kb * CONFIG.temperature);
+            let ke = 0;
+
+            for (let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                const invMass = 1;
+
+                // Random
+                const randF = sqrtKBT * (Math.random() - 0.5) * Math.sqrt(2 * gamma * dt) * invMass;
+
+                simState.velocities[i3] += (forces[i3] * invMass + randF) * dt;
+                simState.velocities[i3+1] += (forces[i3+1] * invMass + randF) * dt;
+                simState.velocities[i3+2] += (forces[i3+2] * invMass + randF) * dt;
+
+                const damp = Math.exp(-gamma * dt * 0.5);
+                simState.velocities[i3] *= damp;
+                simState.velocities[i3+1] *= damp;
+                simState.velocities[i3+2] *= damp;
+
+                simState.positions[i3] += simState.velocities[i3] * dt;
+                simState.positions[i3+1] += simState.velocities[i3+1] * dt;
+                simState.positions[i3+2] += simState.velocities[i3+2] * dt;
+
+                simState.positions[i3] = (simState.positions[i3] + box) % box;
+                simState.positions[i3+1] = Math.max(0.5, Math.min(12, simState.positions[i3+1]));
+                simState.positions[i3+2] = (simState.positions[i3+2] + box) % box;
+
+                ke += 0.5 * (simState.velocities[i3]**2 + simState.velocities[i3+1]**2 + simState.velocities[i3+2]**2);
+            }
+
+            simState.temperature = 2 * ke / (3 * count * kb);
+            simState.step++;
+        }
+
+        function updateVisuals() {
+            // Update particles
+            const count = simState.positions.length / 3;
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+
+            for (let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                dummy.position.set(simState.positions[i3], simState.positions[i3+1], simState.positions[i3+2]);
+
+                const vel = Math.sqrt(simState.velocities[i3]**2 + simState.velocities[i3+1]**2 + simState.velocities[i3+2]**2);
+                dummy.scale.setScalar(0.5 + Math.min(vel * 2, 1));
+                dummy.updateMatrix();
+                particles.setMatrixAt(i, dummy.matrix);
+
+                color.setHSL(0.4 - Math.min(vel * 0.15, 0.25), 0.8, 0.5);
+                particles.setColorAt(i, color);
+            }
+            particles.instanceMatrix.needsUpdate = true;
+            particles.instanceColor.needsUpdate = true;
+
+            // Update fly
+            flyMesh.position.set(flyAgent.x, flyAgent.y, flyAgent.z);
+            flyMesh.rotation.y = -flyAgent.heading;
+
+            // Wing flapping
+            const wingL = flyMesh.children[1];
+            const wingR = flyMesh.children[2];
+            wingL.rotation.z = Math.sin(flyAgent.wingPhase) * 0.4;
+            wingR.rotation.z = -Math.sin(flyAgent.wingPhase) * 0.4;
+
+            // Food animation
+            const time = performance.now() * 0.001;
+            foodMarkers.forEach((food, i) => {
+                const pulse = 1 + Math.sin(time * 3 + i) * 0.1;
+                food.mesh.scale.setScalar(pulse);
+                food.glow.scale.setScalar(pulse * 1.4);
+            });
+        }
+
+        function updateUI() {
+            // Stats
+            document.getElementById('stat-particles').textContent = CONFIG.particleCount.toLocaleString();
+            document.getElementById('stat-temp').textContent = Math.round(simState.temperature) + ' K';
+            document.getElementById('stat-fps').textContent = fps;
+            document.getElementById('stat-step').textContent = simState.step;
+
+            // Brain regions
+            const activities = brain.getRegionActivities();
+            BRAIN_REGIONS.forEach((r, i) => {
+                const val = Math.min(1, activities[i] * 2);
+                document.getElementById(`region-bar-${i}`).style.width = (val * 100) + '%';
+                document.getElementById(`region-val-${i}`).textContent = val.toFixed(2);
+            });
+
+            // Signal flow
+            const odorStrength = activities[0] * 2;
+            document.getElementById('odor-strength').textContent = Math.round(odorStrength * 100) + '%';
+            document.getElementById('al-activity').textContent = Math.round(activities[0] * 100) + '%';
+            document.getElementById('mb-activity').textContent = Math.round(activities[1] * 100) + '%';
+            document.getElementById('cx-activity').textContent = Math.round(activities[2] * 100) + '%';
+
+            // Motor output
+            document.getElementById('motor-speed').textContent = flyAgent.speed.toFixed(2);
+            document.getElementById('motor-turn').textContent = flyAgent.heading.toFixed(2);
+            document.getElementById('speed-bar').style.width = (flyAgent.speed * 100) + '%';
+            document.getElementById('turn-bar').style.width = (50 + flyAgent.heading * 30) + '%';
+
+            // Neurons
+            let firing = 0;
+            for (let i = 0; i < brain.nNeurons; i++) {
+                const el = document.getElementById(`neuron-${i}`);
+                if (brain.fired[i]) {
+                    el.classList.add('firing');
+                    el.style.background = BRAIN_REGIONS[brain.region[i]].color;
+                    firing++;
+                } else {
+                    el.classList.remove('firing');
+                    el.style.background = '#0a0a10';
+                }
+            }
+            document.getElementById('firing-count').textContent = firing;
+        }
+
+        // ============================================================
+        // Animation Loop
+        // ============================================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastTime = now;
+            }
+
+            simulateStep();
+            updateVisuals();
+            updateUI();
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

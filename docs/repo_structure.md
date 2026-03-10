@@ -32,6 +32,15 @@ use these first:
 - `scripts/`
   Benchmark helpers, analyzers, profiling scripts, telemetry capture, and cloud deployment helpers.
 
+## Sidecar Subprojects
+
+- `oneuro-3d/`
+  Native Bevy-based 3D visualization track. Use this for fly-world and terrarium rendering, not for the canonical benchmark path.
+- `oneuro-wasm/`
+  Browser/WASM demo surface. Use this for lightweight web demos and visualization prototypes.
+- `pharma_platform/`
+  Python sidecar for pathogen/drug modeling experiments. This is organized as its own package with `drugs/`, `pathogens/`, `tests/`, `experiments/`, `benchmarks/`, and `docs/`.
+
 ## Generated or Artifact-Heavy Areas
 
 - `results/`

@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Terrarium Ecosystem</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0a0f;
+            color: #fff;
+            font-family: 'SF Pro Display', -apple-system, sans-serif;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== PANELS ===== */
+        .panel {
+            position: absolute;
+            background: rgba(12, 12, 20, 0.95);
+            border: 1px solid rgba(100, 180, 255, 0.15);
+            border-radius: 14px;
+            padding: 16px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.5);
+        }
+
+        #title {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 22px;
+            font-weight: 200;
+            letter-spacing: 8px;
+            color: #88cc66;
+            text-transform: uppercase;
+        }
+
+        #subtitle {
+            position: absolute;
+            top: 44px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: #405050;
+        }
+
+        /* ===== LEFT - ORGANISMS ===== */
+        #organisms-panel {
+            top: 90px;
+            left: 16px;
+            width: 200px;
+        }
+
+        .org-title {
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: #88cc66;
+            margin-bottom: 12px;
+        }
+
+        .org-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            border-left: 3px solid;
+        }
+
+        .org-item.ants { border-color: #ff6644; }
+        .org-item.isopods { border-color: #6688aa; }
+        .org-item.plants { border-color: #44aa44; }
+        .org-item.water { border-color: #4488cc; }
+
+        .org-label {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .org-item.ants .org-label { color: #ff6644; }
+        .org-item.isopods .org-label { color: #88aacc; }
+        .org-item.plants .org-label { color: #66aa66; }
+        .org-item.water .org-label { color: #66aacc; }
+
+        .org-count {
+            font-size: 20px;
+            font-weight: 300;
+            color: #fff;
+        }
+
+        .org-desc {
+            font-size: 8px;
+            color: #607080;
+            margin-top: 4px;
+        }
+
+        /* ===== CENTER - BRAIN ===== */
+        #brain-panel {
+            top: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 280px;
+            text-align: center;
+        }
+
+        .brain-title {
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: #ff66aa;
+            margin-bottom: 12px;
+        }
+
+        .brain-region {
+            margin: 8px 0;
+            text-align: left;
+        }
+
+        .brain-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+        }
+
+        .brain-name { color: #70a0b0; }
+        .brain-val { color: #00ff88; }
+
+        .brain-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 3px;
+        }
+
+        .brain-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.1s;
+        }
+
+        .signal-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,100,150,0.1);
+        }
+
+        .signal-node {
+            padding: 4px 8px;
+            background: rgba(255,100,150,0.1);
+            border: 1px solid rgba(255,100,150,0.3);
+            border-radius: 4px;
+            font-size: 8px;
+            color: #ff6699;
+        }
+
+        .brain-desc {
+            margin-top: 10px;
+            font-size: 8px;
+            color: #506070;
+            line-height: 1.4;
+            text-align: left;
+            padding: 8px;
+            background: rgba(255,100,150,0.05);
+            border-radius: 6px;
+        }
+
+        /* ===== RIGHT - ENVIRONMENT ===== */
+        #env-panel {
+            top: 90px;
+            right: 16px;
+            width: 180px;
+        }
+
+        .env-title {
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: #66aacc;
+            margin-bottom: 12px;
+        }
+
+        .env-item {
+            margin: 10px 0;
+        }
+
+        .env-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: #608090;
+            margin-bottom: 4px;
+        }
+
+        .env-val { color: #00ff88; }
+
+        .env-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .env-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.2s;
+        }
+
+        /* ===== BOTTOM ===== */
+        #controls-panel {
+            bottom: 16px;
+            left: 16px;
+        }
+
+        button {
+            padding: 10px 16px;
+            background: rgba(100, 180, 255, 0.1);
+            border: 1px solid rgba(100, 180, 255, 0.3);
+            color: #66ccff;
+            border-radius: 8px;
+            font-size: 9px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 8px;
+        }
+
+        button:hover { background: rgba(100, 180, 255, 0.2); }
+        button.active { background: rgba(0, 255, 136, 0.15); border-color: #00ff88; color: #00ff88; }
+
+        #stats-panel {
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 24px;
+            font-size: 9px;
+        }
+
+        .stat-row { display: flex; gap: 5px; color: #507080; }
+        .stat-val { color: #00ff88; font-weight: 500; }
+
+        /* ===== LEGEND ===== */
+        #legend-panel {
+            bottom: 16px;
+            right: 16px;
+            font-size: 8px;
+        }
+
+        .legend-title {
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: #607080;
+            margin-bottom: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 4px 0;
+            color: #708090;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* ===== LOADING ===== */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.4s;
+        }
+        #loading.hidden { opacity: 0; pointer-events: none; }
+        .loader {
+            width: 40px; height: 40px;
+            border: 2px solid rgba(100,180,255,0.15);
+            border-top-color: #66ccff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loading"><div class="loader"></div></div>
+
+    <div id="canvas-container"></div>
+
+    <div id="title">oNeuro</div>
+    <div id="subtitle">TERRARIUM ECOSYSTEM</div>
+
+    <!-- ===== ORGANISMS ===== -->
+    <div class="panel" id="organisms-panel">
+        <div class="org-title">🪲 ORGANISMS</div>
+
+        <div class="org-item ants">
+            <div class="org-label">🐜 Ants</div>
+            <div class="org-count" id="ant-count">0</div>
+            <div class="org-desc">Communicate via pheromones. Find food, alert others, form trails.</div>
+        </div>
+
+        <div class="org-item isopods">
+            <div class="org-label">🦀 Isopods</div>
+            <div class="org-count" id="isopod-count">0</div>
+            <div class="org-desc">Rolly pollies! Eat decaying matter, curl into balls when threatened.</div>
+        </div>
+
+        <div class="org-item plants">
+            <div class="org-label">🌱 Plants</div>
+            <div class="org-count" id="plant-count">0</div>
+            <div class="org-desc">Absorb water, grow toward light, release oxygen.</div>
+        </div>
+
+        <div class="org-item water">
+            <div class="org-label">💧 Water</div>
+            <div class="org-count" id="water-count">0</div>
+            <div class="org-desc">Evaporates, condenses, absorbed by soil and plants.</div>
+        </div>
+    </div>
+
+    <!-- ===== BRAIN ===== -->
+    <div class="panel" id="brain-panel">
+        <div class="brain-title">🧠 COLONY MIND</div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">Pheromone Level</span>
+                <span class="brain-val" id="val-pheromone">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-pheromone" style="width: 0%; background: #ff6644;"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">Food Found</span>
+                <span class="brain-val" id="val-food">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-food" style="width: 0%; background: #44aa44;"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">Alert Level</span>
+                <span class="brain-val" id="val-alert">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-alert" style="width: 0%; background: #ff4444;"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">Foraging</span>
+                <span class="brain-val" id="val-forage">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-forage" style="width: 0%; background: #ffaa44;"></div></div>
+        </div>
+
+        <div class="signal-flow">
+            <div class="signal-node">SMELL</div>
+            <div style="color:#405060;font-size:10px">→</div>
+            <div class="signal-node">PROCESS</div>
+            <div style="color:#405060;font-size:10px">→</div>
+            <div class="signal-node">ACT</div>
+        </div>
+
+        <div class="brain-desc">
+            <b>How it works:</b> Ants detect pheromones with antennae.
+            High pheromone = "food this way!" → more ants follow the trail.
+            Food found = alert colony → more ants leave nest.
+        </div>
+    </div>
+
+    <!-- ===== ENVIRONMENT ===== -->
+    <div class="panel" id="env-panel">
+        <div class="env-title">🌡️ ENVIRONMENT</div>
+
+        <div class="env-item">
+            <div class="env-label"><span>Moisture</span><span class="env-val" id="val-moisture">0%</span></div>
+            <div class="env-bar"><div class="env-fill" id="bar-moisture" style="width: 50%; background: #4488cc;"></div></div>
+        </div>
+
+        <div class="env-item">
+            <div class="env-label"><span>Temperature</span><span class="env-val" id="val-temp">22°C</span></div>
+            <div class="env-bar"><div class="env-fill" id="bar-temp" style="width: 50%; background: #ff6644;"></div></div>
+        </div>
+
+        <div class="env-item">
+            <div class="env-label"><span>Soil Quality</span><span class="env-val" id="val-soil">100%</span></div>
+            <div class="env-bar"><div class="env-fill" id="bar-soil" style="width: 100%; background: #8B4513;"></div></div>
+        </div>
+
+        <div class="env-item">
+            <div class="env-label"><span>Food Available</span><span class="env-val" id="val-food-avail">0</span></div>
+            <div class="env-bar"><div class="env-fill" id="bar-food-avail" style="width: 0%; background: #44aa44;"></div></div>
+        </div>
+    </div>
+
+    <!-- ===== CONTROLS ===== -->
+    <div id="controls-panel">
+        <button id="btn-play" class="active">Play</button>
+        <button id="btn-reset">Reset</button>
+        <button id="btn-food">Add Food</button>
+        <button id="btn-water">Add Water</button>
+    </div>
+
+    <!-- ===== STATS ===== -->
+    <div id="stats-panel">
+        <div class="stat-row"><span>Step:</span><span class="stat-val" id="stat-step">0</span></div>
+        <div class="stat-row"><span>FPS:</span><span class="stat-val" id="stat-fps">0</span></div>
+    </div>
+
+    <!-- ===== LEGEND ===== -->
+    <div class="panel" id="legend-panel">
+        <div class="legend-title">LEGEND</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff4422"></div> Ant (red = carrying food)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffaa00"></div> Ant (yellow = searching)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#6688aa"></div> Isopod (rollie pollie)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#44aa44"></div> Plant</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#4488cc"></div> Water drop</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff6644;opacity:0.3"></div> Pheromone trail</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8B4513"></div> Food crumb</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ===== CONFIG =====
+        const CONFIG = {
+            width: 40,
+            depth: 30,
+            maxAnts: 25,
+            maxIsopods: 8,
+            maxPlants: 6,
+            maxFood: 10,
+            maxWater: 15,
+        };
+
+        // ===== STATE =====
+        let scene, camera, renderer;
+        let ants = [], isopods = [], plants = [], foodItems = [], waterDrops = [];
+        let pheromoneGrid = [];
+        let step = 0, fps = 60, isPlaying = true;
+        let lastTime = performance.now(), frameCount = 0;
+
+        // Environment
+        let env = {
+            moisture: 0.5,
+            temperature: 0.5,
+            soilQuality: 1.0,
+            pheromoneLevel: 0,
+            foodFound: 0,
+            alertLevel: 0,
+            forageLevel: 0
+        };
+
+        // ===== INIT =====
+        async function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0f);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+            camera.position.set(CONFIG.width/2, 35, 50);
+            camera.lookAt(CONFIG.width/2, 0, CONFIG.depth/2);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Mouse drag
+            let dragging = false, lastMouse = {x:0, y:0};
+            renderer.domElement.addEventListener('mousedown', e => { dragging = true; lastMouse = {x:e.clientX, y:e.clientY}; });
+            renderer.domElement.addEventListener('mouseup', () => dragging = false);
+            renderer.domElement.addEventListener('mousemove', e => {
+                if(!dragging) return;
+                camera.position.x += (e.clientX - lastMouse.x) * 0.1;
+                camera.position.z += (e.clientY - lastMouse.y) * 0.1;
+                camera.lookAt(CONFIG.width/2, 0, CONFIG.depth/2);
+                lastMouse = {x:e.clientX, y:e.clientY};
+            });
+
+            // Terrain
+            createTerrain();
+
+            // Pheromone grid
+            for(let x = 0; x < CONFIG.width; x++) {
+                pheromoneGrid[x] = [];
+                for(let z = 0; z < CONFIG.depth; z++) {
+                    pheromoneGrid[x][z] = 0;
+                }
+            }
+
+            // Create organisms
+            createPlants();
+            createAnts();
+            createIsopods();
+            addFoodItem(10, 10, 1);
+            addFoodItem(30, 20, 0.8);
+
+            initControls();
+            window.addEventListener('resize', onResize);
+
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 400);
+            animate();
+        }
+
+        function createTerrain() {
+            // Ground (dirt)
+            const groundGeo = new THREE.PlaneGeometry(CONFIG.width * 2, CONFIG.depth * 2);
+            const groundMat = new THREE.MeshBasicMaterial({ color: 0x1a1008 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.set(CONFIG.width/2, -0.2, CONFIG.depth/2);
+            scene.add(ground);
+
+            // Grid lines
+            const grid = new THREE.GridHelper(Math.max(CONFIG.width, CONFIG.depth) * 2, 20, 0x2a1a10, 0x1a0a08);
+            grid.position.set(CONFIG.width/2, 0, CONFIG.depth/2);
+            scene.add(grid);
+
+            // Walls (glass)
+            const wallMat = new THREE.MeshBasicMaterial({ color: 0x203040, transparent: true, opacity: 0.1, side: THREE.DoubleSide });
+
+            const wallBack = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.width * 2, 15), wallMat);
+            wallBack.position.set(CONFIG.width/2, 7.5, -1);
+            scene.add(wallBack);
+
+            const wallLeft = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.depth * 2, 15), wallMat);
+            wallLeft.rotation.y = Math.PI / 2;
+            wallLeft.position.set(-1, 7.5, CONFIG.depth/2);
+            scene.add(wallLeft);
+
+            const wallRight = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.depth * 2, 15), wallMat);
+            wallRight.rotation.y = Math.PI / 2;
+            wallRight.position.set(CONFIG.width + 1, 7.5, CONFIG.depth/2);
+            scene.add(wallRight);
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x404050, 0.8));
+            const sun = new THREE.DirectionalLight(0xffffcc, 0.6);
+            sun.position.set(20, 30, 10);
+            scene.add(sun);
+        }
+
+        // ===== ANTS =====
+        function createAnts() {
+            for(let i = 0; i < CONFIG.maxAnts; i++) {
+                const ant = createAnt();
+                ant.x = CONFIG.width / 2 + (Math.random() - 0.5) * 4;
+                ant.z = CONFIG.depth / 2 + (Math.random() - 0.5) * 4;
+                ant.heading = Math.random() * Math.PI * 2;
+                ant.hasFood = false;
+                ant.state = 'foraging'; // foraging, following, returning
+                ant.targetX = null;
+                ant.targetZ = null;
+                ants.push(ant);
+            }
+        }
+
+        function createAnt() {
+            const group = new THREE.Group();
+
+            // Body (3 segments)
+            const bodyMat = new THREE.MeshBasicMaterial({ color: 0x332211 });
+
+            const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.25, 6, 4), bodyMat);
+            abdomen.position.z = -0.2;
+            group.add(abdomen);
+
+            const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 4), bodyMat);
+            thorax.position.z = 0.1;
+            group.add(thorax);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), bodyMat);
+            head.position.z = 0.35;
+            group.add(head);
+
+            // Antennae
+            const antMat = new THREE.MeshBasicMaterial({ color: 0x221100 });
+            const antL = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.01, 0.25), antMat);
+            antL.position.set(-0.08, 0.1, 0.45);
+            antL.rotation.x = -0.5;
+            antL.rotation.z = 0.3;
+            group.add(antL);
+
+            const antR = antL.clone();
+            antR.position.set(0.08, 0.1, 0.45);
+            antR.rotation.z = -0.3;
+            group.add(antR);
+
+            // Legs (6)
+            for(let i = 0; i < 6; i++) {
+                const leg = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.01, 0.01, 0.3),
+                    antMat
+                );
+                leg.position.z = 0.1 - i * 0.06;
+                leg.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.5;
+                leg.rotation.x = 0.3;
+                group.add(leg);
+            }
+
+            // Eyes
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 3), eyeMat);
+            eyeL.position.set(-0.08, 0.05, 0.42);
+            group.add(eyeL);
+            const eyeR = eyeL.clone();
+            eyeR.position.set(0.08, 0.05, 0.42);
+            group.add(eyeR);
+
+            // Carried food indicator
+            const foodIndicator = new THREE.Mesh(
+                new THREE.SphereGeometry(0.15, 6, 4),
+                new THREE.MeshBasicMaterial({ color: 0x44aa44 })
+            );
+            foodIndicator.position.set(0, 0.2, -0.3);
+            foodIndicator.visible = false;
+            foodIndicator.name = 'foodIndicator';
+            group.add(foodIndicator);
+
+            group.position.y = 0.3;
+            scene.add(group);
+
+            return { mesh: group, x: 0, z: 0, heading: 0, hasFood: false, state: 'foraging' };
+        }
+
+        function updateAnts() {
+            let totalPheromone = 0;
+            let antsWithFood = 0;
+            let foraging = 0;
+
+            for(const ant of ants) {
+                // Sense pheromones
+                const senseDist = 3;
+                let leftPheromone = 0, rightPheromone = 0;
+
+                for(let d = 1; d <= senseDist; d++) {
+                    const lx = Math.floor(ant.x + Math.cos(ant.heading + 0.5) * d);
+                    const lz = Math.floor(ant.z + Math.sin(ant.heading + 0.5) * d);
+                    const rx = Math.floor(ant.x + Math.cos(ant.heading - 0.5) * d);
+                    const rz = Math.floor(ant.z + Math.sin(ant.heading - 0.5) * d);
+
+                    if(lx >= 0 && lx < CONFIG.width && lz >= 0 && lz < CONFIG.depth) {
+                        leftPheromone += pheromoneGrid[lx][lz];
+                    }
+                    if(rx >= 0 && rx < CONFIG.width && rz >= 0 && rz < CONFIG.depth) {
+                        rightPheromone += pheromoneGrid[rx][rz];
+                    }
+                }
+
+                // Turn toward stronger pheromone
+                if(leftPheromone > rightPheromone) {
+                    ant.heading += 0.1;
+                } else if(rightPheromone > leftPheromone) {
+                    ant.heading -= 0.1;
+                }
+
+                // Random wandering
+                ant.heading += (Math.random() - 0.5) * 0.3;
+
+                // State machine
+                if(ant.hasFood) {
+                    // Return to nest (center)
+                    const toNestX = CONFIG.width/2 - ant.x;
+                    const toNestZ = CONFIG.depth/2 - ant.z;
+                    ant.heading = Math.atan2(toNestZ, toNestX);
+
+                    // Drop pheromone trail
+                    const px = Math.floor(ant.x);
+                    const pz = Math.floor(ant.z);
+                    if(px >= 0 && px < CONFIG.width && pz >= 0 && pz < CONFIG.depth) {
+                        pheromoneGrid[px][pz] = Math.min(1, pheromoneGrid[px][pz] + 0.3);
+                    }
+
+                    antsWithFood++;
+
+                    // Check if at nest
+                    const distToNest = Math.sqrt(toNestX*toNestX + toNestZ*toNestZ);
+                    if(distToNest < 2) {
+                        ant.hasFood = false;
+                        ant.mesh.children.find(c => c.name === 'foodIndicator').visible = false;
+                        ant.mesh.children.forEach(c => {
+                            if(c.material) c.material.color.setHex(0x332211);
+                        });
+                    }
+                } else {
+                    // Looking for food
+                    foraging++;
+
+                    // Check nearby food
+                    let nearestFood = null;
+                    let nearestDist = Infinity;
+
+                    for(const food of foodItems) {
+                        if(food.amount <= 0) continue;
+                        const dx = food.x - ant.x;
+                        const dz = food.z - ant.z;
+                        const dist = Math.sqrt(dx*dx + dz*dz);
+                        if(dist < nearestDist) {
+                            nearestDist = dist;
+                            nearestFood = food;
+                        }
+                    }
+
+                    if(nearestFood && nearestDist < 8) {
+                        // Go toward food
+                        ant.heading = Math.atan2(nearestFood.z - ant.z, nearestFood.x - ant.x);
+
+                        if(nearestDist < 1) {
+                            // Take food
+                            ant.hasFood = true;
+                            nearestFood.amount -= 0.3;
+                            ant.mesh.children.find(c => c.name === 'foodIndicator').visible = true;
+                            ant.mesh.children.forEach(c => {
+                                if(c.material) c.material.color.setHex(0xff4422);
+                            });
+                        }
+                    } else {
+                        // Follow pheromone trail
+                        if(leftPheromone + rightPheromone > 0.1) {
+                            // Already following trail, keep going
+                        }
+                    }
+                }
+
+                // Move
+                ant.x += Math.cos(ant.heading) * 0.15;
+                ant.z += Math.sin(ant.heading) * 0.15;
+
+                // Bounds
+                ant.x = Math.max(0.5, Math.min(CONFIG.width - 0.5, ant.x));
+                ant.z = Math.max(0.5, Math.min(CONFIG.depth - 0.5, ant.z));
+
+                // Update mesh
+                ant.mesh.position.set(ant.x, 0.3, ant.z);
+                ant.mesh.rotation.y = -ant.heading;
+
+                totalPheromone += leftPheromone + rightPheromone;
+            }
+
+            // Update environment stats
+            env.pheromoneLevel = totalPheromone / ants.length / senseDist;
+            env.foodFound = antsWithFood / ants.length;
+            env.forageLevel = foraging / ants.length;
+        }
+
+        // ===== ISOPODS =====
+        function createIsopods() {
+            for(let i = 0; i < CONFIG.maxIsopods; i++) {
+                const iso = createIsopod();
+                iso.x = Math.random() * CONFIG.width;
+                iso.z = Math.random() * CONFIG.depth;
+                iso.heading = Math.random() * Math.PI * 2;
+                iso.rolled = false;
+                isopods.push(iso);
+            }
+        }
+
+        function createIsopod() {
+            const group = new THREE.Group();
+
+            // Body (oval)
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.3, 8, 6),
+                new THREE.MeshBasicMaterial({ color: 0x556677 })
+            );
+            body.scale.set(1, 0.5, 1.5);
+            group.add(body);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.15, 6, 4),
+                new THREE.MeshBasicMaterial({ color: 0x445566 })
+            );
+            head.position.z = 0.35;
+            group.add(head);
+
+            // Eyes
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 3), eyeMat);
+            eyeL.position.set(-0.1, 0.1, 0.4);
+            group.add(eyeL);
+            const eyeR = eyeL.clone();
+            eyeR.position.x = 0.1;
+            group.add(eyeR);
+
+            // Legs (7 pairs)
+            for(let i = 0; i < 7; i++) {
+                const leg = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.02, 0.02, 0.2),
+                    new THREE.MeshBasicMaterial({ color: 0x334455 })
+                );
+                leg.position.z = 0.15 - i * 0.05;
+                leg.position.y = -0.1;
+                leg.rotation.x = 0.5;
+                group.add(leg);
+            }
+
+            group.position.y = 0.2;
+            scene.add(group);
+
+            return { mesh: group, x: 0, z: 0, heading: 0, rolled: false };
+        }
+
+        function updateIsopods() {
+            for(const iso of isopods) {
+                // Random movement
+                iso.heading += (Math.random() - 0.5) * 0.4;
+
+                // Roll up if threatened (random chance)
+                if(!iso.rolled && Math.random() < 0.001) {
+                    iso.rolled = true;
+                    iso.mesh.children[0].scale.set(0.8, 0.8, 0.8);
+                }
+
+                // Unroll
+                if(iso.rolled && Math.random() < 0.01) {
+                    iso.rolled = false;
+                    iso.mesh.children[0].scale.set(1, 0.5, 1.5);
+                }
+
+                if(!iso.rolled) {
+                    iso.x += Math.cos(iso.heading) * 0.05;
+                    iso.z += Math.sin(iso.heading) * 0.05;
+                }
+
+                // Bounds
+                iso.x = Math.max(0.5, Math.min(CONFIG.width - 0.5, iso.x));
+                iso.z = Math.max(0.5, Math.min(CONFIG.depth - 0.5, iso.z));
+
+                iso.mesh.position.set(iso.x, 0.15, iso.z);
+                iso.mesh.rotation.y = -iso.heading;
+            }
+        }
+
+        // ===== PLANTS =====
+        function createPlants() {
+            const positions = [
+                [5, 5], [35, 8], [8, 25], [32, 22], [15, 15], [25, 5]
+            ];
+
+            for(const [x, z] of positions) {
+                addPlant(x, z);
+            }
+        }
+
+        function addPlant(x, z) {
+            const group = new THREE.Group();
+
+            // Stem
+            const stem = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.05, 0.08, 1.5, 6),
+                new THREE.MeshBasicMaterial({ color: 0x228822 })
+            );
+            stem.position.y = 0.75;
+            group.add(stem);
+
+            // Leaves
+            for(let i = 0; i < 4; i++) {
+                const leaf = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.4, 6, 4),
+                    new THREE.MeshBasicMaterial({ color: 0x44aa44 })
+                );
+                leaf.scale.set(1, 0.3, 1);
+                leaf.position.y = 1 + i * 0.2;
+                leaf.position.x = Math.cos(i * 1.5) * 0.3;
+                leaf.position.z = Math.sin(i * 1.5) * 0.3;
+                group.add(leaf);
+            }
+
+            // Soil
+            const soil = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.5, 0.6, 0.2, 8),
+                new THREE.MeshBasicMaterial({ color: 0x3d2817 })
+            );
+            soil.position.y = 0.1;
+            group.add(soil);
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+
+            plants.push({ mesh: group, x, z, growth: 1, health: 1 });
+        }
+
+        function updatePlants() {
+            for(const plant of plants) {
+                // Grow slowly
+                if(plant.growth < 1.5 && Math.random() < 0.001) {
+                    plant.growth += 0.01;
+                    plant.mesh.scale.setScalar(plant.growth);
+                }
+
+                // Absorb water
+                const waterNearby = waterDrops.filter(w =>
+                    Math.sqrt((w.x - plant.x)**2 + (w.z - plant.z)**2) < 3
+                ).length;
+
+                if(waterNearby > 0 && Math.random() < 0.01) {
+                    // Plant healthy
+                }
+            }
+        }
+
+        // ===== FOOD =====
+        function addFoodItem(x, z, amount) {
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.4 * amount, 8, 6),
+                new THREE.MeshBasicMaterial({ color: 0x8B4513 })
+            );
+            mesh.position.set(x, 0.3, z);
+            scene.add(mesh);
+
+            foodItems.push({ mesh, x, z, amount });
+        }
+
+        function updateFood() {
+            // Remove depleted food
+            for(let i = foodItems.length - 1; i >= 0; i--) {
+                if(foodItems[i].amount <= 0) {
+                    scene.remove(foodItems[i].mesh);
+                    foodItems.splice(i, 1);
+                }
+            }
+
+            env.foodFound = 1 - (foodItems.length / CONFIG.maxFood);
+        }
+
+        // ===== WATER =====
+        function addWaterDrop(x, z) {
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.2, 6, 4),
+                new THREE.MeshBasicMaterial({ color: 0x4488cc, transparent: true, opacity: 0.7 })
+            );
+            mesh.position.set(x, 0.2, z);
+            scene.add(mesh);
+
+            waterDrops.push({ mesh, x, z, life: 1 });
+        }
+
+        function updateWater() {
+            // Evaporate
+            for(let i = waterDrops.length - 1; i >= 0; i--) {
+                waterDrops[i].life -= 0.005;
+                waterDrops[i].mesh.material.opacity = waterDrops[i].life * 0.7;
+
+                if(waterDrops[i].life <= 0) {
+                    scene.remove(waterDrops[i].mesh);
+                    waterDrops.splice(i, 1);
+                }
+            }
+
+            // Random new drops
+            if(waterDrops.length < CONFIG.maxWater && Math.random() < 0.02) {
+                addWaterDrop(Math.random() * CONFIG.width, Math.random() * CONFIG.depth);
+            }
+
+            env.moisture = waterDrops.length / CONFIG.maxWater;
+        }
+
+        // ===== PHEROMONES =====
+        function updatePheromones() {
+            // Decay
+            for(let x = 0; x < CONFIG.width; x++) {
+                for(let z = 0; z < CONFIG.depth; z++) {
+                    pheromoneGrid[x][z] *= 0.98;
+                }
+            }
+        }
+
+        // ===== CONTROLS =====
+        function initControls() {
+            document.getElementById('btn-play').onclick = () => {
+                isPlaying = !isPlaying;
+                document.getElementById('btn-play').textContent = isPlaying ? 'Pause' : 'Play';
+                document.getElementById('btn-play').classList.toggle('active', isPlaying);
+            };
+
+            document.getElementById('btn-reset').onclick = () => {
+                // Reset pheromones
+                for(let x = 0; x < CONFIG.width; x++) {
+                    for(let z = 0; z < CONFIG.depth; z++) {
+                        pheromoneGrid[x][z] = 0;
+                    }
+                }
+                step = 0;
+            };
+
+            document.getElementById('btn-food').onclick = () => {
+                addFoodItem(
+                    Math.random() * (CONFIG.width - 4) + 2,
+                    Math.random() * (CONFIG.depth - 4) + 2,
+                    0.8 + Math.random() * 0.4
+                );
+            };
+
+            document.getElementById('btn-water').onclick = () => {
+                for(let i = 0; i < 5; i++) {
+                    addWaterDrop(
+                        Math.random() * CONFIG.width,
+                        Math.random() * CONFIG.depth
+                    );
+                }
+            };
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ===== SIMULATE =====
+        function simulate() {
+            if(!isPlaying) return;
+
+            updateAnts();
+            updateIsopods();
+            updatePlants();
+            updateFood();
+            updateWater();
+            updatePheromones();
+
+            step++;
+        }
+
+        // ===== UI =====
+        function updateUI() {
+            document.getElementById('stat-step').textContent = step;
+            document.getElementById('stat-fps').textContent = fps;
+
+            // Organisms
+            document.getElementById('ant-count').textContent = ants.length;
+            document.getElementById('isopod-count').textContent = isopods.length;
+            document.getElementById('plant-count').textContent = plants.length;
+            document.getElementById('water-count').textContent = waterDrops.length;
+
+            // Brain
+            document.getElementById('bar-pheromone').style.width = (env.pheromoneLevel * 100) + '%';
+            document.getElementById('val-pheromone').textContent = Math.round(env.pheromoneLevel * 100) + '%';
+
+            document.getElementById('bar-food').style.width = (env.foodFound * 100) + '%';
+            document.getElementById('val-food').textContent = Math.round(env.foodFound * 100) + '%';
+
+            document.getElementById('bar-alert').style.width = (env.alertLevel * 100) + '%';
+            document.getElementById('val-alert').textContent = Math.round(env.alertLevel * 100) + '%';
+
+            document.getElementById('bar-forage').style.width = (env.forageLevel * 100) + '%';
+            document.getElementById('val-forage').textContent = Math.round(env.forageLevel * 100) + '%';
+
+            // Environment
+            document.getElementById('bar-moisture').style.width = (env.moisture * 100) + '%';
+            document.getElementById('val-moisture').textContent = Math.round(env.moisture * 100) + '%';
+
+            document.getElementById('bar-temp').style.width = (env.temperature * 100) + '%';
+            document.getElementById('val-temp').textContent = Math.round(15 + env.temperature * 15) + '°C';
+
+            document.getElementById('bar-soil').style.width = (env.soilQuality * 100) + '%';
+            document.getElementById('val-soil').textContent = Math.round(env.soilQuality * 100) + '%';
+
+            document.getElementById('bar-food-avail').style.width = (foodItems.length / CONFIG.maxFood * 100) + '%';
+            document.getElementById('val-food-avail').textContent = foodItems.length;
+        }
+
+        // ===== LOOP =====
+        function animate() {
+            requestAnimationFrame(animate);
+
+            frameCount++;
+            const now = performance.now();
+            if(now - lastTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastTime = now;
+            }
+
+            simulate();
+            if(step % 2 === 0) updateUI();
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

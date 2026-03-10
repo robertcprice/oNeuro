@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>oNeuro WASM Demos</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0c1117;
+      --panel: #151d26;
+      --text: #e8eef5;
+      --muted: #97a9bb;
+      --accent: #7cd1b8;
+      --border: #263241;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0c1117 0%, #101925 100%);
+      color: var(--text);
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 48px 20px 64px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 2.4rem;
+    }
+    p {
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .card {
+      display: block;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--panel);
+      color: inherit;
+      text-decoration: none;
+    }
+    .card:hover {
+      border-color: var(--accent);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+    .section {
+      margin-top: 32px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>oNeuro WASM Demos</h1>
+    <p>
+      Browser-side visualization and demo entrypoints for the oNeuro project.
+      These are exploratory demo surfaces, not the canonical benchmark path.
+    </p>
+
+    <div class="section">
+      <div class="grid">
+        <a class="card" href="full_integration.html">
+          <strong>Full Integration</strong>
+          Combined neural, molecular, and environment demo.
+        </a>
+        <a class="card" href="md_visualization.html">
+          <strong>MD Visualization</strong>
+          Particle and molecular dynamics view.
+        </a>
+        <a class="card" href="prototypes/README.md">
+          <strong>Prototype Demos</strong>
+          Additional experimental browser entrypoints.
+        </a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Molecular Ecosystem</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #050508;
+            color: #fff;
+            font-family: 'SF Mono', 'JetBrains Mono', monospace;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== PANELS ===== */
+        .panel {
+            position: absolute;
+            background: rgba(8, 12, 18, 0.95);
+            border: 1px solid rgba(80, 200, 120, 0.12);
+            border-radius: 12px;
+            padding: 14px;
+            backdrop-filter: blur(20px);
+        }
+
+        #title {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 18px;
+            font-weight: 300;
+            letter-spacing: 6px;
+            color: #50c878;
+            text-transform: uppercase;
+        }
+
+        #subtitle {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 8px;
+            letter-spacing: 2px;
+            color: #404850;
+        }
+
+        /* ===== LEFT - MOLECULES ===== */
+        #molecules-panel {
+            top: 80px;
+            left: 16px;
+            width: 180px;
+        }
+
+        .mol-title {
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: #50c878;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .mol-stat {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mol-label { font-size: 10px; color: #606878; }
+        .mol-value { font-size: 12px; color: #50c878; font-weight: 600; }
+
+        /* ===== RIGHT - NEURAL ===== */
+        #neural-panel {
+            top: 80px;
+            right: 16px;
+            width: 200px;
+        }
+
+        .brain-region {
+            margin: 10px 0;
+        }
+
+        .region-name {
+            font-size: 8px;
+            color: #808890;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .region-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .region-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.1s;
+        }
+
+        .fill-al { background: linear-gradient(90deg, #ff6644, #ffaa44); }
+        .fill-mb { background: linear-gradient(90deg, #44aaff, #44ffaa); }
+        .fill-cx { background: linear-gradient(90deg, #aa44ff, #ff44aa); }
+        .fill-vnc { background: linear-gradient(90deg, #50c878, #88ff88); }
+
+        /* ===== BOTTOM - CONTROLS ===== */
+        #controls-panel {
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        button {
+            background: rgba(80, 200, 120, 0.1);
+            border: 1px solid rgba(80, 200, 120, 0.25);
+            color: #50c878;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+
+        button:hover { background: rgba(80, 200, 120, 0.2); }
+        button.active { background: rgba(80, 200, 120, 0.3); border-color: #50c878; }
+
+        .slider-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .slider-label { font-size: 9px; color: #606878; }
+        input[type="range"] {
+            width: 80px;
+            height: 3px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 10px;
+            height: 10px;
+            background: #50c878;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* ===== INFO ===== */
+        #info-panel {
+            bottom: 70px;
+            left: 16px;
+            width: 220px;
+            font-size: 9px;
+            color: #505860;
+            line-height: 1.6;
+        }
+
+        #info-panel b { color: #707880; }
+
+        /* ===== LEGEND ===== */
+        #legend {
+            position: absolute;
+            bottom: 70px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 9px;
+            color: #505860;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* ===== LOADING ===== */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #050508;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+
+        .loader {
+            width: 30px; height: 30px;
+            border: 2px solid rgba(80, 200, 120, 0.1);
+            border-top-color: #50c878;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading-text { margin-top: 12px; color: #50c878; font-size: 10px; letter-spacing: 3px; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="loader"></div>
+        <div id="loading-text">MOLECULAR SYSTEM</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="title">oNeuro</div>
+    <div id="subtitle">Molecular Ecosystem Simulation</div>
+
+    <!-- Left: Molecule Stats -->
+    <div id="molecules-panel" class="panel">
+        <div class="mol-title">Molecular System</div>
+        <div class="mol-stat">
+            <span class="mol-label">Pheromone Molecules</span>
+            <span class="mol-value" id="stat-molecules">0</span>
+        </div>
+        <div class="mol-stat">
+            <span class="mol-label">Diffusion Rate</span>
+            <span class="mol-value" id="stat-diffusion">0.1</span>
+        </div>
+        <div class="mol-stat">
+            <span class="mol-label">Evaporation</span>
+            <span class="mol-value" id="stat-evap">0.5%/s</span>
+        </div>
+        <div class="mol-stat">
+            <span class="mol-label">Temperature</span>
+            <span class="mol-value" id="stat-temp">298K</span>
+        </div>
+    </div>
+
+    <!-- Right: Neural Activity -->
+    <div id="neural-panel" class="panel">
+        <div class="mol-title">Ant Brain Regions</div>
+
+        <div class="brain-region">
+            <div class="region-name">Antennal Lobe (Sensors)</div>
+            <div class="region-bar"><div class="region-fill fill-al" id="bar-al" style="width: 0%"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="region-name">Mushroom Body (Memory)</div>
+            <div class="region-bar"><div class="region-fill fill-mb" id="bar-mb" style="width: 0%"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="region-name">Central Complex (Navigation)</div>
+            <div class="region-bar"><div class="region-fill fill-cx" id="bar-cx" style="width: 0%"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="region-name">VNC (Motors)</div>
+            <div class="region-bar"><div class="region-fill fill-vnc" id="bar-vnc" style="width: 0%"></div></div>
+        </div>
+    </div>
+
+    <!-- Bottom: Controls -->
+    <div id="controls-panel" class="panel">
+        <button id="btn-play" class="active">Play</button>
+        <button id="btn-reset">Reset</button>
+        <button id="btn-food">Add Food</button>
+        <div class="slider-wrap">
+            <span class="slider-label">Diffusion</span>
+            <input type="range" id="slider-diff" min="0.01" max="0.5" step="0.01" value="0.1">
+        </div>
+        <div class="slider-wrap">
+            <span class="slider-label">Ants</span>
+            <input type="range" id="slider-ants" min="1" max="20" step="1" value="8">
+        </div>
+    </div>
+
+    <!-- Info -->
+    <div id="info-panel" class="panel">
+        <b>How it works:</b> Pheromone molecules diffuse physically through the environment.
+        Ants have sensory neurons that detect molecule concentrations. The Drosophila brain
+        processes sensor input through AL → MB → CX → VNC. Motor output drives movement.
+        <b>No behaviors are hardcoded</b> — all navigation emerges from neural processing.
+    </div>
+
+    <!-- Legend -->
+    <div id="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#ff6644"></div> Pheromone molecule</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#44ff88"></div> Ant</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffaa00"></div> Food source</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#444466"></div> Nest</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ============================================================
+        // CONFIG
+        // ============================================================
+        const CONFIG = {
+            width: 40,
+            depth: 40,
+            maxMolecules: 5000,
+            diffusionRate: 0.1,
+            evaporationRate: 0.005,
+            sensorRadius: 2.0,
+            nestX: 20,
+            nestZ: 20,
+        };
+
+        // ============================================================
+        // SIMPLIFIED DROSOPHILA BRAIN MODEL
+        // (Processes sensor input → motor output)
+        // ============================================================
+        class DrosophilaBrain {
+            constructor(seed = 42) {
+                this.seed = seed;
+                this.reset();
+            }
+
+            reset() {
+                // Neuron activities
+                this.al = new Float32Array(10);  // Antennal Lobe (sensors)
+                this.mb = new Float32Array(20);   // Mushroom Body (memory)
+                this.cx = new Float32Array(12);   // Central Complex (navigation)
+                this.vnc = new Float32Array(6);  // Ventral Nerve Cord (motors)
+
+                // Synaptic weights (learned/evolved)
+                // AL → MB: sensory to memory
+                this.w_al_mb = this.createWeights(10, 20, 0.3);
+                // MB → CX: memory to navigation
+                this.w_mb_cx = this.createWeights(20, 12, 0.2);
+                // CX → VNC: navigation to motor
+                this.w_cx_vnc = this.createWeights(12, 6, 0.4);
+
+                // Recurrent connections for CX (path integration)
+                this.cx_recurrent = this.createWeights(12, 12, 0.1);
+            }
+
+            createWeights(rows, cols, density) {
+                const w = [];
+                for (let i = 0; i < rows; i++) {
+                    w.push(new Float32Array(cols));
+                    for (let j = 0; j < cols; j++) {
+                        if (Math.random() < density) {
+                            w[i][j] = (Math.random() - 0.5) * 0.5;
+                        }
+                    }
+                }
+                return w;
+            }
+
+            // Process sensor input → motor output
+            process(leftSensor, rightSensor, centerSensor) {
+                // Input: left/right/center pheromone concentrations (0-1)
+                const input = [leftSensor, rightSensor, centerSensor,
+                              leftSensor * rightSensor,
+                              Math.abs(leftSensor - rightSensor)];
+
+                // Feed to AL (sensory layer)
+                for (let i = 0; i < this.al.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < input.length; j++) {
+                        sum += input[j] * (Math.random() * 0.5 + 0.5);
+                    }
+                    // Activation function (ReLU + normalization)
+                    this.al[i] = Math.tanh(sum * 2);
+                }
+
+                // AL → MB (memory/learning layer)
+                for (let i = 0; i < this.mb.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < this.al.length; j++) {
+                        sum += this.al[j] * this.w_al_mb[j][i];
+                    }
+                    this.mb[i] = Math.tanh(sum);
+                }
+
+                // MB → CX (navigation layer)
+                for (let i = 0; i < this.cx.length; i++) {
+                    let sum = 0;
+                    // Feed-forward from MB
+                    for (let j = 0; j < this.mb.length; j++) {
+                        sum += this.mb[j] * this.w_mb_cx[j][i];
+                    }
+                    // Recurrent from CX (path integration)
+                    for (let j = 0; j < this.cx.length; j++) {
+                        sum += this.cx[j] * this.cx_recurrent[j][i];
+                    }
+                    this.cx[i] = Math.tanh(sum * 0.8);
+                }
+
+                // CX → VNC (motor layer)
+                for (let i = 0; i < this.vnc.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < this.cx.length; j++) {
+                        sum += this.cx[j] * this.w_cx_vnc[j][i];
+                    }
+                    this.vnc[i] = Math.tanh(sum);
+                }
+
+                // Extract motor commands
+                // VNC[0,1] = left/right motor for turning
+                // VNC[2,3] = forward/backward
+                const turn = (this.vnc[0] - this.vnc[1]) * 0.5;
+                const speed = (this.vnc[2] - this.vnc[3]) * 0.5 + 0.2; // Base speed
+
+                return {
+                    turn: Math.max(-1, Math.min(1, turn)),
+                    speed: Math.max(0.05, Math.min(1, speed)),
+                    al: this.getActivity(this.al),
+                    mb: this.getActivity(this.mb),
+                    cx: this.getActivity(this.cx),
+                    vnc: this.getActivity(this.vnc),
+                };
+            }
+
+            getActivity(neurons) {
+                let sum = 0;
+                for (let i = 0; i < neurons.length; i++) {
+                    sum += Math.abs(neurons[i]);
+                }
+                return sum / neurons.length;
+            }
+        }
+
+        // ============================================================
+        // MOLECULAR SYSTEM
+        // ============================================================
+        class MolecularSystem {
+            constructor() {
+                this.particles = [];
+                this.grid = new Array(CONFIG.width * CONFIG.depth).fill(0);
+            }
+
+            addMolecule(x, z, amount = 1) {
+                for (let i = 0; i < Math.floor(amount * 50); i++) {
+                    this.particles.push({
+                        x: x + (Math.random() - 0.5) * 2,
+                        z: z + (Math.random() - 0.5) * 2,
+                        vx: (Math.random() - 0.5) * 0.5,
+                        vz: (Math.random() - 0.5) * 0.5,
+                        life: 1.0,
+                    });
+                }
+            }
+
+            step(dt) {
+                const diff = CONFIG.diffusionRate;
+                const evap = CONFIG.evaporationRate;
+
+                // Update each molecule
+                for (let p of this.particles) {
+                    // Brownian motion (diffusion)
+                    p.vx += (Math.random() - 0.5) * diff;
+                    p.vz += (Math.random() - 0.5) * diff;
+
+                    // Damping
+                    p.vx *= 0.95;
+                    p.vz *= 0.95;
+
+                    // Update position
+                    p.x += p.vx * dt * 10;
+                    p.z += p.vz * dt * 10;
+
+                    // Wrap around boundaries
+                    p.x = (p.x + CONFIG.width) % CONFIG.width;
+                    p.z = (p.z + CONFIG.depth) % CONFIG.depth;
+
+                    // Evaporate
+                    p.life -= evap * dt;
+                }
+
+                // Remove dead molecules
+                this.particles = this.particles.filter(p => p.life > 0);
+
+                // Limit total
+                if (this.particles.length > CONFIG.maxMolecules) {
+                    this.particles = this.particles.slice(-CONFIG.maxMolecules);
+                }
+
+                // Build concentration grid
+                this.grid.fill(0);
+                for (let p of this.particles) {
+                    const gx = Math.floor(p.x);
+                    const gz = Math.floor(p.z);
+                    if (gx >= 0 && gx < CONFIG.width && gz >= 0 && gz < CONFIG.depth) {
+                        this.grid[gz * CONFIG.width + gx] += p.life;
+                    }
+                }
+
+                return this.particles.length;
+            }
+
+            // Sense concentration at a position
+            sense(x, z, radius) {
+                let sum = 0;
+                let count = 0;
+
+                for (let p of this.particles) {
+                    const dx = p.x - x;
+                    const dz = p.z - z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+
+                    if (dist < radius) {
+                        // Gaussian falloff
+                        const weight = Math.exp(-dist * dist / (radius * radius * 0.5));
+                        sum += p.life * weight;
+                        count++;
+                    }
+                }
+
+                return Math.min(1, sum / 10);
+            }
+        }
+
+        // ============================================================
+        // ANT AGENT
+        // ============================================================
+        class Ant {
+            constructor(x, z, brain) {
+                this.x = x;
+                this.z = z;
+                this.heading = Math.random() * Math.PI * 2;
+                this.speed = 0;
+                this.hasFood = false;
+                this.brain = brain;
+                this.age = 0;
+            }
+
+            step(molecular, foodSources, dt) {
+                this.age += dt;
+
+                // Sensor positions
+                const sensorDist = 2.0;
+                const sensorAngle = 0.5;
+
+                const leftX = this.x + Math.cos(this.heading + sensorAngle) * sensorDist;
+                const leftZ = this.z + Math.sin(this.heading + sensorAngle) * sensorDist;
+                const rightX = this.x + Math.cos(this.heading - sensorAngle) * sensorDist;
+                const rightZ = this.z + Math.sin(this.heading - sensorAngle) * sensorDist;
+                const centerX = this.x + Math.cos(this.heading) * sensorDist * 0.5;
+                const centerZ = this.z + Math.sin(this.heading) * sensorDist * 0.5;
+
+                // Sense pheromones
+                const left = molecular.sense(leftX, leftZ, 3);
+                const right = molecular.sense(rightX, rightZ, 3);
+                const center = molecular.sense(centerX, centerZ, 3);
+
+                // Process through brain (this is where behavior emerges!)
+                const motor = this.brain.process(left, right, center);
+
+                // Apply motor output
+                this.heading += motor.turn * dt * 5;
+                this.speed = motor.speed;
+
+                // Move
+                const moveSpeed = this.speed * 8 * dt;
+                this.x += Math.cos(this.heading) * moveSpeed;
+                this.z += Math.sin(this.heading) * moveSpeed;
+
+                // Boundary wrap
+                this.x = (this.x + CONFIG.width) % CONFIG.width;
+                this.z = (this.z + CONFIG.depth) % CONFIG.depth;
+
+                // Interact with food
+                for (let food of foodSources) {
+                    const dx = food.x - this.x;
+                    const dz = food.z - this.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+
+                    if (dist < 1.5 && !this.hasFood) {
+                        // Found food! Pick it up and drop pheromones
+                        this.hasFood = true;
+                        food.amount -= 0.1;
+                        if (food.amount <= 0) {
+                            foodSources.splice(foodSources.indexOf(food), 1);
+                        }
+
+                        // Add lots of pheromones at current location (mark trail)
+                        molecular.addMolecule(this.x, this.z, 3);
+                    }
+                }
+
+                // If has food, head to nest and drop pheromones
+                if (this.hasFood) {
+                    const toNestX = CONFIG.nestX - this.x;
+                    const toNestZ = CONFIG.nestZ - this.z;
+                    const toNestDist = Math.sqrt(toNestX * toNestX + toNestZ * toNestZ);
+
+                    // Steer toward nest
+                    const nestHeading = Math.atan2(toNestZ, toNestX);
+                    let angleDiff = nestHeading - this.heading;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+                    this.heading += angleDiff * dt * 2;
+
+                    // Drop pheromones along path
+                    if (Math.random() < 0.3) {
+                        molecular.addMolecule(this.x, this.z, 0.5);
+                    }
+
+                    // Dropped at nest
+                    if (toNestDist < 3) {
+                        this.hasFood = false;
+                        // Add extra pheromone at nest (recruit others)
+                        molecular.addMolecule(CONFIG.nestX, CONFIG.nestZ, 2);
+                    }
+                }
+
+                // Random wandering when no signal
+                if (left < 0.1 && right < 0.1 && center < 0.1) {
+                    this.heading += (Math.random() - 0.5) * dt * 3;
+                }
+
+                return motor;
+            }
+        }
+
+        // ============================================================
+        // MAIN SIMULATION
+        // ============================================================
+        let scene, camera, renderer;
+        let molecular, ants = [], foodSources = [];
+        let moleculeMesh, antMeshes = [], foodMeshes = [];
+        let isPlaying = true;
+        let clock = new THREE.Clock();
+
+        // Stats
+        let totalAL = 0, totalMB = 0, totalCX = 0, totalVNC = 0;
+
+        async function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050508);
+            scene.fog = new THREE.FogExp2(0x050508, 0.015);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+            camera.position.set(CONFIG.width / 2, 35, CONFIG.depth + 20);
+            camera.lookAt(CONFIG.width / 2, 0, CONFIG.depth / 2);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x404050, 0.6));
+            const light = new THREE.DirectionalLight(0xffffff, 0.4);
+            light.position.set(20, 40, 20);
+            scene.add(light);
+
+            // Ground
+            const groundGeo = new THREE.PlaneGeometry(CONFIG.width, CONFIG.depth);
+            const groundMat = new THREE.MeshStandardMaterial({
+                color: 0x1a1a1f,
+                roughness: 0.9,
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.set(CONFIG.width / 2, 0, CONFIG.depth / 2);
+            scene.add(ground);
+
+            // Grid
+            const grid = new THREE.GridHelper(Math.max(CONFIG.width, CONFIG.depth), 20, 0x202025, 0x151518);
+            grid.position.set(CONFIG.width / 2, 0.01, CONFIG.depth / 2);
+            scene.add(grid);
+
+            // Nest marker
+            const nestGeo = new THREE.RingGeometry(1.5, 2.5, 16);
+            const nestMat = new THREE.MeshBasicMaterial({ color: 0x333344, side: THREE.DoubleSide });
+            const nest = new THREE.Mesh(nestGeo, nestMat);
+            nest.rotation.x = -Math.PI / 2;
+            nest.position.set(CONFIG.nestX, 0.05, CONFIG.nestZ);
+            scene.add(nest);
+
+            // Initialize systems
+            molecular = new MolecularSystem();
+
+            // Create ants
+            createAnts(8);
+
+            // Initial food
+            addFood(8, 8);
+            addFood(32, 30);
+
+            // Molecule visualization (points)
+            const molGeo = new THREE.BufferGeometry();
+            const molPositions = new Float32Array(CONFIG.maxMolecules * 3);
+            const molColors = new Float32Array(CONFIG.maxMolecules * 3);
+            molGeo.setAttribute('position', new THREE.BufferAttribute(molPositions, 3));
+            molGeo.setAttribute('color', new THREE.BufferAttribute(molColors, 3));
+
+            const molMat = new THREE.PointsMaterial({
+                size: 0.3,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+            });
+
+            moleculeMesh = new THREE.Points(molGeo, molMat);
+            scene.add(moleculeMesh);
+
+            // Camera controls
+            let isDragging = false;
+            let prevMouse = { x: 0, y: 0 };
+
+            renderer.domElement.addEventListener('mousedown', e => {
+                isDragging = true;
+                prevMouse = { x: e.clientX, y: e.clientY };
+            });
+
+            renderer.domElement.addEventListener('mouseup', () => isDragging = false);
+
+            renderer.domElement.addEventListener('mousemove', e => {
+                if (!isDragging) return;
+                const dx = e.clientX - prevMouse.x;
+                camera.position.x += dx * 0.1;
+                camera.position.x = Math.max(0, Math.min(CONFIG.width, camera.position.x));
+                prevMouse = { x: e.clientX, y: e.clientY };
+            });
+
+            // Controls
+            initControls();
+
+            // Resize
+            window.addEventListener('resize', onResize);
+
+            // Hide loading
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 500);
+
+            animate();
+        }
+
+        function createAnts(n) {
+            // Remove old ant meshes
+            for (let m of antMeshes) {
+                scene.remove(m);
+            }
+            antMeshes = [];
+            ants = [];
+
+            for (let i = 0; i < n; i++) {
+                const brain = new DrosophilaBrain(42 + i);
+                const ant = new Ant(
+                    CONFIG.nestX + (Math.random() - 0.5) * 4,
+                    CONFIG.nestZ + (Math.random() - 0.5) * 4,
+                    brain
+                );
+                ants.push(ant);
+
+                // Visual
+                const group = new THREE.Group();
+
+                // Body
+                const bodyGeo = new THREE.SphereGeometry(0.3, 8, 6);
+                const bodyMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.scale.set(1, 0.6, 1.5);
+                group.add(body);
+
+                // Head
+                const headGeo = new THREE.SphereGeometry(0.15, 6, 4);
+                const head = new THREE.Mesh(headGeo, bodyMat);
+                head.position.set(0, 0.1, 0.4);
+                group.add(head);
+
+                // Antennae
+                const antGeo = new THREE.CylinderGeometry(0.02, 0.01, 0.25);
+                const antMat = new THREE.MeshBasicMaterial({ color: 0x444444 });
+                const antL = new THREE.Mesh(antGeo, antMat);
+                antL.position.set(-0.08, 0.2, 0.5);
+                antL.rotation.x = 0.5;
+                antL.rotation.z = 0.3;
+                group.add(antL);
+
+                const antR = antL.clone();
+                antR.position.set(0.08, 0.2, 0.5);
+                antR.rotation.z = -0.3;
+                group.add(antR);
+
+                // Food indicator
+                const foodGeo = new THREE.SphereGeometry(0.2, 6, 4);
+                const foodMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, visible: false });
+                const foodInd = new THREE.Mesh(foodGeo, foodMat);
+                foodInd.name = 'foodIndicator';
+                foodInd.position.set(0, 0.3, 0.3);
+                group.add(foodInd);
+
+                group.position.set(ant.x, 0.3, ant.z);
+                scene.add(group);
+                antMeshes.push(group);
+            }
+        }
+
+        function addFood(x, z) {
+            foodSources.push({ x, z, amount: 1.0 });
+
+            const geo = new THREE.SphereGeometry(0.8, 8, 6);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, 0.5, z);
+            scene.add(mesh);
+            foodMeshes.push(mesh);
+        }
+
+        function initControls() {
+            document.getElementById('btn-play').onclick = () => {
+                isPlaying = !isPlaying;
+                document.getElementById('btn-play').textContent = isPlaying ? 'Pause' : 'Play';
+                document.getElementById('btn-play').classList.toggle('active', isPlaying);
+            };
+
+            document.getElementById('btn-reset').onclick = () => {
+                molecular = new MolecularSystem();
+                createAnts(ants.length);
+                foodSources = [];
+                foodMeshes.forEach(m => scene.remove(m));
+                foodMeshes = [];
+                addFood(8, 8);
+                addFood(32, 30);
+            };
+
+            document.getElementById('btn-food').onclick = () => {
+                const x = 5 + Math.random() * (CONFIG.width - 10);
+                const z = 5 + Math.random() * (CONFIG.depth - 10);
+                addFood(x, z);
+            };
+
+            document.getElementById('slider-diff').oninput = e => {
+                CONFIG.diffusionRate = parseFloat(e.target.value);
+                document.getElementById('stat-diffusion').textContent = CONFIG.diffusionRate.toFixed(2);
+            };
+
+            document.getElementById('slider-ants').oninput = e => {
+                const n = parseInt(e.target.value);
+                createAnts(n);
+            };
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.05);
+
+            if (isPlaying) {
+                // Step molecular system
+                const nMolecules = molecular.step(dt);
+
+                // Step ants
+                let alSum = 0, mbSum = 0, cxSum = 0, vncSum = 0;
+
+                for (let i = 0; i < ants.length; i++) {
+                    const motor = ants[i].step(molecular, foodSources, dt);
+                    antMeshes[i].position.set(ants[i].x, 0.3, ants[i].z);
+                    antMeshes[i].rotation.y = -ants[i].heading;
+
+                    // Update food indicator
+                    const foodInd = antMeshes[i].children.find(c => c.name === 'foodIndicator');
+                    if (foodInd) foodInd.visible = ants[i].hasFood;
+
+                    alSum += motor.al;
+                    mbSum += motor.mb;
+                    cxSum += motor.cx;
+                    vncSum += motor.vnc;
+                }
+
+                // Average brain activity
+                const n = ants.length || 1;
+                totalAL = totalAL * 0.95 + alSum / n * 0.05;
+                totalMB = totalMB * 0.95 + mbSum / n * 0.05;
+                totalCX = totalCX * 0.95 + cxSum / n * 0.05;
+                totalVNC = totalVNC * 0.95 + vncSum / n * 0.05;
+
+                // Update molecule visualization
+                const positions = moleculeMesh.geometry.attributes.position.array;
+                const colors = moleculeMesh.geometry.attributes.color.array;
+
+                for (let i = 0; i < molecular.particles.length; i++) {
+                    const p = molecular.particles[i];
+                    positions[i * 3] = p.x;
+                    positions[i * 3 + 1] = 0.2 + Math.random() * 0.3;
+                    positions[i * 3 + 2] = p.z;
+
+                    // Orange/red pheromone color based on life
+                    colors[i * 3] = 1.0;
+                    colors[i * 3 + 1] = 0.3 + p.life * 0.3;
+                    colors[i * 3 + 2] = 0.1;
+                }
+
+                moleculeMesh.geometry.attributes.position.needsUpdate = true;
+                moleculeMesh.geometry.attributes.color.needsUpdate = true;
+                moleculeMesh.geometry.setDrawRange(0, molecular.particles.length);
+
+                // Update UI
+                document.getElementById('stat-molecules').textContent = molecular.particles.length;
+                document.getElementById('stat-evap').textContent = (CONFIG.evaporationRate * 100).toFixed(1) + '%/s';
+                document.getElementById('stat-temp').textContent = (298 + CONFIG.diffusionRate * 100).toFixed(0) + 'K';
+
+                document.getElementById('bar-al').style.width = (totalAL * 100) + '%';
+                document.getElementById('bar-mb').style.width = (totalMB * 100) + '%';
+                document.getElementById('bar-cx').style.width = (totalCX * 100) + '%';
+                document.getElementById('bar-vnc').style.width = (totalVNC * 100) + '%';
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

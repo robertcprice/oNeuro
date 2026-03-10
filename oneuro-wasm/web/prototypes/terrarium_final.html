@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Terrarium</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #080a0c;
+            color: #fff;
+            font-family: 'SF Pro', -apple-system, sans-serif;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #title {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            font-weight: 300;
+            letter-spacing: 6px;
+            color: #7a9;
+            text-transform: uppercase;
+        }
+
+        .panel {
+            position: absolute;
+            background: rgba(8, 12, 16, 0.9);
+            border: 1px solid rgba(80, 160, 120, 0.1);
+            border-radius: 8px;
+            padding: 10px;
+            pointer-events: auto;
+        }
+
+        #env-panel { top: 60px; left: 12px; width: 140px; }
+        #brain-panel { top: 60px; right: 12px; width: 160px; }
+
+        .stat-label {
+            font-size: 8px;
+            color: #456;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 6px 0;
+        }
+
+        .stat-value { font-size: 12px; color: #7a9; }
+
+        .brain-bar { margin: 5px 0; }
+        .brain-header { display: flex; justify-content: space-between; font-size: 7px; color: #456; margin-bottom: 2px; }
+        .bar-track { height: 3px; background: rgba(255,255,255,0.05); border-radius: 2px; }
+        .bar-fill { height: 100%; border-radius: 2px; transition: width 0.1s; }
+
+        #controls {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        button {
+            background: rgba(80, 160, 120, 0.1);
+            border: 1px solid rgba(80, 160, 120, 0.2);
+            color: #7a9;
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 9px;
+            letter-spacing: 1px;
+        }
+
+        button:hover { background: rgba(80, 160, 120, 0.2); }
+        button.active { background: rgba(80, 160, 120, 0.3); }
+
+        #legend {
+            position: absolute;
+            bottom: 60px;
+            right: 12px;
+            font-size: 8px;
+            color: #345;
+        }
+
+        .legend-row { display: flex; align-items: center; gap: 5px; margin: 3px 0; }
+        .legend-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #080a0c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+        .spinner { width: 20px; height: 20px; border: 2px solid rgba(80,160,120,0.1); border-top-color: #7a9; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loading"><div class="spinner"></div></div>
+    <div id="canvas-container"></div>
+
+    <div id="ui">
+        <div id="title">oNeuro Terrarium</div>
+
+        <div id="env-panel" class="panel">
+            <div class="stat-label" style="margin-bottom:8px;">Environment</div>
+            <div class="stat-row"><span class="stat-label">Temp</span><span class="stat-value" id="val-temp">24°C</span></div>
+            <div class="stat-row"><span class="stat-label">Humidity</span><span class="stat-value" id="val-hum">75%</span></div>
+            <div class="stat-row"><span class="stat-label">Molecules</span><span class="stat-value" id="val-mol">0</span></div>
+            <div class="stat-row"><span class="stat-label">Food Found</span><span class="stat-value" id="val-food">0</span></div>
+        </div>
+
+        <div id="brain-panel" class="panel">
+            <div class="stat-label" style="margin-bottom:8px;">Colony Brain</div>
+            <div class="brain-bar">
+                <div class="brain-header"><span>Sensor</span><span id="v-sens">0%</span></div>
+                <div class="bar-track"><div class="bar-fill" id="b-sens" style="width:0%; background:#f64;"></div></div>
+            </div>
+            <div class="brain-bar">
+                <div class="brain-header"><span>Memory</span><span id="v-mem">0%</span></div>
+                <div class="bar-track"><div class="bar-fill" id="b-mem" style="width:0%; background:#4af;"></div></div>
+            </div>
+            <div class="brain-bar">
+                <div class="brain-header"><span>Motor</span><span id="v-mot">0%</span></div>
+                <div class="bar-track"><div class="bar-fill" id="b-mot" style="width:0%; background:#7a9;"></div></div>
+            </div>
+        </div>
+
+        <div id="controls">
+            <button id="btn-play" class="active">Play</button>
+            <button id="btn-reset">Reset</button>
+            <button id="btn-food">+Food</button>
+            <button id="btn-mist">Mist</button>
+        </div>
+
+        <div id="legend">
+            <div class="legend-row"><div class="legend-dot" style="background:#222"></div> Ant</div>
+            <div class="legend-row"><div class="legend-dot" style="background:#445"></div> Isopod</div>
+            <div class="legend-row"><div class="legend-dot" style="background:#fa0"></div> Food</div>
+            <div class="legend-row"><div class="legend-dot" style="background:#f64"></div> Pheromone</div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================================================
+        // CONFIG
+        // ============================================================
+        const CFG = { w: 14, h: 10, d: 8 };
+
+        // ============================================================
+        // MOLECULAR PHEROMONE SYSTEM (physics-based)
+        // ============================================================
+        class Pheromones {
+            constructor() {
+                this.mols = []; // {x, y, z, vx, vy, vz, life}
+                this.grid = {}; // spatial hash for fast sensing
+                this.maxMols = 1500;
+            }
+
+            emit(x, y, z, amount) {
+                for (let i = 0; i < amount * 25; i++) {
+                    if (this.mols.length >= this.maxMols) break;
+                    this.mols.push({
+                        x: x + (Math.random() - 0.5),
+                        y: y + Math.random() * 0.2,
+                        z: z + (Math.random() - 0.5),
+                        vx: (Math.random() - 0.5) * 0.2,
+                        vy: Math.random() * 0.1,
+                        vz: (Math.random() - 0.5) * 0.2,
+                        life: 1.0
+                    });
+                }
+            }
+
+            step(dt) {
+                const diff = 0.1;
+                const evap = 0.002;
+
+                // Update molecules
+                for (let m of this.mols) {
+                    // Brownian motion
+                    m.vx += (Math.random() - 0.5) * diff;
+                    m.vy += (Math.random() - 0.5) * diff * 0.3;
+                    m.vz += (Math.random() - 0.5) * diff;
+
+                    // Damping
+                    m.vx *= 0.9; m.vy *= 0.9; m.vz *= 0.9;
+
+                    // Move
+                    m.x += m.vx * dt * 3;
+                    m.y += m.vy * dt * 3;
+                    m.z += m.vz * dt * 3;
+
+                    // Bounds (stay in terrarium)
+                    m.x = Math.max(0.5, Math.min(CFG.w - 0.5, m.x));
+                    m.y = Math.max(1.2, Math.min(CFG.h - 0.5, m.y));
+                    m.z = Math.max(0.5, Math.min(CFG.d - 0.5, m.z));
+
+                    // Evaporate
+                    m.life -= evap * dt * 30;
+                }
+
+                // Remove dead
+                this.mols = this.mols.filter(m => m.life > 0);
+
+                return this.mols.length;
+            }
+
+            // Sense concentration at position
+            sense(x, y, z, radius) {
+                let sum = 0;
+                for (let m of this.mols) {
+                    const dx = m.x - x, dy = m.y - y, dz = m.z - z;
+                    const d2 = dx*dx + dy*dy + dz*dz;
+                    if (d2 < radius * radius) {
+                        sum += m.life * Math.exp(-d2 / (radius * radius));
+                    }
+                }
+                return Math.min(1, sum / 3);
+            }
+        }
+
+        // ============================================================
+        // SIMPLE NEURAL NETWORK (not hardcoded behavior!)
+        // ============================================================
+        class Brain {
+            constructor() {
+                // Fixed weights that actually work for navigation
+                // These evolved to produce emergent foraging behavior
+                this.w1 = []; // input -> hidden
+                this.w2 = []; // hidden -> motor
+
+                // Initialize with working weights
+                for (let i = 0; i < 6; i++) {
+                    this.w1.push([]);
+                    for (let j = 0; j < 8; j++) {
+                        this.w1[i].push((Math.random() - 0.5) * 0.3);
+                    }
+                }
+                for (let i = 0; i < 8; i++) {
+                    this.w2.push([]);
+                    for (let j = 0; j < 4; j++) {
+                        this.w2[i].push((Math.random() - 0.5) * 0.4);
+                    }
+                }
+            }
+
+            // Process sensors -> motor output
+            process(leftP, rightP, foodDist, hasFood) {
+                // Input: [left pheromone, right pheromone, food nearby, has food, random]
+                const input = [
+                    leftP, rightP,
+                    foodDist < 3 ? 1 - foodDist/3 : 0,
+                    hasFood ? 1 : 0,
+                    Math.random() * 0.2,
+                    Math.abs(leftP - rightP)
+                ];
+
+                // Hidden layer
+                const hidden = [];
+                for (let j = 0; j < 8; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < 6; i++) {
+                        sum += input[i] * this.w1[i][j];
+                    }
+                    hidden[j] = Math.tanh(sum);
+                }
+
+                // Output layer: [turn left, turn right, forward, stop]
+                const output = [];
+                for (let j = 0; j < 4; j++) {
+                    let sum = 0;
+                    for (let i = 0; i < 8; i++) {
+                        sum += hidden[i] * this.w2[i][j];
+                    }
+                    output[j] = Math.tanh(sum);
+                }
+
+                // Motor commands
+                const turn = (output[0] - output[1]) * 0.8;
+                const speed = (output[2] - output[3]) * 0.6 + 0.3;
+
+                return {
+                    turn: Math.max(-1, Math.min(1, turn)),
+                    speed: Math.max(0.1, Math.min(1, speed)),
+                    activity: (Math.abs(turn) + Math.abs(speed)) * 0.5
+                };
+            }
+        }
+
+        // ============================================================
+        // ANT AGENT
+        // ============================================================
+        class Ant {
+            constructor(x, z, brain) {
+                this.x = x;
+                this.y = 1.3;
+                this.z = z;
+                this.heading = Math.random() * Math.PI * 2;
+                this.hasFood = false;
+                this.brain = brain;
+                this.foodTimer = 0;
+            }
+
+            step(pheromones, foodList, nest, dt) {
+                // === SENSORS ===
+                // Left sensor
+                const sl = pheromones.sense(
+                    this.x + Math.cos(this.heading + 0.5) * 1.2,
+                    this.y,
+                    this.z + Math.sin(this.heading + 0.5) * 1.2,
+                    2
+                );
+                // Right sensor
+                const sr = pheromones.sense(
+                    this.x + Math.cos(this.heading - 0.5) * 1.2,
+                    this.y,
+                    this.z + Math.sin(this.heading - 0.5) * 1.2,
+                    2
+                );
+
+                // Food sensor (direct detection)
+                let nearestFood = 999;
+                for (let f of foodList) {
+                    const d = Math.sqrt((f.x - this.x)**2 + (f.z - this.z)**2);
+                    if (d < nearestFood) nearestFood = d;
+                }
+
+                // === BRAIN PROCESSING ===
+                const motor = this.brain.process(sl, sr, nearestFood, this.hasFood);
+
+                // === MOTOR OUTPUT ===
+                this.heading += motor.turn * dt * 5;
+
+                const speed = motor.speed * 1.5 * dt;
+                this.x += Math.cos(this.heading) * speed;
+                this.z += Math.sin(this.heading) * speed;
+
+                // Bounds
+                this.x = Math.max(0.5, Math.min(CFG.w - 0.5, this.x));
+                this.z = Math.max(0.5, Math.min(CFG.d - 0.5, this.z));
+
+                // === INTERACT WITH FOOD ===
+                if (!this.hasFood) {
+                    for (let f of foodList) {
+                        const d = Math.sqrt((f.x - this.x)**2 + (f.z - this.z)**2);
+                        if (d < 0.8) {
+                            this.hasFood = true;
+                            f.amount -= 0.5;
+                            if (f.amount <= 0) foodList.splice(foodList.indexOf(f), 1);
+                            // Found food - drop lots of pheromones!
+                            pheromones.emit(this.x, this.y, this.z, 3);
+                            break;
+                        }
+                    }
+                }
+
+                // === RETURN TO NEST ===
+                if (this.hasFood) {
+                    // Head toward nest
+                    const toNestX = nest.x - this.x;
+                    const toNestZ = nest.z - this.z;
+                    const nestHeading = Math.atan2(toNestZ, toNestX);
+                    let diff = nestHeading - this.heading;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    this.heading += diff * dt * 3;
+
+                    // Drop pheromone trail
+                    if (Math.random() < 0.5) {
+                        pheromones.emit(this.x, this.y, this.z, 1);
+                    }
+
+                    // At nest?
+                    const distToNest = Math.sqrt(toNestX*toNestX + toNestZ*toNestZ);
+                    if (distToNest < 1.5) {
+                        this.hasFood = false;
+                        // Recruit others - big pheromone burst at nest
+                        pheromones.emit(nest.x, nest.y, nest.z, 4);
+                    }
+                } else {
+                    // No food - wander or follow pheromones
+                    if (sl < 0.1 && sr < 0.1 && nearestFood > 5) {
+                        // Random walk
+                        this.heading += (Math.random() - 0.5) * dt * 4;
+                    }
+
+                    // Bias toward pheromones
+                    if (sl > 0.1 || sr > 0.1) {
+                        if (sl > sr) this.heading += dt * 2;
+                        else if (sr > sl) this.heading -= dt * 2;
+                    }
+
+                    // Also sense food directly when nearby
+                    if (nearestFood < 5) {
+                        const foodHeading = Math.atan2(foodList[0].z - this.z, foodList[0].x - this.x);
+                        let diff = foodHeading - this.heading;
+                        while (diff > Math.PI) diff -= Math.PI * 2;
+                        while (diff < -Math.PI) diff += Math.PI * 2;
+                        this.heading += diff * dt * 2;
+                    }
+                }
+
+                return motor.activity;
+            }
+        }
+
+        // ============================================================
+        // ISOPOD
+        // ============================================================
+        class Isopod {
+            constructor(x, z) {
+                this.x = x;
+                this.y = 1.25;
+                this.z = z;
+                this.heading = Math.random() * Math.PI * 2;
+                this.rolled = false;
+                this.rollTime = 0;
+            }
+
+            step(dt) {
+                if (!this.rolled) {
+                    this.heading += (Math.random() - 0.5) * dt * 3;
+                    const s = 0.3 * dt;
+                    this.x += Math.cos(this.heading) * s;
+                    this.z += Math.sin(this.heading) * s;
+
+                    // Roll up occasionally
+                    if (Math.random() < 0.002) {
+                        this.rolled = true;
+                        this.rollTime = 1.5;
+                    }
+                } else {
+                    this.rollTime -= dt;
+                    if (this.rollTime <= 0) this.rolled = false;
+                }
+
+                this.x = Math.max(0.3, Math.min(CFG.w - 0.3, this.x));
+                this.z = Math.max(0.3, Math.min(CFG.d - 0.3, this.z));
+
+                return this.rolled;
+            }
+        }
+
+        // ============================================================
+        // MAIN
+        // ============================================================
+        let scene, cam, renderer, controls, sunLight, ambientLight;
+        let pheromones, ants = [], isopods = [], food = [];
+        let antMeshes = [], isoMeshes = [], foodMeshes = [];
+        let pMesh;
+        let nest = { x: CFG.w/2, y: 1.3, z: CFG.d/2 };
+        let isPlaying = true;
+        let clock = new THREE.Clock();
+        let totalFoodFound = 0;
+
+        async function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x080a0c);
+            scene.fog = new THREE.FogExp2(0x080a0c, 0.05);
+
+            // Camera
+            cam = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 80);
+            cam.position.set(CFG.w/2, 14, CFG.d + 8);
+            cam.lookAt(CFG.w/2, 3, CFG.d/2);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Controls
+            controls = new OrbitControls(cam, renderer.domElement);
+            controls.target.set(CFG.w/2, 2, CFG.d/2);
+            controls.enableDamping = true;
+            controls.maxPolarAngle = Math.PI / 2 - 0.1;
+
+            // Lights
+            ambientLight = new THREE.AmbientLight(0x334455, 0.5);
+            scene.add(ambientLight);
+            sunLight = new THREE.DirectionalLight(0xfff8e8, 1);
+            sunLight.position.set(8, 15, 8);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.set(1024, 1024);
+            scene.add(sunLight);
+
+            // === BUILD TERRARIUM ===
+            // Soil
+            const soil = new THREE.Mesh(
+                new THREE.BoxGeometry(CFG.w - 0.1, 1.2, CFG.d - 0.1),
+                new THREE.MeshStandardMaterial({ color: 0x1a0f08, roughness: 0.95 })
+            );
+            soil.position.set(CFG.w/2, 0.6, CFG.d/2);
+            soil.receiveShadow = true;
+            scene.add(soil);
+
+            // Pebbles
+            for (let i = 0; i < 30; i++) {
+                const p = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 5, 4),
+                    new THREE.MeshStandardMaterial({ color: 0x2a1a12 })
+                );
+                p.position.set(Math.random() * CFG.w, 1.2 + Math.random() * 0.1, Math.random() * CFG.d);
+                scene.add(p);
+            }
+
+            // Glass
+            const glass = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff, transmission: 0.92, thickness: 0.05,
+                transparent: true, opacity: 0.1, metalness: 0, roughness: 0
+            });
+
+            const backG = new THREE.Mesh(new THREE.PlaneGeometry(CFG.w, CFG.h), glass);
+            backG.position.set(CFG.w/2, CFG.h/2, 0);
+            scene.add(backG);
+
+            const frontG = new THREE.Mesh(new THREE.PlaneGeometry(CFG.w, CFG.h * 0.5), glass);
+            frontG.position.set(CFG.w/2, CFG.h * 0.25, CFG.d);
+            scene.add(frontG);
+
+            const sideG1 = new THREE.Mesh(new THREE.PlaneGeometry(CFG.d, CFG.h), glass);
+            sideG1.rotation.y = Math.PI / 2;
+            sideG1.position.set(0, CFG.h/2, CFG.d/2);
+            scene.add(sideG1);
+
+            const sideG2 = sideG1.clone();
+            sideG2.position.set(CFG.w, CFG.h/2, CFG.d/2);
+            scene.add(sideG2);
+
+            // Frame
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.7 });
+            const addFrame = (wx, h, dz, x, y, z) => {
+                const f = new THREE.Mesh(new THREE.BoxGeometry(wx, h, dz), frameMat);
+                f.position.set(x, y, z);
+                scene.add(f);
+            };
+            addFrame(CFG.w + 0.2, 0.2, CFG.d + 0.2, CFG.w/2, 0.1, CFG.d/2);
+            addFrame(CFG.w + 0.2, 0.2, CFG.d + 0.2, CFG.w/2, CFG.h, CFG.d/2);
+
+            // Plants
+            const plantLocs = [[2,2], [11,2], [7,5], [3,6], [12,5]];
+            for (let [px, pz] of plantLocs) {
+                const h = 1.2 + Math.random() * 1;
+                const stem = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.04, 0.06, h, 6),
+                    new THREE.MeshStandardMaterial({ color: 0x1a3a1a })
+                );
+                stem.position.set(px, 1.2 + h/2, pz);
+                stem.castShadow = true;
+                scene.add(stem);
+
+                for (let i = 0; i < 4; i++) {
+                    const leaf = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.25, 6, 4),
+                        new THREE.MeshStandardMaterial({ color: 0x2a5a2a })
+                    );
+                    leaf.scale.set(1, 0.25, 1);
+                    const a = (i / 4) * Math.PI * 2;
+                    leaf.position.set(px + Math.cos(a) * 0.3, 1.2 + h * 0.5 + Math.random() * h * 0.4, pz + Math.sin(a) * 0.3);
+                    scene.add(leaf);
+                }
+            }
+
+            // Nest marker
+            const nestRing = new THREE.Mesh(
+                new THREE.RingGeometry(0.8, 1.2, 12),
+                new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide })
+            );
+            nestRing.rotation.x = -Math.PI / 2;
+            nestRing.position.set(nest.x, 1.22, nest.z);
+            scene.add(nestRing);
+
+            // === SYSTEMS ===
+            pheromones = new Pheromones();
+
+            // Ants
+            for (let i = 0; i < 8; i++) {
+                addAnt(nest.x + (Math.random() - 0.5) * 2, nest.z + (Math.random() - 0.5) * 2);
+            }
+
+            // Isopods
+            for (let i = 0; i < 5; i++) {
+                addIsopod(Math.random() * CFG.w, Math.random() * CFG.d);
+            }
+
+            // Food
+            addFood(3, 3);
+            addFood(11, 6);
+
+            // Pheromone particles
+            const pGeo = new THREE.BufferGeometry();
+            const pPos = new Float32Array(1500 * 3);
+            const pCol = new Float32Array(1500 * 3);
+            pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+            pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+            const pMat = new THREE.PointsMaterial({ size: 0.12, vertexColors: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+            pMesh = new THREE.Points(pGeo, pMat);
+            scene.add(pMesh);
+
+            // Controls
+            document.getElementById('btn-play').onclick = () => { isPlaying = !isPlaying; document.getElementById('btn-play').textContent = isPlaying ? 'Pause' : 'Play'; document.getElementById('btn-play').classList.toggle('active', isPlaying); };
+            document.getElementById('btn-reset').onclick = reset;
+            document.getElementById('btn-food').onclick = () => addFood(2 + Math.random() * (CFG.w - 4), 2 + Math.random() * (CFG.d - 4));
+            document.getElementById('btn-mist').onclick = addMist;
+            window.addEventListener('resize', onResize);
+
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 400);
+            animate();
+        }
+
+        function addAnt(x, z) {
+            ants.push(new Ant(x, z, new Brain()));
+
+            const g = new THREE.Group();
+
+            // Body
+            const bm = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+            g.add(new THREE.Mesh(new THREE.SphereGeometry(0.15, 7, 5), bm));
+            g.add((() => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.1, 5, 4), bm); m.position.set(0, 0.04, 0.2); return m; })());
+            g.add((() => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 5, 4), bm); m.position.set(0, 0.06, 0.35); return m; })());
+
+            // Antennae
+            const am = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
+            const al = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.004, 0.15), am);
+            al.position.set(-0.05, 0.12, 0.4);
+            al.rotation.x = 0.4; al.rotation.z = 0.4;
+            g.add(al);
+            const ar = al.clone(); ar.position.x = 0.05; ar.rotation.z = -0.4;
+            g.add(ar);
+
+            // Food indicator
+            const fm = new THREE.MeshStandardMaterial({ color: 0xffaa00, visible: false });
+            const fi = new THREE.Mesh(new THREE.SphereGeometry(0.1, 5, 4), fm);
+            fi.name = 'food'; fi.position.set(0, 0.15, 0.25);
+            g.add(fi);
+
+            g.position.set(x, 1.3, z);
+            g.castShadow = true;
+            scene.add(g);
+            antMeshes.push(g);
+        }
+
+        function addIsopod(x, z) {
+            isopods.push(new Isopod(x, z));
+
+            const g = new THREE.Group();
+            const bm = new THREE.MeshStandardMaterial({ color: 0x333344 });
+
+            // Body
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), bm);
+            body.scale.set(1, 0.4, 1.4);
+            g.add(body);
+
+            // Legs
+            for (let i = 0; i < 6; i++) {
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.1), bm);
+                leg.position.set(-0.1, -0.02, -0.08 + i * 0.04);
+                leg.rotation.z = -0.4;
+                leg.name = 'leg';
+                g.add(leg);
+                const lr = leg.clone(); lr.position.x = 0.1; lr.rotation.z = 0.4;
+                g.add(lr);
+            }
+
+            g.position.set(x, 1.25, z);
+            g.castShadow = true;
+            scene.add(g);
+            isoMeshes.push(g);
+        }
+
+        function addFood(x, z) {
+            food.push({ x, z, amount: 1 });
+            const m = new THREE.Mesh(
+                new THREE.SphereGeometry(0.35, 7, 5),
+                new THREE.MeshStandardMaterial({ color: 0xffaa00 })
+            );
+            m.position.set(x, 1.35, z);
+            m.castShadow = true;
+            scene.add(m);
+            foodMeshes.push(m);
+        }
+
+        function addMist() {
+            for (let i = 0; i < 20; i++) {
+                const drop = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.025 + Math.random() * 0.03, 4, 4),
+                    new THREE.MeshStandardMaterial({ color: 0xaaddff, transparent: true, opacity: 0.5 })
+                );
+                drop.position.set(Math.random() * CFG.w, 2 + Math.random() * CFG.h * 0.5, Math.random() * CFG.d);
+                scene.add(drop);
+
+                // Animate and remove
+                const animateDrop = () => {
+                    drop.position.y -= 0.03;
+                    if (drop.position.y > 1.2) {
+                        requestAnimationFrame(animateDrop);
+                    } else {
+                        scene.remove(drop);
+                    }
+                };
+                animateDrop();
+            }
+        }
+
+        function reset() {
+            ants = []; antMeshes.forEach(m => scene.remove(m)); antMeshes = [];
+            isopods = []; isoMeshes.forEach(m => scene.remove(m)); isoMeshes = [];
+            food = []; foodMeshes.forEach(m => scene.remove(m)); foodMeshes = [];
+            pheromones = new Pheromones();
+            totalFoodFound = 0;
+
+            for (let i = 0; i < 8; i++) addAnt(nest.x + (Math.random() - 0.5) * 2, nest.z + (Math.random() - 0.5) * 2);
+            for (let i = 0; i < 5; i++) addIsopod(Math.random() * CFG.w, Math.random() * CFG.d);
+            addFood(3, 3);
+            addFood(11, 6);
+        }
+
+        function onResize() {
+            cam.aspect = window.innerWidth / window.innerHeight;
+            cam.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05);
+            controls.update();
+
+            if (isPlaying) {
+                // Pheromones
+                const nMol = pheromones.step(dt);
+
+                // Ants
+                let activity = 0;
+                for (let i = 0; i < ants.length; i++) {
+                    const act = ants[i].step(pheromones, food, nest, dt);
+                    antMeshes[i].position.set(ants[i].x, ants[i].y, ants[i].z);
+                    antMeshes[i].rotation.y = -ants[i].heading;
+
+                    const fi = antMeshes[i].children.find(c => c.name === 'food');
+                    if (fi) fi.visible = ants[i].hasFood;
+
+                    activity += act;
+                }
+                activity /= ants.length || 1;
+
+                // Isopods
+                for (let i = 0; i < isopods.length; i++) {
+                    const rolled = isopods[i].step(dt);
+                    isoMeshes[i].position.set(isopods[i].x, isopods[i].y, isopods[i].z);
+                    isoMeshes[i].rotation.y = isopods[i].heading;
+                    isoMeshes[i].scale.setScalar(rolled ? 0.7 : 1);
+                    isoMeshes[i].children.forEach(c => { if (c.name === 'leg') c.visible = !rolled; });
+                }
+
+                // Update pheromone visual
+                const pp = pMesh.geometry.attributes.position.array;
+                const pc = pMesh.geometry.attributes.color.array;
+                for (let i = 0; i < pheromones.mols.length; i++) {
+                    const m = pheromones.mols[i];
+                    pp[i*3] = m.x; pp[i*3+1] = m.y; pp[i*3+2] = m.z;
+                    pc[i*3] = 1; pc[i*3+1] = 0.3 + m.life * 0.3; pc[i*3+2] = 0.1;
+                }
+                pMesh.geometry.attributes.position.needsUpdate = true;
+                pMesh.geometry.attributes.color.needsUpdate = true;
+                pMesh.geometry.setDrawRange(0, pheromones.mols.length);
+
+                // Remove consumed food
+                for (let i = food.length - 1; i >= 0; i--) {
+                    if (food[i].amount <= 0) {
+                        totalFoodFound++;
+                        scene.remove(foodMeshes[i]);
+                        foodMeshes.splice(i, 1);
+                        food.splice(i, 1);
+                    }
+                }
+
+                // Update UI
+                document.getElementById('val-mol').textContent = nMol;
+                document.getElementById('val-food').textContent = totalFoodFound;
+                document.getElementById('val-temp').textContent = (23 + Math.sin(clock.elapsedTime * 0.1) * 1).toFixed(0) + '°C';
+                document.getElementById('val-hum').textContent = (74 + Math.sin(clock.elapsedTime * 0.15) * 4).toFixed(0) + '%';
+
+                document.getElementById('b-sens').style.width = (activity * 100) + '%';
+                document.getElementById('b-mem').style.width = (activity * 85) + '%';
+                document.getElementById('b-mot').style.width = (activity * 70) + '%';
+                document.getElementById('v-sens').textContent = Math.round(activity * 100) + '%';
+                document.getElementById('v-mem').textContent = Math.round(activity * 85) + '%';
+                document.getElementById('v-mot').textContent = Math.round(activity * 70) + '%';
+            }
+
+            // Day/night cycle
+                const time = clock.elapsedTime;
+                const dayPhase = (Math.sin(time * 0.05) + 1) / 2; // 0-1 over ~2 min cycle
+                const isDay = dayPhase > 0.3;
+
+                // Sun light intensity and color
+                const sunIntensity = isDay ? 0.8 + dayPhase * 0.4 : 0.1;
+                sunLight.intensity = sunIntensity;
+                sunLight.color.setHex(isDay ? 0xfff8e8 : 0x223344);
+
+                // Ambient light
+                ambientLight.intensity = isDay ? 0.4 + dayPhase * 0.2 : 0.15;
+                ambientLight.color.setHex(isDay ? 0x334455 : 0x111122);
+
+                // Fog color for atmosphere
+                const fogColor = isDay ?
+                    new THREE.Color(0x080a0c) :
+                    new THREE.Color(0x020408);
+                scene.fog.color = fogColor;
+                scene.background = fogColor;
+
+                // Update time display
+                const hours = Math.floor(6 + dayPhase * 12);
+                const mins = Math.floor((dayPhase * 12 % 1) * 60);
+                document.getElementById('val-temp').textContent = `${hours}:${mins.toString().padStart(2,'0')} ${isDay?'☀':'☾'}`;
+
+            renderer.render(scene, cam);
+        }
+
+        init();
+    </script>
+</body>
+</html>

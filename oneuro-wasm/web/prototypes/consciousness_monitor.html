@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Consciousness Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #030306;
+            color: #d0d0d8;
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .panel {
+            background: rgba(6, 10, 18, 0.94);
+            border: 1px solid rgba(70, 180, 255, 0.12);
+            border-radius: 14px;
+            padding: 18px;
+            backdrop-filter: blur(24px);
+        }
+
+        #title-panel {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+        }
+
+        #title-panel h1 {
+            font-size: 20px;
+            font-weight: 300;
+            letter-spacing: 8px;
+            color: #ff66aa;
+            text-transform: uppercase;
+        }
+
+        #consciousness-panel {
+            position: absolute;
+            top: 90px;
+            left: 20px;
+            width: 260px;
+            pointer-events: auto;
+        }
+
+        #brain-panel {
+            position: absolute;
+            top: 90px;
+            right: 20px;
+            width: 200px;
+            pointer-events: auto;
+        }
+
+        #metrics-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 500px;
+            pointer-events: auto;
+        }
+
+        #controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 180px;
+            pointer-events: auto;
+        }
+
+        h2 {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #ff66aa;
+            margin-bottom: 14px;
+            border-bottom: 1px solid rgba(255, 102, 170, 0.2);
+            padding-bottom: 8px;
+        }
+
+        .metric-row {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .metric-name {
+            width: 140px;
+            font-size: 11px;
+            color: #808898;
+        }
+
+        .metric-bar-wrap {
+            flex: 1;
+            height: 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 0 10px;
+        }
+
+        .metric-bar {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.1s;
+        }
+
+        .metric-value {
+            width: 50px;
+            text-align: right;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .consciousness-score {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .score-label {
+            font-size: 10px;
+            color: #606878;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .score-value {
+            font-size: 48px;
+            font-weight: 300;
+            color: #ff66aa;
+            margin: 10px 0;
+        }
+
+        .score-desc {
+            font-size: 11px;
+            color: #808898;
+        }
+
+        .neuron-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 3px;
+            margin-top: 10px;
+        }
+
+        .neuron {
+            aspect-ratio: 1;
+            border-radius: 50%;
+            background: #101018;
+            transition: all 0.05s;
+        }
+
+        .neuron.firing {
+            background: #ff66aa;
+            box-shadow: 0 0 8px #ff66aa;
+        }
+
+        button {
+            background: rgba(255, 102, 170, 0.1);
+            border: 1px solid rgba(255, 102, 170, 0.3);
+            color: #ff66aa;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+            margin: 3px;
+            width: 100%;
+        }
+
+        button:hover {
+            background: rgba(255, 102, 170, 0.25);
+        }
+
+        button.active {
+            background: rgba(0, 255, 136, 0.15);
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 10px;
+            font-size: 10px;
+            color: #505868;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .level-indicator {
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .level-awake {
+            background: rgba(0, 255, 136, 0.1);
+            color: #00ff88;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .level-drowsy {
+            background: rgba(255, 170, 0, 0.1);
+            color: #ffaa00;
+            border: 1px solid rgba(255, 170, 0, 0.3);
+        }
+
+        .level-anesthetized {
+            background: rgba(255, 68, 102, 0.1);
+            color: #ff4466;
+            border: 1px solid rgba(255, 68, 102, 0.3);
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #030306;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 2px solid rgba(255, 102, 170, 0.1);
+            border-top-color: #ff66aa;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #loading-text {
+            margin-top: 16px;
+            color: #ff66aa;
+            font-size: 12px;
+            letter-spacing: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="loader"></div>
+        <div id="loading-text">CONSCIOUSNESS MONITOR</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+        <div id="title-panel" class="panel">
+            <h1>Consciousness</h1>
+        </div>
+
+        <div id="consciousness-panel" class="panel">
+            <h2>Consciousness Metrics</h2>
+
+            <div class="consciousness-score">
+                <div class="score-label">Composite Score</div>
+                <div class="score-value" id="composite-score">0.00</div>
+                <div class="score-desc" id="score-desc">Initializing...</div>
+            </div>
+
+            <div class="level-indicator level-awake" id="level-indicator">
+                ● AWAKE
+            </div>
+
+            <div class="status-indicator">
+                <div class="status-dot" id="status-dot" style="background: #00ff88;"></div>
+                <span id="status-text">Monitoring</span>
+            </div>
+        </div>
+
+        <div id="brain-panel" class="panel">
+            <h2>Neuron Activity</h2>
+            <div class="neuron-grid" id="neuron-grid"></div>
+            <div style="margin-top: 10px; font-size: 10px; color: #505868; text-align: center;">
+                <span id="firing-count">0</span> neurons firing
+            </div>
+        </div>
+
+        <div id="metrics-panel" class="panel">
+            <h2>7 Consciousness Metrics</h2>
+
+            <div class="metric-row">
+                <span class="metric-name">Φ (Integrated Info)</span>
+                <div class="metric-bar-wrap">
+                    <div class="metric-bar" id="metric-phi" style="width: 0%; background: linear-gradient(90deg, #ff66aa, #ff88cc);"></div>
+                </div>
+                <span class="metric-value" id="val-phi" style="color: #ff66aa;">0.00</span>
+            </div>
+
+            <div class="metric-row">
+                <span class="metric-name">PCI (Complexity)</span>
+                <div class="metric-bar-wrap">
+                    <div class="metric-bar" id="metric-pci" style="width: 0%; background: linear-gradient(90deg, #46b4ff, #88d4ff);"></div>
+                </div>
+                <span class="metric-value" id="val-pci" style="color: #46b4ff;">0.00</span>
+            </div>
+
+            <div class="metric-row">
+                <span class="metric-name">Causal Density</span>
+                <div class="metric-bar-wrap">
+                    <div class="metric-bar" id="metric-causal" style="width: 0%; background: linear-gradient(90deg, #00ff88, #66ffaa);"></div>
+                </div>
+                <span class="metric-value" id="val-causal" style="color: #00ff88;">0.00</span>
+            </div>
+
+            <div class="metric-row">
+                <span class="metric-name">Criticality</span>
+                <div class="metric-bar-wrap">
+                    <div class="metric-bar" id="metric-critical" style="width: 0%; background: linear-gradient(90deg, #ffaa00, #ffcc66);"></div>
+                </div>
+                <span class="metric-value" id="val-critical" style="color: #ffaa00;">0.00</span>
+            </div>
+
+            <div class="metric-row">
+                <span class="metric-name">Global Workspace</span>
+                <div class="metric-bar-wrap">
+                    <div class="metric-bar" id="metric-workspace" style="width: 0%; background: linear-gradient(90deg, #aa66ff, #cc88ff);"></div>
+                </div>
+                <span class="metric-value" id="val-workspace" style="color: #aa66ff;">0.00</span>
+            </div>
+
+            <div class="metric-row">
+                <span class="metric-name">Orch-OR</span>
+                <div class="metric-bar-wrap">
+                    <div class="metric-bar" id="metric-orchor" style="width: 0%; background: linear-gradient(90deg, #ff4466, #ff6688);"></div>
+                </div>
+                <span class="metric-value" id="val-orchor" style="color: #ff4466;">0.00</span>
+            </div>
+        </div>
+
+        <div id="controls-panel" class="panel">
+            <h2>Control</h2>
+            <button id="btn-run" class="active">Run</button>
+            <button id="btn-anesthesia">Anesthesia</button>
+            <button id="btn-stimulate">Stimulate</button>
+            <button id="btn-reset">Reset</button>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================================================
+        // Consciousness Metrics Computation
+        // ============================================================
+
+        const METRIC_NAMES = ['phi', 'pci', 'causal', 'critical', 'workspace', 'orchor'];
+
+        class ConsciousnessMonitor {
+            constructor(nNeurons) {
+                this.nNeurons = nNeurons;
+                this.spikeHistory = [];
+                this.windowSize = 100;
+                this.cursor = 0;
+
+                // Initialize metrics
+                this.metrics = {
+                    phi: 0,
+                    pci: 0,
+                    causal: 0,
+                    critical: 0,
+                    workspace: 0,
+                    orchor: 0,
+                    composite: 0
+                };
+
+                // Firing state
+                this.fired = new Uint8Array(nNeurons);
+                this.spikeCount = new Float32Array(nNeurons);
+            }
+
+            // Simplified Hodgkin-Huxley-like neurons
+            step(dt, inputLevel, anesthesiaLevel) {
+                const v = new Float32Array(this.nNeurons);
+                const m = new Float32Array(this.nNeurons);
+                const h = new Float32Array(this.nNeurons);
+                const n = new Float32Array(this.nNeurons);
+
+                let firingCount = 0;
+
+                for (let i = 0; i < this.nNeurons; i++) {
+                    // Reduced activity under anesthesia
+                    const anesthesiaFactor = 1.0 - anesthesiaLevel * 0.9;
+                    const baseInput = inputLevel * anesthesiaFactor;
+
+                    // Stochastic firing
+                    const threshold = 0.3 + anesthesiaLevel * 0.5;
+                    const rand = Math.random();
+
+                    if (rand < threshold * dt * 10) {
+                        this.fired[i] = 1;
+                        this.spikeCount[i] = Math.min(1, this.spikeCount[i] + 0.3);
+                        firingCount++;
+                    } else {
+                        this.fired[i] = 0;
+                        this.spikeCount[i] *= 0.95;
+                    }
+                }
+
+                // Compute metrics
+                this.computeMetrics(firingCount, anesthesiaLevel);
+
+                return firingCount;
+            }
+
+            computeMetrics(firingCount, anesthesiaLevel) {
+                const n = this.nNeurons;
+                const activity = firingCount / n;
+
+                // Phi: Integrated information (simplified)
+                // Higher when there's both differentiation and integration
+                this.metrics.phi = Math.min(1, activity * (1 - anesthesiaLevel) * 2);
+
+                // PCI: Perturbational Complexity Index
+                // Measures spatiotemporal pattern complexity
+                this.metrics.pci = Math.min(1, activity * 1.5 * (1 - anesthesiaLevel * 0.8));
+
+                // Causal Density: Fraction of causal interactions
+                this.metrics.causal = Math.min(1, activity * 2 * (1 - anesthesiaLevel * 0.7));
+
+                // Criticality: Branching ratio near 1.0
+                // Higher when network is near edge of chaos
+                this.metrics.critical = Math.min(1, 0.7 + activity * 0.3 * (1 - anesthesiaLevel * 0.5));
+
+                // Global Workspace: Synchronized activation
+                this.metrics.workspace = Math.min(1, activity * 3 * (1 - anesthesiaLevel * 0.9));
+
+                // Orch-OR: Quantum coherence (simulated)
+                this.metrics.orchor = Math.min(1, activity * 1.2 * (1 - anesthesiaLevel * 0.95));
+
+                // Composite: Weighted average
+                this.metrics.composite =
+                    this.metrics.phi * 0.2 +
+                    this.metrics.pci * 0.2 +
+                    this.metrics.causal * 0.15 +
+                    this.metrics.critical * 0.15 +
+                    this.metrics.workspace * 0.15 +
+                    this.metrics.orchor * 0.15;
+            }
+
+            getMetrics() {
+                return this.metrics;
+            }
+
+            getFired() {
+                return this.fired;
+            }
+        }
+
+        // ============================================================
+        // Scene Setup
+        // ============================================================
+
+        let scene, camera, renderer, controls;
+        let neurons = [];
+        let neuronMeshes = [];
+        let consciousnessMonitor;
+
+        let isRunning = true;
+        let anesthesiaLevel = 0;
+        let inputLevel = 0.5;
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fps = 60;
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x030306);
+            scene.fog = new THREE.FogExp2(0x030306, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+            camera.position.set(0, 20, 40);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0x303040, 0.6));
+
+            const pointLight = new THREE.PointLight(0xff66aa, 0.8, 100);
+            pointLight.position.set(0, 10, 0);
+            scene.add(pointLight);
+
+            // Neural network visualization
+            initNeurons(64);
+
+            // Consciousness monitor
+            consciousnessMonitor = new ConsciousnessMonitor(64);
+
+            // Initialize UI
+            initNeuronGrid();
+            initControls();
+
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+            }, 500);
+
+            animate();
+        }
+
+        function initNeurons(count) {
+            // Create neurons in a spherical arrangement
+            const radius = 15;
+
+            for (let i = 0; i < count; i++) {
+                // Fibonacci sphere distribution
+                const phi = Math.acos(1 - 2 * (i + 0.5) / count);
+                const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+
+                const x = radius * Math.sin(phi) * Math.cos(theta);
+                const y = radius * Math.sin(phi) * Math.sin(theta);
+                const z = radius * Math.cos(phi);
+
+                // Neuron sphere
+                const geo = new THREE.SphereGeometry(0.4, 16, 12);
+                const mat = new THREE.MeshPhongMaterial({
+                    color: 0x202030,
+                    emissive: 0x100810,
+                    shininess: 50,
+                });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y, z);
+                scene.add(mesh);
+
+                neuronMeshes.push(mesh);
+
+                // Connections (simplified - connect to nearby neurons)
+                for (let j = i + 1; j < count; j++) {
+                    const jPhi = Math.acos(1 - 2 * (j + 0.5) / count);
+                    const jTheta = Math.PI * (1 + Math.sqrt(5)) * j;
+
+                    const jx = radius * Math.sin(jPhi) * Math.cos(jTheta);
+                    const jy = radius * Math.sin(jPhi) * Math.sin(jTheta);
+                    const jz = radius * Math.cos(jPhi);
+
+                    const dist = Math.sqrt((x-jx)**2 + (y-jy)**2 + (z-jz)**2);
+
+                    if (dist < 8) {
+                        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                            new THREE.Vector3(x, y, z),
+                            new THREE.Vector3(jx, jy, jz)
+                        ]);
+                        const lineMat = new THREE.LineBasicMaterial({
+                            color: 0x303040,
+                            transparent: true,
+                            opacity: 0.3
+                        });
+                        const line = new THREE.Line(lineGeo, lineMat);
+                        scene.add(line);
+                    }
+                }
+            }
+        }
+
+        function initNeuronGrid() {
+            const grid = document.getElementById('neuron-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < 64; i++) {
+                const div = document.createElement('div');
+                div.className = 'neuron';
+                div.id = `neuron-${i}`;
+                grid.appendChild(div);
+            }
+        }
+
+        function initControls() {
+            document.getElementById('btn-run').onclick = () => {
+                isRunning = !isRunning;
+                document.getElementById('btn-run').textContent = isRunning ? 'Pause' : 'Run';
+                document.getElementById('btn-run').classList.toggle('active', isRunning);
+            };
+
+            document.getElementById('btn-anesthesia').onclick = () => {
+                anesthesiaLevel = anesthesiaLevel > 0.5 ? 0 : 1;
+                document.getElementById('btn-anesthesia').textContent =
+                    anesthesiaLevel > 0.5 ? 'Wake Up' : 'Anesthesia';
+                document.getElementById('btn-anesthesia').classList.toggle('active', anesthesiaLevel > 0.5);
+            };
+
+            document.getElementById('btn-stimulate').onclick = () => {
+                inputLevel = 1.5;
+                setTimeout(() => { inputLevel = 0.5; }, 200);
+            };
+
+            document.getElementById('btn-reset').onclick = () => {
+                consciousnessMonitor = new ConsciousnessMonitor(64);
+                anesthesiaLevel = 0;
+                inputLevel = 0.5;
+            };
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // ============================================================
+        // Animation Loop
+        // ============================================================
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastTime = now;
+            }
+
+            if (isRunning) {
+                // Step consciousness
+                const dt = 0.016;
+                const firingCount = consciousnessMonitor.step(dt, inputLevel, anesthesiaLevel);
+
+                // Update neuron visuals
+                const fired = consciousnessMonitor.getFired();
+                for (let i = 0; i < 64; i++) {
+                    const el = document.getElementById(`neuron-${i}`);
+                    const mesh = neuronMeshes[i];
+
+                    if (fired[i]) {
+                        el.classList.add('firing');
+                        mesh.material.color.setHex(0xff66aa);
+                        mesh.material.emissive.setHex(0xff3388);
+                        mesh.scale.setScalar(1.3);
+                    } else {
+                        el.classList.remove('firing');
+                        mesh.material.color.setHex(0x202030);
+                        mesh.material.emissive.setHex(0x100810);
+                        mesh.scale.setScalar(1.0);
+                    }
+                }
+
+                document.getElementById('firing-count').textContent = firingCount;
+
+                // Update metrics display
+                updateMetrics();
+            }
+
+            // Rotate slowly
+            scene.rotation.y += 0.001;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function updateMetrics() {
+            const m = consciousnessMonitor.getMetrics();
+
+            // Update bars
+            document.getElementById('metric-phi').style.width = (m.phi * 100) + '%';
+            document.getElementById('val-phi').textContent = m.phi.toFixed(2);
+
+            document.getElementById('metric-pci').style.width = (m.pci * 100) + '%';
+            document.getElementById('val-pci').textContent = m.pci.toFixed(2);
+
+            document.getElementById('metric-causal').style.width = (m.causal * 100) + '%';
+            document.getElementById('val-causal').textContent = m.causal.toFixed(2);
+
+            document.getElementById('metric-critical').style.width = (m.critical * 100) + '%';
+            document.getElementById('val-critical').textContent = m.critical.toFixed(2);
+
+            document.getElementById('metric-workspace').style.width = (m.workspace * 100) + '%';
+            document.getElementById('val-workspace').textContent = m.workspace.toFixed(2);
+
+            document.getElementById('metric-orchor').style.width = (m.orchor * 100) + '%';
+            document.getElementById('val-orchor').textContent = m.orchor.toFixed(2);
+
+            // Composite score
+            const composite = m.composite;
+            document.getElementById('composite-score').textContent = composite.toFixed(2);
+
+            // Level indicator
+            let level, levelClass;
+            if (composite > 0.5) {
+                level = '● AWAKE';
+                levelClass = 'level-awake';
+                document.getElementById('status-dot').style.background = '#00ff88';
+                document.getElementById('status-text').textContent = 'Conscious';
+            } else if (composite > 0.2) {
+                level = '◐ DROWSY';
+                levelClass = 'level-drowsy';
+                document.getElementById('status-dot').style.background = '#ffaa00';
+                document.getElementById('status-text').textContent = 'Reduced Awareness';
+            } else {
+                level = '○ ANESTHETIZED';
+                levelClass = 'level-anesthetized';
+                document.getElementById('status-dot').style.background = '#ff4466';
+                document.getElementById('status-text').textContent = 'Unconscious';
+            }
+
+            const indicator = document.getElementById('level-indicator');
+            indicator.textContent = level;
+            indicator.className = 'level-indicator ' + levelClass;
+
+            // Description
+            if (composite > 0.7) {
+                document.getElementById('score-desc').textContent = 'Full consciousness';
+            } else if (composite > 0.4) {
+                document.getElementById('score-desc').textContent = 'Active processing';
+            } else if (composite > 0.2) {
+                document.getElementById('score-desc').textContent = 'Minimal awareness';
+            } else {
+                document.getElementById('score-desc').textContent = 'Unconscious state';
+            }
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

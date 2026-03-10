@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Neural Molecular Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0a12;
+            color: #fff;
+            font-family: 'SF Pro Display', -apple-system, sans-serif;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== PANELS ===== */
+        .panel {
+            position: absolute;
+            background: rgba(15, 15, 25, 0.95);
+            border: 1px solid rgba(80, 200, 255, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        /* Title */
+        #title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            font-weight: 200;
+            letter-spacing: 10px;
+            color: #50c8ff;
+            text-transform: uppercase;
+        }
+
+        #subtitle {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            letter-spacing: 3px;
+            color: #405060;
+        }
+
+        /* ===== LEFT - WHAT IS THIS? ===== */
+        #explain-panel {
+            top: 100px;
+            left: 20px;
+            width: 260px;
+        }
+
+        .explain-title {
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: #ff66aa;
+            margin-bottom: 12px;
+        }
+
+        .explain-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            border-left: 3px solid;
+        }
+
+        .explain-item.fly { border-color: #00ff88; }
+        .explain-item.food { border-color: #ff4422; }
+        .explain-item.particles { border-color: #50c8ff; }
+
+        .explain-label {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .explain-item.fly .explain-label { color: #00ff88; }
+        .explain-item.food .explain-label { color: #ff4422; }
+        .explain-item.particles .explain-label { color: #50c8ff; }
+
+        .explain-desc {
+            font-size: 9px;
+            color: #708090;
+            line-height: 1.4;
+        }
+
+        /* ===== CENTER - BRAIN ===== */
+        #brain-panel {
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 320px;
+            text-align: center;
+        }
+
+        .brain-region {
+            margin: 14px 0;
+            text-align: left;
+        }
+
+        .brain-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            margin-bottom: 6px;
+        }
+
+        .brain-name { color: #60a0c0; font-weight: 500; }
+        .brain-val { color: #00ff88; font-weight: 600; }
+
+        .brain-bar {
+            height: 10px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .brain-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.15s ease;
+        }
+
+        /* Signal flow */
+        .signal-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(80,200,255,0.1);
+        }
+
+        .signal-node {
+            padding: 6px 10px;
+            background: rgba(80, 200, 255, 0.1);
+            border: 1px solid rgba(80, 200, 255, 0.3);
+            border-radius: 6px;
+            font-size: 9px;
+            color: #50c8ff;
+        }
+
+        .signal-arrow { color: #305060; font-size: 10px; }
+
+        .brain-desc {
+            margin-top: 12px;
+            font-size: 9px;
+            color: #506070;
+            line-height: 1.5;
+            text-align: left;
+            padding: 10px;
+            background: rgba(80,200,255,0.05);
+            border-radius: 8px;
+        }
+
+        /* ===== RIGHT - MOTOR ===== */
+        #motor-panel {
+            top: 100px;
+            right: 20px;
+            width: 180px;
+        }
+
+        .motor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .motor-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .motor-value {
+            font-size: 24px;
+            font-weight: 300;
+            color: #00ff88;
+        }
+
+        .motor-label {
+            font-size: 8px;
+            color: #506070;
+            margin-top: 4px;
+        }
+
+        /* ===== BOTTOM ===== */
+        #controls-panel {
+            bottom: 20px;
+            left: 20px;
+        }
+
+        button {
+            padding: 10px 18px;
+            background: rgba(80, 200, 255, 0.1);
+            border: 1px solid rgba(80, 200, 255, 0.3);
+            color: #50c8ff;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 8px;
+        }
+
+        button:hover {
+            background: rgba(80, 200, 255, 0.25);
+        }
+
+        button.active {
+            background: rgba(0, 255, 136, 0.15);
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+
+        #stats-panel {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 30px;
+            font-size: 10px;
+        }
+
+        .stat-row {
+            display: flex;
+            gap: 6px;
+            color: #507080;
+        }
+
+        .stat-val { color: #00ff88; font-weight: 500; }
+
+        /* ===== LOADING ===== */
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0a12;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(80, 200, 255, 0.15);
+            border-top-color: #50c8ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loading"><div class="loader"></div></div>
+
+    <div id="canvas-container"></div>
+
+    <div id="title">oNeuro</div>
+    <div id="subtitle">Neural Molecular Dynamics</div>
+
+    <!-- ===== EXPLAIN PANEL ===== -->
+    <div class="panel" id="explain-panel">
+        <div class="explain-title">WHAT AM I LOOKING AT?</div>
+
+        <div class="explain-item fly">
+            <div class="explain-label">🪰 THE FLY</div>
+            <div class="explain-desc">
+                A simulated fruit fly with a brain made of
+                <b style="color:#00ff88">32 neurons</b>.
+                It uses real neural circuits to smell food and decide where to go.
+            </div>
+        </div>
+
+        <div class="explain-item food">
+            <div class="explain-label">🍎 FOOD SOURCES</div>
+            <div class="explain-desc">
+                Orange spheres emit odor molecules.
+                The fly's <b style="color:#00ff88">antennae</b> detect these
+                and tell the brain "food nearby!"
+            </div>
+        </div>
+
+        <div class="explain-item particles">
+            <div class="explain-label">💨 MOLECULES</div>
+            <div class="explain-desc">
+                Green particles = food scent molecules
+                floating in the air. More particles = stronger smell.
+                They cluster around food sources.
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== BRAIN PANEL ===== -->
+    <div class="panel" id="brain-panel">
+        <div style="font-size: 10px; letter-spacing: 2px; color: #50c8ff; margin-bottom: 14px;">
+            🧠 FLY BRAIN ACTIVITY
+        </div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">AL - Antenna Lobe</span>
+                <span class="brain-val" id="val-al">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-al" style="width: 0%; background: linear-gradient(90deg, #00ff88, #50ffaa);"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">MB - Mushroom Body</span>
+                <span class="brain-val" id="val-mb">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-mb" style="width: 0%; background: linear-gradient(90deg, #50b4ff, #88d4ff);"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">CX - Central Complex</span>
+                <span class="brain-val" id="val-cx">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-cx" style="width: 0%; background: linear-gradient(90deg, #ff66aa, #ff88cc);"></div></div>
+        </div>
+
+        <div class="brain-region">
+            <div class="brain-label">
+                <span class="brain-name">VNC - Motor Control</span>
+                <span class="brain-val" id="val-vnc">0%</span>
+            </div>
+            <div class="brain-bar"><div class="brain-fill" id="bar-vnc" style="width: 0%; background: linear-gradient(90deg, #ffaa00, #ffcc44);"></div></div>
+        </div>
+
+        <div class="signal-flow">
+            <div class="signal-node">👃 SMELL</div>
+            <div class="signal-arrow">→</div>
+            <div class="signal-node">AL</div>
+            <div class="signal-arrow">→</div>
+            <div class="signal-node">MB</div>
+            <div class="signal-arrow">→</div>
+            <div class="signal-node">CX</div>
+            <div class="signal-arrow">→</div>
+            <div class="signal-node">🦵 MOVE</div>
+        </div>
+
+        <div class="brain-desc">
+            <b>How it works:</b> Food smell → AL (detect) → MB (remember) → CX (navigate) → VNC (move legs/wings)
+        </div>
+    </div>
+
+    <!-- ===== MOTOR PANEL ===== -->
+    <div class="panel" id="motor-panel">
+        <div style="font-size: 10px; letter-spacing: 2px; color: #ffaa00; margin-bottom: 12px;">
+            🦵 MOTOR OUTPUT
+        </div>
+
+        <div class="motor-grid">
+            <div class="motor-card">
+                <div class="motor-value" id="motor-speed">0</div>
+                <div class="motor-label">Speed</div>
+            </div>
+            <div class="motor-card">
+                <div class="motor-value" id="motor-turn">0°</div>
+                <div class="motor-label">Turn</div>
+            </div>
+            <div class="motor-card">
+                <div class="motor-value" id="motor-odor">0%</div>
+                <div class="motor-label">Smell</div>
+            </div>
+            <div class="motor-card">
+                <div class="motor-value" id="motor-food">0</div>
+                <div class="motor-label">Food</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CONTROLS ===== -->
+    <div id="controls-panel">
+        <button id="btn-play" class="active">Play</button>
+        <button id="btn-reset">Reset</button>
+        <button id="btn-food">Add Food</button>
+    </div>
+
+    <!-- ===== STATS ===== -->
+    <div id="stats-panel">
+        <div class="stat-row"><span>Particles:</span><span class="stat-val" id="stat-particles">0</span></div>
+        <div class="stat-row"><span>FPS:</span><span class="stat-val" id="stat-fps">0</span></div>
+        <div class="stat-row"><span>Step:</span><span class="stat-val" id="stat-step">0</span></div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ===== CONFIG =====
+        const CONFIG = {
+            particles: 600,
+            boxSize: 28,
+        };
+
+        // ===== STATE =====
+        let scene, camera, renderer;
+        let particles;
+        let foodMarkers = [];
+        let fly = { x: 14, z: 14, heading: 0, speed: 0 };
+        let flyMesh;
+        let brain = { al: 0, mb: 0, cx: 0, vnc: 0, odor: 0 };
+        let step = 0, fps = 60, isPlaying = true;
+        let lastTime = performance.now(), frameCount = 0;
+
+        // ===== INIT =====
+        async function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a12);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+            camera.position.set(0, 32, 45);
+            camera.lookAt(CONFIG.boxSize/2, 0, CONFIG.boxSize/2);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Mouse drag
+            let dragging = false, lastMouse = {x:0, y:0};
+            renderer.domElement.addEventListener('mousedown', e => { dragging = true; lastMouse = {x:e.clientX, y:e.clientY}; });
+            renderer.domElement.addEventListener('mouseup', () => dragging = false);
+            renderer.domElement.addEventListener('mousemove', e => {
+                if(!dragging) return;
+                camera.position.x += (e.clientX - lastMouse.x) * 0.15;
+                camera.lookAt(CONFIG.boxSize/2, 0, CONFIG.boxSize/2);
+                lastMouse = {x:e.clientX, y:e.clientY};
+            });
+
+            // Floor
+            const floor = new THREE.Mesh(
+                new THREE.PlaneGeometry(CONFIG.boxSize * 2, CONFIG.boxSize * 2),
+                new THREE.MeshBasicMaterial({ color: 0x0a0a15 })
+            );
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(CONFIG.boxSize/2, -0.1, CONFIG.boxSize/2);
+            scene.add(floor);
+
+            // Grid
+            const grid = new THREE.GridHelper(CONFIG.boxSize * 2, 16, 0x1a1a2a, 0x101018);
+            grid.position.set(CONFIG.boxSize/2, 0, CONFIG.boxSize/2);
+            scene.add(grid);
+
+            scene.add(new THREE.AmbientLight(0x404060, 0.9));
+
+            initParticles();
+            initFly();
+            initFood();
+            initControls();
+            window.addEventListener('resize', onResize);
+
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 400);
+            animate();
+        }
+
+        function initParticles() {
+            const geo = new THREE.SphereGeometry(0.22, 6, 4);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+            particles = new THREE.InstancedMesh(geo, mat, CONFIG.particles);
+
+            const pos = new Float32Array(CONFIG.particles * 3);
+            const vel = new Float32Array(CONFIG.particles * 3);
+
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+
+            for(let i = 0; i < CONFIG.particles; i++) {
+                const i3 = i * 3;
+                pos[i3] = Math.random() * CONFIG.boxSize;
+                pos[i3+1] = Math.random() * 4 + 1;
+                pos[i3+2] = Math.random() * CONFIG.boxSize;
+
+                dummy.position.set(pos[i3], pos[i3+1], pos[i3+2]);
+                dummy.updateMatrix();
+                particles.setMatrixAt(i, dummy.matrix);
+
+                color.setHSL(0.4, 0.9, 0.5);
+                particles.setColorAt(i, color);
+            }
+
+            particles.instanceMatrix.needsUpdate = true;
+            particles.instanceColor.needsUpdate = true;
+            scene.add(particles);
+
+            window.particlePos = pos;
+            window.particleVel = vel;
+        }
+
+        function initFly() {
+            const group = new THREE.Group();
+
+            // Body
+            group.add(new THREE.Mesh(
+                new THREE.CapsuleGeometry(0.4, 1, 4, 8),
+                new THREE.MeshBasicMaterial({ color: 0x303040 })
+            ));
+
+            // Wings
+            const wingGeo = new THREE.PlaneGeometry(1.2, 0.5);
+            const wingMat = new THREE.MeshBasicMaterial({ color: 0x88bbdd, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            const wingL = new THREE.Mesh(wingGeo, wingMat);
+            wingL.position.set(0, 0.3, 0.5);
+            wingL.rotation.x = -0.3;
+            group.add(wingL);
+            const wingR = new THREE.Mesh(wingGeo, wingMat);
+            wingR.position.set(0, 0.3, -0.5);
+            wingR.rotation.x = 0.3;
+            group.add(wingR);
+
+            // Head
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0x404050 }));
+            head.position.set(0, 0.2, 0.8);
+            group.add(head);
+
+            // Antennae
+            const antGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.5);
+            const antMat = new THREE.MeshBasicMaterial({ color: 0x606070 });
+            const antL = new THREE.Mesh(antGeo, antMat);
+            antL.position.set(-0.15, 0.5, 0.9);
+            antL.rotation.x = -0.5;
+            group.add(antL);
+            const antR = new THREE.Mesh(antGeo, antMat);
+            antR.position.set(0.15, 0.5, 0.9);
+            antR.rotation.x = -0.5;
+            group.add(antR);
+
+            // Eyes (green glow when detecting)
+            const eyeGeo = new THREE.SphereGeometry(0.12, 6, 4);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeL.position.set(-0.25, 0.25, 1.0);
+            group.add(eyeL);
+            const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeR.position.set(0.25, 0.25, 1.0);
+            group.add(eyeR);
+
+            flyMesh = group;
+            flyMesh.position.set(fly.x, 1.5, fly.z);
+            scene.add(flyMesh);
+        }
+
+        function initFood() {
+            addFood(7, 7, 1);
+            addFood(21, 21, 0.8);
+        }
+
+        function addFood(x, z, strength) {
+            // Fruit
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(1.3, 12, 8),
+                new THREE.MeshBasicMaterial({ color: 0xff4422 })
+            );
+            mesh.position.set(x, 0.9, z);
+            scene.add(mesh);
+
+            // Glow
+            const glow = new THREE.Mesh(
+                new THREE.SphereGeometry(2, 8, 6),
+                new THREE.MeshBasicMaterial({ color: 0xff2200, transparent: true, opacity: 0.2 })
+            );
+            glow.position.set(x, 0.9, z);
+            scene.add(glow);
+
+            // Stem
+            scene.add(new THREE.Mesh(
+                new THREE.CylinderGeometry(0.1, 0.15, 0.8),
+                new THREE.MeshBasicMaterial({ color: 0x228822 })
+            ).translate(x, 0.4, z));
+
+            foodMarkers.push({ x, z, strength, mesh, glow });
+        }
+
+        function initControls() {
+            document.getElementById('btn-play').onclick = () => {
+                isPlaying = !isPlaying;
+                document.getElementById('btn-play').textContent = isPlaying ? 'Pause' : 'Play';
+                document.getElementById('btn-play').classList.toggle('active', isPlaying);
+            };
+            document.getElementById('btn-reset').onclick = () => {
+                fly.x = CONFIG.boxSize/2;
+                fly.z = CONFIG.boxSize/2;
+                fly.heading = 0;
+                step = 0;
+            };
+            document.getElementById('btn-food').onclick = () => {
+                addFood(Math.random() * (CONFIG.boxSize-4)+2, Math.random() * (CONFIG.boxSize-4)+2, 0.5+Math.random()*0.5);
+            };
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ===== SIMULATE =====
+        function simulate() {
+            if(!isPlaying) return;
+
+            const dt = 0.016;
+            const box = CONFIG.boxSize;
+
+            // Odor at fly
+            let nearestFood = null, nearestDist = Infinity;
+            brain.odor = 0;
+
+            for(const f of foodMarkers) {
+                const dx = f.x - fly.x, dz = f.z - fly.z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                if(dist < nearestDist) { nearestDist = dist; nearestFood = f; }
+                if(dist < 10) brain.odor += f.strength * Math.exp(-dist / 3);
+            }
+            brain.odor = Math.min(1, brain.odor);
+
+            // Brain
+            brain.al = brain.odor * 0.9 + Math.random() * 0.1;
+            brain.mb = brain.al * 0.8 + brain.mb * 0.3 + Math.random() * 0.05;
+            brain.cx = brain.mb * 0.7 + Math.random() * 0.05;
+            brain.vnc = brain.cx * 0.8;
+
+            // Motor
+            fly.speed = brain.vnc * 0.7;
+            fly.heading += (Math.random() - 0.5) * brain.cx * 0.3;
+
+            // Navigate to food
+            if(nearestFood && nearestDist > 2) {
+                const toFood = Math.atan2(nearestFood.z - fly.z, nearestFood.x - fly.x);
+                let diff = toFood - fly.heading;
+                while(diff > Math.PI) diff -= Math.PI*2;
+                while(diff < -Math.PI) diff += Math.PI*2;
+                fly.heading += diff * 0.05 * brain.odor;
+            }
+
+            // Move
+            fly.x += Math.cos(fly.heading) * fly.speed * dt * 12;
+            fly.z += Math.sin(fly.heading) * fly.speed * dt * 12;
+            fly.x = (fly.x + box) % box;
+            fly.z = (fly.z + box) % box;
+
+            flyMesh.position.set(fly.x, 1.5, fly.z);
+            flyMesh.rotation.y = -fly.heading;
+            flyMesh.children[1].rotation.z = Math.sin(step * 0.3) * 0.4 * fly.speed;
+            flyMesh.children[2].rotation.z = -Math.sin(step * 0.3) * 0.4 * fly.speed;
+
+            // Particles
+            const pos = window.particlePos;
+            const vel = window.particleVel;
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+
+            for(let i = 0; i < CONFIG.particles; i++) {
+                const i3 = i * 3;
+
+                // Food attraction
+                for(const f of foodMarkers) {
+                    const dx = f.x - pos[i3], dz = f.z - pos[i3+2];
+                    const dist = Math.sqrt(dx*dx + dz*dz);
+                    if(dist < 7 && dist > 0.5) {
+                        vel[i3] += dx/dist * f.strength * 0.08 / (dist+1);
+                        vel[i3+2] += dz/dist * f.strength * 0.08 / (dist+1);
+                    }
+                }
+
+                // Fly attraction (pheromone)
+                const fdx = fly.x - pos[i3], fdz = fly.z - pos[i3+2];
+                const fdist = Math.sqrt(fdx*fdx + fdz*fdz);
+                if(fdist < 4 && fdist > 0.5) {
+                    vel[i3] += fdx/fdist * 0.04 / (fdist+1);
+                    vel[i3+2] += fdz/fdist * 0.04 / (fdist+1);
+                }
+
+                // Random + gravity
+                vel[i3] += (Math.random()-0.5) * 0.008;
+                vel[i3+1] += (Math.random()-0.5) * 0.008 - 0.002;
+                vel[i3+2] += (Math.random()-0.5) * 0.008;
+
+                vel[i3] *= 0.98; vel[i3+1] *= 0.98; vel[i3+2] *= 0.98;
+                pos[i3] += vel[i3]; pos[i3+1] += vel[i3+1]; pos[i3+2] += vel[i3+2];
+                pos[i3] = (pos[i3]+box)%box; pos[i3+1] = Math.max(0.3, Math.min(5, pos[i3+1])); pos[i3+2] = (pos[i3+2]+box)%box;
+
+                dummy.position.set(pos[i3], pos[i3+1], pos[i3+2]);
+                const v = Math.sqrt(vel[i3]**2 + vel[i3+1]**2 + vel[i3+2]**2);
+                dummy.scale.setScalar(0.5 + Math.min(v * 5, 1));
+                dummy.updateMatrix();
+                particles.setMatrixAt(i, dummy.matrix);
+
+                color.setHSL(0.4 - Math.min(v * 0.06, 0.25), 0.85, 0.5);
+                particles.setColorAt(i, color);
+            }
+
+            particles.instanceMatrix.needsUpdate = true;
+            particles.instanceColor.needsUpdate = true;
+
+            // Food pulse
+            const t = performance.now() * 0.001;
+            foodMarkers.forEach((f, i) => {
+                const p = 1 + Math.sin(t*2+i) * 0.1;
+                f.mesh.scale.setScalar(p);
+                f.glow.scale.setScalar(p*1.4);
+            });
+
+            step++;
+        }
+
+        function updateUI() {
+            document.getElementById('stat-particles').textContent = CONFIG.particles;
+            document.getElementById('stat-fps').textContent = fps;
+            document.getElementById('stat-step').textContent = step;
+
+            // Brain
+            document.getElementById('bar-al').style.width = (brain.al*100)+'%';
+            document.getElementById('val-al').textContent = Math.round(brain.al*100)+'%';
+            document.getElementById('bar-mb').style.width = (brain.mb*100)+'%';
+            document.getElementById('val-mb').textContent = Math.round(brain.mb*100)+'%';
+            document.getElementById('bar-cx').style.width = (brain.cx*100)+'%';
+            document.getElementById('val-cx').textContent = Math.round(brain.cx*100)+'%';
+            document.getElementById('bar-vnc').style.width = (brain.vnc*100)+'%';
+            document.getElementById('val-vnc').textContent = Math.round(brain.vnc*100)+'%';
+
+            // Motor
+            document.getElementById('motor-speed').textContent = fly.speed.toFixed(1);
+            document.getElementById('motor-turn').textContent = Math.round(fly.heading*180/Math.PI)+'°';
+            document.getElementById('motor-odor').textContent = Math.round(brain.odor*100)+'%';
+            document.getElementById('motor-food').textContent = foodMarkers.length;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            frameCount++;
+            const now = performance.now();
+            if(now - lastTime >= 1000) { fps = frameCount; frameCount = 0; lastTime = now; }
+
+            simulate();
+            if(step % 2 === 0) updateUI();
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

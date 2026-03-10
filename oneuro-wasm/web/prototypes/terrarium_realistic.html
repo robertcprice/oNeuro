@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oNeuro - Terrarium</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0c10;
+            color: #fff;
+            font-family: 'SF Pro', -apple-system, sans-serif;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== UI OVERLAY ===== */
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            font-weight: 300;
+            letter-spacing: 8px;
+            color: #8fa;
+            text-transform: uppercase;
+        }
+
+        /* ===== PANELS ===== */
+        .panel {
+            position: absolute;
+            background: rgba(10, 15, 20, 0.85);
+            border: 1px solid rgba(100, 180, 120, 0.1);
+            border-radius: 10px;
+            padding: 12px;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+        }
+
+        /* Left - Environment */
+        #env-panel {
+            top: 70px;
+            left: 16px;
+            width: 160px;
+        }
+
+        /* Right - Neural */
+        #brain-panel {
+            top: 70px;
+            right: 16px;
+            width: 180px;
+        }
+
+        /* Bottom - Controls */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            pointer-events: auto;
+        }
+
+        button {
+            background: rgba(100, 180, 120, 0.1);
+            border: 1px solid rgba(100, 180, 120, 0.2);
+            color: #8fa;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 10px;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+
+        button:hover { background: rgba(100, 180, 120, 0.2); }
+        button.active { background: rgba(100, 180, 120, 0.3); }
+
+        /* Stats */
+        .stat-label {
+            font-size: 9px;
+            color: #567;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+        }
+
+        .stat-value {
+            font-size: 14px;
+            color: #8fa;
+            font-weight: 500;
+        }
+
+        /* Brain bars */
+        .brain-bar {
+            margin: 6px 0;
+        }
+
+        .brain-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 8px;
+            color: #567;
+            margin-bottom: 3px;
+        }
+
+        .bar-track {
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.1s;
+        }
+
+        /* Legend */
+        #legend {
+            position: absolute;
+            bottom: 70px;
+            right: 16px;
+            font-size: 9px;
+            color: #456;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 4px 0;
+        }
+
+        .legend-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        /* Loading */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0c10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        #loading.hidden { opacity: 0; pointer-events: none; }
+
+        .spinner {
+            width: 24px; height: 24px;
+            border: 2px solid rgba(100, 180, 120, 0.1);
+            border-top-color: #8fa;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loading"><div class="spinner"></div></div>
+    <div id="canvas-container"></div>
+
+    <div id="ui">
+        <div id="title">oNeuro Terrarium</div>
+
+        <!-- Environment Panel -->
+        <div id="env-panel" class="panel">
+            <div class="stat-label" style="margin-bottom: 10px;">Environment</div>
+            <div class="stat-row">
+                <span class="stat-label">Temperature</span>
+                <span class="stat-value" id="val-temp">24°C</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Humidity</span>
+                <span class="stat-value" id="val-humidity">78%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Soil Moisture</span>
+                <span class="stat-value" id="val-soil">65%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Pheromones</span>
+                <span class="stat-value" id="val-pheromones">0</span>
+            </div>
+        </div>
+
+        <!-- Brain Panel -->
+        <div id="brain-panel" class="panel">
+            <div class="stat-label" style="margin-bottom: 10px;">Colony Neural Activity</div>
+
+            <div class="brain-bar">
+                <div class="brain-header"><span>Sensors</span><span id="val-sensor">0%</span></div>
+                <div class="bar-track"><div class="bar-fill" id="bar-sensor" style="width:0%; background:#f64;"></div></div>
+            </div>
+
+            <div class="brain-bar">
+                <div class="brain-header"><span>Memory</span><span id="val-memory">0%</span></div>
+                <div class="bar-track"><div class="bar-fill" id="bar-memory" style="width:0%; background:#4af;"></div></div>
+            </div>
+
+            <div class="brain-bar">
+                <div class="brain-header"><span>Navigation</span><span id="val-nav">0%</span></div>
+                <div class="bar-track"><div class="bar-fill" id="bar-nav" style="width:0%; background:#a4f;"></div></div>
+            </div>
+
+            <div class="brain-bar">
+                <div class="brain-header"><span>Motor</span><span id="val-motor">0%</span></div>
+                <div class="bar-track"><div class="bar-fill" id="bar-motor" style="width:0%; background:#8fa;"></div></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls">
+            <button id="btn-play" class="active">Play</button>
+            <button id="btn-reset">Reset</button>
+            <button id="btn-food">Add Food</button>
+            <button id="btn-water">Mist</button>
+        </div>
+
+        <!-- Legend -->
+        <div id="legend">
+            <div class="legend-row"><div class="legend-dot" style="background:#333"></div> Ant</div>
+            <div class="legend-row"><div class="legend-dot" style="background:#556"></div> Isopod</div>
+            <div class="legend-row"><div class="legend-dot" style="background:#fa0"></div> Food</div>
+            <div class="legend-row"><div class="legend-dot" style="background:rgba(100,180,120,0.5)"></div> Water</div>
+            <div class="legend-row"><div class="legend-dot" style="background:#f64"></div> Pheromone</div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================================================
+        // CONFIG
+        // ============================================================
+        const CONFIG = {
+            width: 16,
+            height: 12,
+            depth: 10,
+            glassThickness: 0.1,
+        };
+
+        // ============================================================
+        // DROSOPHILA BRAIN (simplified)
+        // ============================================================
+        class Brain {
+            constructor() {
+                this.sensor = new Float32Array(8);
+                this.memory = new Float32Array(12);
+                this.nav = new Float32Array(8);
+                this.motor = new Float32Array(4);
+
+                // Weights
+                this.w_sm = this.createWeights(8, 12, 0.4);
+                this.w_mn = this.createWeights(12, 8, 0.3);
+                this.w_nm = this.createWeights(8, 4, 0.5);
+            }
+
+            createWeights(rows, cols, density) {
+                const w = [];
+                for (let i = 0; i < rows; i++) {
+                    w.push(new Float32Array(cols));
+                    for (let j = 0; j < cols; j++) {
+                        if (Math.random() < density) {
+                            w[i][j] = (Math.random() - 0.5) * 0.4;
+                        }
+                    }
+                }
+                return w;
+            }
+
+            process(left, right, center, hasFood) {
+                // Input: sensor readings
+                const input = [left, right, center, left * right, Math.abs(left - right), hasFood ? 1 : 0];
+
+                // Sensor layer
+                for (let i = 0; i < this.sensor.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < input.length; j++) {
+                        sum += input[j] * (Math.random() * 0.3 + 0.7);
+                    }
+                    this.sensor[i] = Math.tanh(sum * 1.5);
+                }
+
+                // Memory layer
+                for (let i = 0; i < this.memory.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < this.sensor.length; j++) {
+                        sum += this.sensor[j] * this.w_sm[j][i];
+                    }
+                    this.memory[i] = Math.tanh(sum);
+                }
+
+                // Navigation layer
+                for (let i = 0; i < this.nav.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < this.memory.length; j++) {
+                        sum += this.memory[j] * this.w_mn[j][i];
+                    }
+                    this.nav[i] = Math.tanh(sum);
+                }
+
+                // Motor layer
+                for (let i = 0; i < this.motor.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < this.nav.length; j++) {
+                        sum += this.nav[j] * this.w_nm[j][i];
+                    }
+                    this.motor[i] = Math.tanh(sum);
+                }
+
+                const turn = (this.motor[0] - this.motor[1]) * 0.6;
+                const speed = (this.motor[2] - this.motor[3]) * 0.5 + 0.3;
+
+                return {
+                    turn: Math.max(-1, Math.min(1, turn)),
+                    speed: Math.max(0.1, Math.min(1, speed)),
+                    activity: this.getActivity(),
+                };
+            }
+
+            getActivity() {
+                const avg = arr => {
+                    let s = 0;
+                    for (let x of arr) s += Math.abs(x);
+                    return s / arr.length;
+                };
+                return {
+                    sensor: avg(this.sensor),
+                    memory: avg(this.memory),
+                    nav: avg(this.nav),
+                    motor: avg(this.motor),
+                };
+            }
+        }
+
+        // ============================================================
+        // MOLECULAR PHEROMONE SYSTEM
+        // ============================================================
+        class PheromoneSystem {
+            constructor() {
+                this.particles = [];
+                this.maxParticles = 2000;
+            }
+
+            emit(x, y, z, amount) {
+                for (let i = 0; i < amount * 30; i++) {
+                    if (this.particles.length >= this.maxParticles) break;
+                    this.particles.push({
+                        x: x + (Math.random() - 0.5) * 0.5,
+                        y: y + Math.random() * 0.3,
+                        z: z + (Math.random() - 0.5) * 0.5,
+                        vx: (Math.random() - 0.5) * 0.3,
+                        vy: Math.random() * 0.2,
+                        vz: (Math.random() - 0.5) * 0.3,
+                        life: 1.0,
+                    });
+                }
+            }
+
+            step(dt) {
+                const diff = 0.15;
+                const evap = 0.003;
+
+                for (let p of this.particles) {
+                    // Diffusion
+                    p.vx += (Math.random() - 0.5) * diff;
+                    p.vy += (Math.random() - 0.5) * diff * 0.5;
+                    p.vz += (Math.random() - 0.5) * diff;
+
+                    // Damping
+                    p.vx *= 0.92;
+                    p.vy *= 0.92;
+                    p.vz *= 0.92;
+
+                    // Move
+                    p.x += p.vx * dt * 2;
+                    p.y += p.vy * dt * 2;
+                    p.z += p.vz * dt * 2;
+
+                    // Bounds (soil to air)
+                    p.y = Math.max(0.5, Math.min(CONFIG.height - 1, p.y));
+
+                    // Evaporate
+                    p.life -= evap * dt * 60;
+                }
+
+                // Remove dead
+                this.particles = this.particles.filter(p => p.life > 0);
+
+                return this.particles.length;
+            }
+
+            sense(x, y, z, radius) {
+                let sum = 0;
+                for (let p of this.particles) {
+                    const dx = p.x - x;
+                    const dy = p.y - y;
+                    const dz = p.z - z;
+                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    if (dist < radius) {
+                        sum += p.life * Math.exp(-dist * dist / (radius * radius));
+                    }
+                }
+                return Math.min(1, sum / 5);
+            }
+        }
+
+        // ============================================================
+        // ANT AGENT
+        // ============================================================
+        class Ant {
+            constructor(x, y, z, brain) {
+                this.x = x; this.y = y; this.z = z;
+                this.heading = Math.random() * Math.PI * 2;
+                this.pitch = 0;
+                this.speed = 0;
+                this.hasFood = false;
+                this.brain = brain;
+                this.state = 'forage'; // forage, follow, return
+            }
+
+            step(pheromones, foodList, nestPos, dt) {
+                // Sensors
+                const sensorDist = 1.5;
+                const sensorAngle = 0.6;
+
+                const sx = Math.cos(this.heading);
+                const sz = Math.sin(this.heading);
+
+                const leftX = this.x + Math.cos(this.heading + sensorAngle) * sensorDist;
+                const leftZ = this.z + Math.sin(this.heading + sensorAngle) * sensorDist;
+                const rightX = this.x + Math.cos(this.heading - sensorAngle) * sensorDist;
+                const rightZ = this.z + Math.sin(this.heading - sensorAngle) * sensorDist;
+                const centerX = this.x + sx * sensorDist * 0.5;
+                const centerZ = this.z + sz * sensorDist * 0.5;
+
+                const left = pheromones.sense(leftX, this.y, leftZ, 2);
+                const right = pheromones.sense(rightX, this.y, rightZ, 2);
+                const center = pheromones.sense(centerX, this.y, centerZ, 2);
+
+                // Brain processing
+                const motor = this.brain.process(left, right, center, this.hasFood);
+
+                // Apply
+                this.heading += motor.turn * dt * 4;
+                this.speed = motor.speed;
+
+                // Movement
+                const moveSpeed = this.speed * 2 * dt;
+                this.x += Math.cos(this.heading) * moveSpeed;
+                this.z += Math.sin(this.heading) * moveSpeed;
+
+                // Keep in terrarium
+                this.x = Math.max(1, Math.min(CONFIG.width - 1, this.x));
+                this.z = Math.max(1, Math.min(CONFIG.depth - 1, this.z));
+
+                // Ground interaction
+                if (this.y > 0.8) {
+                    this.y -= dt * 2; // climb down
+                }
+
+                // Food interaction
+                for (let f of foodList) {
+                    const dx = f.x - this.x;
+                    const dz = f.z - this.z;
+                    const dist = Math.sqrt(dx*dx + dz*dz);
+                    if (dist < 1 && !this.hasFood && f.amount > 0) {
+                        this.hasFood = true;
+                        f.amount -= 0.3;
+                        if (f.amount <= 0) foodList.splice(foodList.indexOf(f), 1);
+                    }
+                }
+
+                // Pheromone behavior
+                if (this.hasFood) {
+                    // Return to nest
+                    const toNestX = nestPos.x - this.x;
+                    const toNestZ = nestPos.z - this.z;
+                    const nestDist = Math.sqrt(toNestX*toNestX + toNestZ*toNestZ);
+                    const nestHeading = Math.atan2(toNestZ, toNestX);
+
+                    let diff = nestHeading - this.heading;
+                    while (diff > Math.PI) diff -= Math.PI*2;
+                    while (diff < -Math.PI) diff += Math.PI*2;
+                    this.heading += diff * dt * 2;
+
+                    // Drop pheromones
+                    if (Math.random() < 0.4) {
+                        pheromones.emit(this.x, this.y + 0.5, this.z, 0.8);
+                    }
+
+                    if (nestDist < 2) {
+                        this.hasFood = false;
+                        pheromones.emit(nestPos.x, nestPos.y + 0.5, nestPos.z, 2);
+                    }
+                } else {
+                    // Random wander
+                    if (center < 0.1 && left < 0.1 && right < 0.1) {
+                        this.heading += (Math.random() - 0.5) * dt * 3;
+                    }
+                }
+
+                return motor.activity;
+            }
+        }
+
+        // ============================================================
+        // ISOPOD (rollie pollie)
+        // ============================================================
+        class Isopod {
+            constructor(x, y, z) {
+                this.x = x; this.y = y; this.z = z;
+                this.heading = Math.random() * Math.PI * 2;
+                this.rolled = false;
+                this.rollTimer = 0;
+            }
+
+            step(dt) {
+                // Random walk
+                this.heading += (Math.random() - 0.5) * dt * 2;
+
+                if (!this.rolled) {
+                    const speed = 0.5 * dt;
+                    this.x += Math.cos(this.heading) * speed;
+                    this.z += Math.sin(this.heading) * speed;
+
+                    // Roll up sometimes
+                    if (Math.random() < 0.001) {
+                        this.rolled = true;
+                        this.rollTimer = 2;
+                    }
+                } else {
+                    this.rollTimer -= dt;
+                    if (this.rollTimer <= 0) this.rolled = false;
+                }
+
+                // Bounds
+                this.x = Math.max(0.5, Math.min(CONFIG.width - 0.5, this.x));
+                this.z = Math.max(0.5, Math.min(CONFIG.depth - 0.5, this.z));
+
+                return this.rolled;
+            }
+        }
+
+        // ============================================================
+        // MAIN
+        // ============================================================
+        let scene, camera, renderer, controls;
+        let pheromones, ants = [], isopods = [], food = [], plants = [];
+        let pheromoneMesh, antMeshes = [], isopodMeshes = [], foodMeshes = [], waterDrops = [];
+        let isPlaying = true;
+        let clock = new THREE.Clock();
+
+        // Stats
+        let avgActivity = { sensor: 0, memory: 0, nav: 0, motor: 0 };
+
+        async function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0c10);
+            scene.fog = new THREE.FogExp2(0x0a0c10, 0.04);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(CONFIG.width / 2, 18, CONFIG.depth + 12);
+            camera.lookAt(CONFIG.width / 2, 4, CONFIG.depth / 2);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(CONFIG.width/2, 3, CONFIG.depth/2);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.1;
+
+            // Lighting
+            const ambient = new THREE.AmbientLight(0x334455, 0.6);
+            scene.add(ambient);
+
+            const sun = new THREE.DirectionalLight(0xfff5e0, 1.2);
+            sun.position.set(10, 20, 10);
+            sun.castShadow = true;
+            sun.shadow.mapSize.width = 1024;
+            sun.shadow.mapSize.height = 1024;
+            sun.shadow.camera.near = 1;
+            sun.shadow.camera.far = 50;
+            sun.shadow.camera.left = -20;
+            sun.shadow.camera.right = 20;
+            sun.shadow.camera.top = 20;
+            sun.shadow.camera.bottom = -20;
+            scene.add(sun);
+
+            // Spot light for terrarium glow
+            const spot = new THREE.SpotLight(0x88ffaa, 0.3, 30, Math.PI/4);
+            spot.position.set(CONFIG.width/2, 15, CONFIG.depth/2);
+            spot.target.position.set(CONFIG.width/2, 0, CONFIG.depth/2);
+            scene.add(spot);
+            scene.add(spot.target);
+
+            // ============================================================
+            // BUILD TERRARIUM
+            // ============================================================
+
+            // Soil
+            const soilGeo = new THREE.BoxGeometry(CONFIG.width - 0.2, 1.5, CONFIG.depth - 0.2);
+            const soilMat = new THREE.MeshStandardMaterial({
+                color: 0x2a1810,
+                roughness: 0.95,
+            });
+            const soil = new THREE.Mesh(soilGeo, soilMat);
+            soil.position.set(CONFIG.width/2, 0.75, CONFIG.depth/2);
+            soil.receiveShadow = true;
+            scene.add(soil);
+
+            // Soil texture (small bumps)
+            for (let i = 0; i < 50; i++) {
+                const pebble = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1 + Math.random() * 0.15, 6, 4),
+                    new THREE.MeshStandardMaterial({ color: 0x3a2820, roughness: 1 })
+                );
+                pebble.position.set(
+                    Math.random() * CONFIG.width,
+                    1.5 + Math.random() * 0.1,
+                    Math.random() * CONFIG.depth
+                );
+                pebble.receiveShadow = true;
+                scene.add(pebble);
+            }
+
+            // Glass container
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff,
+                metalness: 0,
+                roughness: 0,
+                transmission: 0.95,
+                thickness: 0.1,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.DoubleSide,
+            });
+
+            // Back glass
+            const backGlass = new THREE.Mesh(
+                new THREE.PlaneGeometry(CONFIG.width, CONFIG.height),
+                glassMat
+            );
+            backGlass.position.set(CONFIG.width/2, CONFIG.height/2, 0);
+            scene.add(backGlass);
+
+            // Front glass (partial - see inside)
+            const frontGlass = new THREE.Mesh(
+                new THREE.PlaneGeometry(CONFIG.width, CONFIG.height * 0.6),
+                glassMat
+            );
+            frontGlass.position.set(CONFIG.width/2, CONFIG.height * 0.3, CONFIG.depth);
+            scene.add(frontGlass);
+
+            // Side glasses
+            const sideGlass1 = new THREE.Mesh(
+                new THREE.PlaneGeometry(CONFIG.depth, CONFIG.height),
+                glassMat
+            );
+            sideGlass1.rotation.y = Math.PI / 2;
+            sideGlass1.position.set(0, CONFIG.height/2, CONFIG.depth/2);
+            scene.add(sideGlass1);
+
+            const sideGlass2 = sideGlass1.clone();
+            sideGlass2.position.set(CONFIG.width, CONFIG.height/2, CONFIG.depth/2);
+            scene.add(sideGlass2);
+
+            // Glass frame edges
+            const edgeMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 });
+
+            const createEdge = (w, h, d, x, y, z) => {
+                const e = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), edgeMat);
+                e.position.set(x, y, z);
+                return e;
+            };
+
+            // Frame
+            scene.add(createEdge(CONFIG.width + 0.4, 0.3, CONFIG.depth + 0.4, CONFIG.width/2, 0.15, CONFIG.depth/2));
+            scene.add(createEdge(CONFIG.width + 0.4, 0.3, CONFIG.depth + 0.4, CONFIG.width/2, CONFIG.height, CONFIG.depth/2));
+            scene.add(createEdge(0.3, CONFIG.height, 0.3, -0.15, CONFIG.height/2, -0.15));
+            scene.add(createEdge(0.3, CONFIG.height, 0.3, CONFIG.width + 0.15, CONFIG.height/2, -0.15));
+            scene.add(createEdge(0.3, CONFIG.height, 0.3, -0.15, CONFIG.height/2, CONFIG.depth + 0.15));
+            scene.add(createEdge(0.3, CONFIG.height, 0.3, CONFIG.width + 0.15, CONFIG.height/2, CONFIG.depth + 0.15));
+
+            // ============================================================
+            // PLANTS
+            // ============================================================
+            const plantPositions = [
+                { x: 3, z: 3 }, { x: 12, z: 2 }, { x: 8, z: 7 },
+                { x: 2, z: 8 }, { x: 13, z: 6 }, { x: 6, z: 4 }
+            ];
+
+            for (let pos of plantPositions) {
+                addPlant(pos.x, pos.z);
+            }
+
+            // ============================================================
+            // INITIALIZE SYSTEMS
+            // ============================================================
+            pheromones = new PheromoneSystem();
+
+            // Nest position
+            const nestPos = { x: CONFIG.width/2, y: 1.6, z: CONFIG.depth/2 };
+
+            // Ants
+            for (let i = 0; i < 8; i++) {
+                addAnt(nestPos.x + (Math.random() - 0.5) * 2, nestPos.y, nestPos.z + (Math.random() - 0.5) * 2);
+            }
+
+            // Isopods
+            for (let i = 0; i < 5; i++) {
+                addIsopod(Math.random() * CONFIG.width, 1.6, Math.random() * CONFIG.depth);
+            }
+
+            // Initial food
+            addFood(4, 4);
+            addFood(12, 7);
+
+            // Pheromone particles
+            const pGeo = new THREE.BufferGeometry();
+            const pPos = new Float32Array(2000 * 3);
+            const pCol = new Float32Array(2000 * 3);
+            pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+            pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+
+            const pMat = new THREE.PointsMaterial({
+                size: 0.15,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.7,
+                blending: THREE.AdditiveBlending,
+            });
+
+            pheromoneMesh = new THREE.Points(pGeo, pMat);
+            scene.add(pheromoneMesh);
+
+            // Controls
+            initControls();
+            window.addEventListener('resize', onResize);
+
+            // Start
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 500);
+            animate();
+        }
+
+        function addPlant(x, z) {
+            const group = new THREE.Group();
+
+            // Stem
+            const stemH = 1.5 + Math.random() * 1.5;
+            const stem = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.05, 0.08, stemH, 6),
+                new THREE.MeshStandardMaterial({ color: 0x2a5a2a })
+            );
+            stem.position.y = stemH / 2;
+            group.add(stem);
+
+            // Leaves
+            const nLeaves = 4 + Math.floor(Math.random() * 4);
+            for (let i = 0; i < nLeaves; i++) {
+                const leaf = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3 + Math.random() * 0.3, 6, 4),
+                    new THREE.MeshStandardMaterial({ color: 0x3a7a3a })
+                );
+                leaf.scale.set(1, 0.3, 1);
+                const angle = (i / nLeaves) * Math.PI * 2;
+                leaf.position.set(
+                    Math.cos(angle) * 0.4,
+                    stemH * 0.6 + Math.random() * stemH * 0.3,
+                    Math.sin(angle) * 0.4
+                );
+                group.add(leaf);
+            }
+
+            group.position.set(x, 1.5, z);
+            scene.add(group);
+            plants.push(group);
+        }
+
+        function addAnt(x, y, z) {
+            const brain = new Brain();
+            const ant = new Ant(x, y, z, brain);
+            ants.push(ant);
+
+            const group = new THREE.Group();
+
+            // Body segments
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+
+            const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), bodyMat);
+            abdomen.scale.set(0.8, 0.6, 1);
+            group.add(abdomen);
+
+            const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), bodyMat);
+            thorax.position.set(0, 0.05, 0.25);
+            thorax.scale.set(0.8, 0.6, 0.8);
+            group.add(thorax);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 4), bodyMat);
+            head.position.set(0, 0.08, 0.4);
+            group.add(head);
+
+            // Antennae
+            const antMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const antL = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.005, 0.2), antMat);
+            antL.position.set(-0.06, 0.15, 0.45);
+            antL.rotation.x = 0.5;
+            antL.rotation.z = 0.4;
+            group.add(antL);
+
+            const antR = antL.clone();
+            antR.position.x = 0.06;
+            antR.rotation.z = -0.4;
+            group.add(antR);
+
+            // Legs
+            for (let i = 0; i < 3; i++) {
+                const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.005, 0.25), antMat);
+                legL.position.set(-0.1, 0, 0.15 - i * 0.12);
+                legL.rotation.z = -0.8;
+                legL.rotation.y = 0.3;
+                group.add(legL);
+
+                const legR = legL.clone();
+                legR.position.x = 0.1;
+                legR.rotation.z = 0.8;
+                legR.rotation.y = -0.3;
+                group.add(legR);
+            }
+
+            // Food indicator
+            const foodInd = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 6, 4),
+                new THREE.MeshStandardMaterial({ color: 0xffaa00, visible: false })
+            );
+            foodInd.name = 'food';
+            foodInd.position.set(0, 0.2, 0.3);
+            group.add(foodInd);
+
+            group.position.set(x, y, z);
+            group.castShadow = true;
+            scene.add(group);
+            antMeshes.push(group);
+        }
+
+        function addIsopod(x, y, z) {
+            const iso = new Isopod(x, y, z);
+            isopods.push(iso);
+
+            const group = new THREE.Group();
+
+            // Body (ellipsoid)
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.15, 8, 6),
+                new THREE.MeshStandardMaterial({ color: 0x444455, roughness: 0.7 })
+            );
+            body.scale.set(1, 0.5, 1.5);
+            group.add(body);
+
+            // Segments
+            for (let i = 0; i < 5; i++) {
+                const seg = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.12, 0.02, 4, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x333344 })
+                );
+                seg.rotation.x = Math.PI / 2;
+                seg.position.z = -0.1 + i * 0.05;
+                seg.scale.set(1, 0.5, 1);
+                group.add(seg);
+            }
+
+            // Legs (when rolled, hidden)
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x333344 });
+            for (let i = 0; i < 7; i++) {
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.015, 0.12), legMat);
+                leg.position.set(-0.12, -0.02, -0.1 + i * 0.04);
+                leg.rotation.z = -0.5;
+                leg.name = 'leg';
+                group.add(leg);
+
+                const legR = leg.clone();
+                legR.position.x = 0.12;
+                legR.rotation.z = 0.5;
+                group.add(legR);
+            }
+
+            group.position.set(x, y, z);
+            group.castShadow = true;
+            scene.add(group);
+            isopodMeshes.push(group);
+        }
+
+        function addFood(x, z) {
+            food.push({ x, z, amount: 1 });
+
+            const geo = new THREE.SphereGeometry(0.4, 8, 6);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, 1.7, z);
+            mesh.castShadow = true;
+            scene.add(mesh);
+            foodMeshes.push(mesh);
+        }
+
+        function addMist() {
+            for (let i = 0; i < 30; i++) {
+                const drop = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.03 + Math.random() * 0.04, 4, 4),
+                    new THREE.MeshStandardMaterial({
+                        color: 0xaaddff,
+                        transparent: true,
+                        opacity: 0.6,
+                    })
+                );
+                drop.position.set(
+                    Math.random() * CONFIG.width,
+                    2 + Math.random() * CONFIG.height * 0.6,
+                    Math.random() * CONFIG.depth
+                );
+                scene.add(drop);
+                waterDrops.push({ mesh: drop, vy: -0.5 - Math.random() * 0.5, life: 3 });
+            }
+        }
+
+        function initControls() {
+            document.getElementById('btn-play').onclick = () => {
+                isPlaying = !isPlaying;
+                document.getElementById('btn-play').textContent = isPlaying ? 'Pause' : 'Play';
+                document.getElementById('btn-play').classList.toggle('active', isPlaying);
+            };
+
+            document.getElementById('btn-reset').onclick = () => {
+                // Reset
+                ants.forEach((a, i) => antMeshes[i] && scene.remove(antMeshes[i]));
+                ants = []; antMeshes = [];
+                isopods = []; isopodMeshes = [];
+                food = []; foodMeshes.forEach(m => scene.remove(m)); foodMeshes = [];
+                pheromones = new PheromoneSystem();
+
+                const nestPos = { x: CONFIG.width/2, y: 1.6, z: CONFIG.depth/2 };
+                for (let i = 0; i < 8; i++) {
+                    addAnt(nestPos.x + (Math.random() - 0.5) * 2, nestPos.y, nestPos.z + (Math.random() - 0.5) * 2);
+                }
+                for (let i = 0; i < 5; i++) {
+                    addIsopod(Math.random() * CONFIG.width, 1.6, Math.random() * CONFIG.depth);
+                }
+                addFood(4, 4);
+                addFood(12, 7);
+            };
+
+            document.getElementById('btn-food').onclick = () => {
+                addFood(2 + Math.random() * (CONFIG.width - 4), 2 + Math.random() * (CONFIG.depth - 4));
+            };
+
+            document.getElementById('btn-water').onclick = addMist;
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.05);
+
+            controls.update();
+
+            if (isPlaying) {
+                const nestPos = { x: CONFIG.width/2, y: 1.6, z: CONFIG.depth/2 };
+
+                // Step pheromones
+                const nPheromones = pheromones.step(dt);
+
+                // Step ants
+                let sensorSum = 0, memSum = 0, navSum = 0, motSum = 0;
+
+                for (let i = 0; i < ants.length; i++) {
+                    const act = ants[i].step(pheromones, food, nestPos, dt);
+
+                    antMeshes[i].position.set(ants[i].x, ants[i].y, ants[i].z);
+                    antMeshes[i].rotation.y = -ants[i].heading;
+
+                    const foodInd = antMeshes[i].children.find(c => c.name === 'food');
+                    if (foodInd) foodInd.visible = ants[i].hasFood;
+
+                    sensorSum += act.sensor;
+                    memSum += act.memory;
+                    navSum += act.nav;
+                    motSum += act.motor;
+                }
+
+                // Average
+                const n = ants.length || 1;
+                avgActivity.sensor = avgActivity.sensor * 0.9 + sensorSum / n * 0.1;
+                avgActivity.memory = avgActivity.memory * 0.9 + memSum / n * 0.1;
+                avgActivity.nav = avgActivity.nav * 0.9 + navSum / n * 0.1;
+                avgActivity.motor = avgActivity.motor * 0.9 + motSum / n * 0.1;
+
+                // Step isopods
+                for (let i = 0; i < isopods.length; i++) {
+                    const rolled = isopods[i].step(dt);
+                    isopodMeshes[i].position.set(isopods[i].x, isopods[i].y, isopods[i].z);
+                    isopodMeshes[i].rotation.y = isopods[i].heading;
+
+                    // Hide legs when rolled
+                    isopodMeshes[i].children.forEach(c => {
+                        if (c.name === 'leg') c.visible = !rolled;
+                    });
+
+                    // Scale when rolled
+                    isopodMeshes[i].scale.setScalar(rolled ? 0.8 : 1);
+                }
+
+                // Update pheromone visualization
+                const pPos = pheromoneMesh.geometry.attributes.position.array;
+                const pCol = pheromoneMesh.geometry.attributes.color.array;
+
+                for (let i = 0; i < pheromones.particles.length; i++) {
+                    const p = pheromones.particles[i];
+                    pPos[i * 3] = p.x;
+                    pPos[i * 3 + 1] = p.y;
+                    pPos[i * 3 + 2] = p.z;
+                    pCol[i * 3] = 1.0;
+                    pCol[i * 3 + 1] = 0.3 + p.life * 0.3;
+                    pCol[i * 3 + 2] = 0.1;
+                }
+
+                pheromoneMesh.geometry.attributes.position.needsUpdate = true;
+                pheromoneMesh.geometry.attributes.color.needsUpdate = true;
+                pheromoneMesh.geometry.setDrawRange(0, pheromones.particles.length);
+
+                // Update water
+                for (let i = waterDrops.length - 1; i >= 0; i--) {
+                    const w = waterDrops[i];
+                    w.mesh.position.y += w.vy * dt;
+                    w.mesh.position.x += (Math.random() - 0.5) * 0.02;
+                    w.life -= dt;
+
+                    if (w.mesh.position.y < 1.5 || w.life <= 0) {
+                        scene.remove(w.mesh);
+                        waterDrops.splice(i, 1);
+                    }
+                }
+
+                // Update UI
+                document.getElementById('val-pheromones').textContent = nPheromones;
+                document.getElementById('val-temp').textContent = (23 + Math.sin(clock.elapsedTime * 0.1) * 1).toFixed(0) + '°C';
+                document.getElementById('val-humidity').textContent = (75 + Math.sin(clock.elapsedTime * 0.2) * 5).toFixed(0) + '%';
+                document.getElementById('val-soil').textContent = (60 + Math.sin(clock.elapsedTime * 0.05) * 10).toFixed(0) + '%';
+
+                document.getElementById('bar-sensor').style.width = (avgActivity.sensor * 100) + '%';
+                document.getElementById('bar-memory').style.width = (avgActivity.memory * 100) + '%';
+                document.getElementById('bar-nav').style.width = (avgActivity.nav * 100) + '%';
+                document.getElementById('bar-motor').style.width = (avgActivity.motor * 100) + '%';
+
+                document.getElementById('val-sensor').textContent = Math.round(avgActivity.sensor * 100) + '%';
+                document.getElementById('val-memory').textContent = Math.round(avgActivity.memory * 100) + '%';
+                document.getElementById('val-nav').textContent = Math.round(avgActivity.nav * 100) + '%';
+                document.getElementById('val-motor').textContent = Math.round(avgActivity.motor * 100) + '%';
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

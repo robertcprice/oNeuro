@@ -1,0 +1,29 @@
+[package]
+name = "oneuro-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WebGPU-based neural-molecular simulator for browser"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Window",
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "WebGl2RenderingContext",
+    "Performance",
+] }
+wgpu = "0.19"
+nalgebra = "0.33"
+rand = "0.8"
+getrandom = { version = "0.2", features = ["js"] }
+
+[profile.release]
+opt-level = "s"
+lto = true

@@ -21,6 +21,12 @@ oNeuro is moving quickly. This index points to the docs that are most useful rig
 - Whole-cell / minimal-cell strategy: [`whole_cell_strategy.md`](whole_cell_strategy.md)
 - Terrarium Rust status: [`terrarium_rust_status.md`](terrarium_rust_status.md)
 
+## Sidecar Projects
+
+- Native 3D visualization track: [`../oneuro-3d/README.md`](../oneuro-3d/README.md)
+- Browser/WASM demo surface: [`../oneuro-wasm/README.md`](../oneuro-wasm/README.md)
+- Pharma/pathogen package: [`../pharma_platform/README.md`](../pharma_platform/README.md)
+
 ## Papers and Research Notes
 
 - Beyond ANN white paper: [`../papers/beyond_ann_white_paper.md`](../papers/beyond_ann_white_paper.md)

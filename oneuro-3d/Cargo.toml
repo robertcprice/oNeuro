@@ -1,0 +1,12 @@
+[package]
+name = "oneuro-3d"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.10"
+rand = "0.8"
+oneuro-metal = { path = "../oneuro-metal", default-features = false }
+
+[profile.release]
+opt-level = 3
