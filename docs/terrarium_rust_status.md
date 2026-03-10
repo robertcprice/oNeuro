@@ -29,7 +29,7 @@ Yes, the terrarium can become a pure Rust program. The current blocker is no lon
 - `oneuro-metal/src/drosophila.rs`
   - Native fly brain/body step for terrarium sensory input.
 - `oneuro-metal/src/terrarium_world.rs`
-  - Native terrarium owner for broad soil pools, substrate control sync, plant stepping, seed/food bookkeeping, atmosphere stepping, and fly stepping.
+  - Native terrarium owner for broad soil pools, substrate control sync, plant stepping, seed/food bookkeeping, atmosphere stepping, plant/atmosphere gas exchange, and fly stepping.
 - `oneuro-metal/examples/native_terrarium_stack.rs`
   - Headless Rust-only example running the native terrarium owner without Python.
 - `oneuro-metal/src/bin/terrarium_native.rs`
@@ -37,7 +37,7 @@ Yes, the terrarium can become a pure Rust program. The current blocker is no lon
 - `oneuro-metal/src/bin/terrarium_viewer.rs`
   - Rust-native graphical viewer with a live window, top-down field rendering, keyboard controls, and an in-window stats panel driven directly by `TerrariumWorld`.
 - `oneuro-3d/src/bin/terrarium_gpu.rs`
-  - Rust-native GPU viewer built on Bevy/wgpu that renders the terrarium through the platform graphics backend while driving the same native `TerrariumWorld`, now with a custom fragment-shader material that colors the scene on-GPU from a raw scalar field texture plus live overlay point data for water, plants, fruit, and flies.
+  - Rust-native GPU viewer built on Bevy/wgpu that renders the terrarium through the platform graphics backend while driving the same native `TerrariumWorld`, now with packed raw field textures for terrain/soil/canopy/chemistry/odor/gas layers plus live overlay point data for water, plants, fruit, and flies, all colored on-GPU in WGSL.
 
 ## Still Python-Owned
 

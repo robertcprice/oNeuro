@@ -117,7 +117,7 @@ cargo run --bin terrarium_native
 cargo run --bin terrarium_viewer
 ```
 
-Run the shader-backed GPU viewer from `oneuro-3d/`. It now uploads a raw float field texture plus live overlay point data and does palette/contour shading directly in WGSL on the GPU:
+Run the shader-backed GPU viewer from `oneuro-3d/`. It now uploads packed raw float field textures for terrain, soil moisture, canopy, chemistry, odor, and gas exchange, plus live overlay point data, and does palette/contour shading directly in WGSL on the GPU:
 
 ```bash
 cargo run --manifest-path oneuro-3d/Cargo.toml --bin terrarium_gpu
@@ -130,6 +130,7 @@ Useful viewer controls:
 - `3` canopy
 - `4` chemistry
 - `5` odor
+- `6` gas exchange
 - `space` pause
 - `right` single-step
 - `r` reset
