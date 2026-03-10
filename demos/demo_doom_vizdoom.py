@@ -602,6 +602,10 @@ class DoomFEPProtocol:
         # Track last active motor population for Hebbian nudge
         self.last_action: int = 0
         self.motor_populations: Optional[List[torch.Tensor]] = None
+        # ACTION HISTORY for proper credit assignment (RL)
+        # Reward the action that led to health (2-3 steps delay)
+        self.action_history: List[Tuple[int, int]] = []  # (action, steps_ago)
+        self.max_history = 5
 
     def deliver_positive(self, rb: CUDARegionalBrain) -> None:
         """Structured feedback for positive events (health gain, survival).
@@ -696,6 +700,113 @@ class DoomRandomProtocol:
     def deliver_negative(self, rb: CUDARegionalBrain) -> None:
         """Same as positive — no differential feedback."""
         rb.run(self.settle_steps)
+
+
+class DoomRLProtocol:
+    """Reinforcement Learning with proper dopamine/cortisol signals.
+
+    This implements CLASSIC RL, not FEP:
+    - Health collected → Dopamine burst at motor neurons → strengthen that action
+    - Damage taken → Cortisol (stress) → weaken that action
+    - Credit assignment: reward the action that occurred 2-3 steps ago
+
+    This is what actual brains do: reward prediction error drives learning.
+    """
+
+    def __init__(self, cortex_ids: torch.Tensor, relay_ids: torch.Tensor,
+                 l5_ids: torch.Tensor, device: str = "cpu",
+                 da_amount: float = 200.0,  # Strong dopamine
+                 cortisol_amount: float = 150.0,  # Stress signal
+                 reward_steps: int = 10,
+                 settle_steps: int = 5):
+        self.cortex_ids = cortex_ids
+        self.relay_ids = relay_ids
+        self.l5_ids = l5_ids
+        self.device = device
+        self.da_amount = da_amount
+        self.cortisol_amount = cortisol_amount
+        self.reward_steps = reward_steps
+        self.settle_steps = settle_steps
+        self.last_action: int = 0
+        self.motor_populations: Optional[List[torch.Tensor]] = None
+
+        # ACTION HISTORY for temporal credit assignment
+        # Track (action, steps_since) - reward the action that led to outcome
+        self.action_history: List[Tuple[int, int]] = []
+        self.max_history = 4  # How far back to credit
+
+    def record_action(self, action: int) -> None:
+        """Record action and increment step counters."""
+        # Add new action with 0 steps
+        self.action_history.insert(0, (action, 0))
+        # Increment step counter for all historical actions
+        self.action_history = [(a, s+1) for a, s in self.action_history]
+        # Keep only recent history
+        self.action_history = [(a, s) for a, s in self.action_history if s <= self.max_history]
+
+    def deliver_positive(self, rb: CUDARegionalBrain) -> None:
+        """DOPAMINE burst for health collected!
+
+        Credit assignment: reward the action from 2-3 steps ago that led to health.
+        This is how real brains learn - reward prediction error.
+        """
+        brain = rb.brain
+
+        # Credit assignment: find action from 2-3 steps ago
+        rewarded_actions = []
+        for action, steps_ago in self.action_history:
+            if 1 <= steps_ago <= 3:  # Reward delayed actions
+                rewarded_actions.append(action)
+
+        if rewarded_actions and self.motor_populations:
+            # Apply dopamine to the ACTIONS that led to reward
+            # (not just the last action!)
+            unique_actions = list(set(rewarded_actions))
+            for action in unique_actions:
+                count = rewarded_actions.count(action)
+                pop = self.motor_populations[action]
+                # Dopamine at motor neurons strengthens that action pathway
+                brain.nt_conc[pop, NT_DA] += self.da_amount * (count / len(rewarded_actions))
+
+        # Also briefly stimulate to mark the event
+        for _ in range(self.reward_steps):
+            rb.step()
+
+        # Hebbian nudge to strengthen relay->correct motor
+        if self.motor_populations and rewarded_actions:
+            # Strengthen the credited action(s)
+            for action in unique_actions:
+                correct_pop = self.motor_populations[action]
+                wrong_pops = [self.motor_populations[i]
+                              for i in range(N_MOTOR_POPULATIONS)
+                              if i != action]
+                _doom_hebbian_nudge(brain, self.relay_ids, correct_pop,
+                                    wrong_pops, 2.0)  # Stronger nudge for RL
+
+    def deliver_negative(self, rb: CUDARegionalBrain) -> None:
+        """CORTISOL (stress) for damage taken!
+
+        Weaken the action that led to damage.
+        """
+        brain = rb.brain
+
+        # Credit assignment: find action from 2-3 steps ago
+        punished_actions = []
+        for action, steps_ago in self.action_history:
+            if 1 <= steps_ago <= 3:
+                punished_actions.append(action)
+
+        if punished_actions and self.motor_populations:
+            unique_actions = list(set(punished_actions))
+            for action in unique_actions:
+                count = punished_actions.count(action)
+                pop = self.motor_populations[action]
+                # Cortisol weakens synapses - reduce motor output for that action
+                brain.nt_conc[pop, NT_5HT] += self.cortisol_amount * (count / len(punished_actions))
+
+        # Brief settling
+        for _ in range(self.settle_steps):
+            rb.step()
 
 
 # ============================================================================
@@ -820,6 +931,11 @@ def play_doom_episode(
         # Track which action the protocol should credit
         if hasattr(protocol, 'last_action'):
             protocol.last_action = action
+
+        # FOR RL: Record action in history for temporal credit assignment
+        if hasattr(protocol, 'record_action'):
+            protocol.record_action(action)
+
         action_counts[action] += 1
 
         # 5. Execute action in ViZDoom
@@ -830,10 +946,13 @@ def play_doom_episode(
 
         # 6. Deliver feedback based on game event
         if event == "health_gained":
+            # Dopamine for health!
             protocol.deliver_positive(rb)
             total_positive += 1
         elif event == "damage_taken":
+            # Cortisol for damage!
             protocol.deliver_negative(rb)
+            total_negative += 1
             total_negative += 1
         else:
             # Neutral step: brief settling
@@ -1063,7 +1182,7 @@ def exp_learning_speed(
     )
     t0 = time.perf_counter()
 
-    conditions = ["free_energy", "da_reward", "random"]
+    conditions = ["free_energy", "da_reward", "random", "rl"]
     all_results = {}
 
     for condition in conditions:
@@ -1090,6 +1209,12 @@ def exp_learning_speed(
             protocol = DoomDAProtocol(cortex_ids, l5_ids, device=dev,
                                        reward_steps=sp["structured_steps"],
                                        settle_steps=sp["neutral_steps"] * 3)
+            protocol.motor_populations = decoder.populations
+        elif condition == "rl":
+            # RL: Dopamine for health, Cortisol for damage
+            protocol = DoomRLProtocol(
+                cortex_ids, relay_ids, l5_ids, device=dev,
+                da_amount=200.0, cortisol_amount=150.0)
             protocol.motor_populations = decoder.populations
         else:
             protocol = DoomRandomProtocol(cortex_ids, device=dev,
