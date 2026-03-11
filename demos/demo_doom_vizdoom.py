@@ -390,19 +390,33 @@ class DoomGame:
         self._total_episodes += 1
         return self._get_frame()
 
-    def step(self, action_idx: int) -> Tuple[str, float, bool, np.ndarray]:
+    def step(
+        self,
+        action_idx: Optional[int] = None,
+        *,
+        action_vector: Optional[List[int]] = None,
+    ) -> Tuple[str, float, bool, np.ndarray]:
         """Execute one action and return results.
 
         Args:
-            action_idx: Motor population index (0-5, ATTACK is 5).
+            action_idx: Optional motor population index (0-5, ATTACK is 5).
+            action_vector: Optional full 6-button action vector. If provided,
+                it is used directly and can enable simultaneous movement+attack.
 
         Returns:
             Tuple of (event, health_delta, done, frame), where event is one of
             "health_gained", "damage_taken", "kill", "survived", "neutral", or "episode_end".
         """
-        # Build one-hot action vector
-        action = [0] * N_MOTOR_POPULATIONS
-        action[action_idx] = 1
+        if action_vector is not None:
+            action = [1 if int(v) else 0 for v in action_vector[:N_MOTOR_POPULATIONS]]
+            if len(action) < N_MOTOR_POPULATIONS:
+                action.extend([0] * (N_MOTOR_POPULATIONS - len(action)))
+        else:
+            if action_idx is None:
+                raise ValueError("Either action_idx or action_vector must be provided")
+            # Build one-hot action vector
+            action = [0] * N_MOTOR_POPULATIONS
+            action[action_idx] = 1
 
         self._game.make_action(action)
         self._episode_steps += 1

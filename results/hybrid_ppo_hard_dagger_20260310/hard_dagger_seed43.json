@@ -1,0 +1,689 @@
+{
+  "passed": true,
+  "time": 135.96094704099232,
+  "metric_name": "survived",
+  "bio_feedback": true,
+  "feedback_style": "dishbrain",
+  "spike_ablation": "none",
+  "stim_ablation": "none",
+  "freeze_decoder": false,
+  "freeze_encoder": false,
+  "first_q_metric": 0.5,
+  "last_q_metric": 0.5,
+  "first_q_return": -9.493333333333323,
+  "last_q_return": -8.891666666666657,
+  "avg_damage": 90.75,
+  "total_kills": 6,
+  "dagger_replay_size": 562,
+  "last_update": {
+    "policy_loss": 0.20506437122821808,
+    "value_loss": 8.9708890914917,
+    "action_entropy": 1.767881989479065,
+    "encoder_entropy": -0.6058689951896667,
+    "imitation_loss": 1.2174042463302612,
+    "imitation_samples": 128.0,
+    "replay_samples": 128.0
+  },
+  "episode_metrics": [
+    {
+      "episode_return": 2.0300000000000082,
+      "health_gained": 0.0,
+      "kills": 1,
+      "survived": 1.0,
+      "damage_taken": 42.0,
+      "steps": 80,
+      "positive_events": 6.0,
+      "negative_events": 10.5,
+      "action_counts": [
+        11,
+        13,
+        21,
+        7,
+        11,
+        17
+      ],
+      "teacher_agreement": 0.2375,
+      "teacher_labels": 80
+    },
+    {
+      "episode_return": -15.68999999999999,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 120.0,
+      "steps": 73,
+      "positive_events": 0.0,
+      "negative_events": 22.5,
+      "action_counts": [
+        12,
+        10,
+        9,
+        10,
+        12,
+        20
+      ],
+      "teacher_agreement": 0.1232876712328767,
+      "teacher_labels": 73
+    },
+    {
+      "episode_return": -8.759999999999987,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 1.0,
+      "damage_taken": 96.0,
+      "steps": 80,
+      "positive_events": 1.0,
+      "negative_events": 11.5,
+      "action_counts": [
+        10,
+        18,
+        13,
+        13,
+        11,
+        15
+      ],
+      "teacher_agreement": 0.1625,
+      "teacher_labels": 80
+    },
+    {
+      "episode_return": -15.129999999999987,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 108.0,
+      "steps": 77,
+      "positive_events": 0.0,
+      "negative_events": 20.5,
+      "action_counts": [
+        9,
+        16,
+        13,
+        11,
+        12,
+        16
+      ],
+      "teacher_agreement": 0.16883116883116883,
+      "teacher_labels": 77
+    },
+    {
+      "episode_return": -5.969999999999988,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 1.0,
+      "damage_taken": 72.0,
+      "steps": 80,
+      "positive_events": 1.0,
+      "negative_events": 12.0,
+      "action_counts": [
+        11,
+        16,
+        17,
+        12,
+        5,
+        19
+      ],
+      "teacher_agreement": 0.2125,
+      "teacher_labels": 80
+    },
+    {
+      "episode_return": -13.439999999999994,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 108.0,
+      "steps": 47,
+      "positive_events": 0.0,
+      "negative_events": 14.5,
+      "action_counts": [
+        9,
+        9,
+        7,
+        9,
+        8,
+        5
+      ],
+      "teacher_agreement": 0.14893617021276595,
+      "teacher_labels": 47
+    },
+    {
+      "episode_return": -15.379999999999994,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 102.0,
+      "steps": 41,
+      "positive_events": 0.0,
+      "negative_events": 14.0,
+      "action_counts": [
+        7,
+        9,
+        6,
+        9,
+        6,
+        4
+      ],
+      "teacher_agreement": 0.14634146341463414,
+      "teacher_labels": 41
+    },
+    {
+      "episode_return": -6.579999999999988,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 1.0,
+      "damage_taken": 78.0,
+      "steps": 80,
+      "positive_events": 1.0,
+      "negative_events": 11.0,
+      "action_counts": [
+        14,
+        14,
+        12,
+        13,
+        9,
+        18
+      ],
+      "teacher_agreement": 0.15,
+      "teacher_labels": 80
+    },
+    {
+      "episode_return": -2.5399999999999876,
+      "health_gained": 0.0,
+      "kills": 1,
+      "survived": 1.0,
+      "damage_taken": 84.0,
+      "steps": 80,
+      "positive_events": 6.0,
+      "negative_events": 11.5,
+      "action_counts": [
+        10,
+        21,
+        12,
+        14,
+        7,
+        16
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -6.569999999999986,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 1.0,
+      "damage_taken": 78.0,
+      "steps": 80,
+      "positive_events": 1.0,
+      "negative_events": 9.0,
+      "action_counts": [
+        10,
+        7,
+        22,
+        17,
+        12,
+        12
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": 2.030000000000007,
+      "health_gained": 0.0,
+      "kills": 1,
+      "survived": 1.0,
+      "damage_taken": 42.0,
+      "steps": 80,
+      "positive_events": 6.0,
+      "negative_events": 8.0,
+      "action_counts": [
+        16,
+        10,
+        18,
+        10,
+        13,
+        13
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -12.129999999999988,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 108.0,
+      "steps": 77,
+      "positive_events": 0.0,
+      "negative_events": 22.0,
+      "action_counts": [
+        12,
+        15,
+        15,
+        9,
+        7,
+        19
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -2.1499999999999915,
+      "health_gained": 0.0,
+      "kills": 1,
+      "survived": 1.0,
+      "damage_taken": 84.0,
+      "steps": 80,
+      "positive_events": 6.0,
+      "negative_events": 11.0,
+      "action_counts": [
+        11,
+        15,
+        15,
+        12,
+        13,
+        14
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -13.919999999999987,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 126.0,
+      "steps": 76,
+      "positive_events": 0.0,
+      "negative_events": 19.0,
+      "action_counts": [
+        13,
+        12,
+        14,
+        10,
+        15,
+        12
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -6.569999999999988,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 1.0,
+      "damage_taken": 78.0,
+      "steps": 80,
+      "positive_events": 1.0,
+      "negative_events": 10.5,
+      "action_counts": [
+        19,
+        8,
+        10,
+        8,
+        19,
+        16
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -2.779999999999987,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 1.0,
+      "damage_taken": 36.0,
+      "steps": 80,
+      "positive_events": 1.0,
+      "negative_events": 8.0,
+      "action_counts": [
+        11,
+        14,
+        19,
+        10,
+        14,
+        12
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -10.609999999999992,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 108.0,
+      "steps": 43,
+      "positive_events": 0.0,
+      "negative_events": 13.0,
+      "action_counts": [
+        4,
+        10,
+        15,
+        6,
+        3,
+        5
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -15.719999999999986,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 114.0,
+      "steps": 76,
+      "positive_events": 0.0,
+      "negative_events": 21.0,
+      "action_counts": [
+        14,
+        9,
+        11,
+        16,
+        10,
+        16
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -3.7499999999999876,
+      "health_gained": 0.0,
+      "kills": 1,
+      "survived": 1.0,
+      "damage_taken": 96.0,
+      "steps": 80,
+      "positive_events": 6.0,
+      "negative_events": 11.5,
+      "action_counts": [
+        6,
+        14,
+        25,
+        9,
+        11,
+        15
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -15.729999999999988,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 120.0,
+      "steps": 78,
+      "positive_events": 0.0,
+      "negative_events": 23.5,
+      "action_counts": [
+        12,
+        11,
+        10,
+        12,
+        13,
+        20
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -16.719999999999988,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 126.0,
+      "steps": 77,
+      "positive_events": 0.0,
+      "negative_events": 21.5,
+      "action_counts": [
+        12,
+        14,
+        14,
+        13,
+        8,
+        16
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -6.969999999999986,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 1.0,
+      "damage_taken": 78.0,
+      "steps": 80,
+      "positive_events": 1.0,
+      "negative_events": 7.5,
+      "action_counts": [
+        12,
+        13,
+        23,
+        14,
+        9,
+        9
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": -10.629999999999994,
+      "health_gained": 0.0,
+      "kills": 0,
+      "survived": 0.0,
+      "damage_taken": 120.0,
+      "steps": 45,
+      "positive_events": 0.0,
+      "negative_events": 15.0,
+      "action_counts": [
+        6,
+        4,
+        12,
+        8,
+        7,
+        8
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    },
+    {
+      "episode_return": 0.4500000000000064,
+      "health_gained": 0.0,
+      "kills": 1,
+      "survived": 1.0,
+      "damage_taken": 54.0,
+      "steps": 80,
+      "positive_events": 6.0,
+      "negative_events": 13.0,
+      "action_counts": [
+        11,
+        15,
+        17,
+        11,
+        6,
+        20
+      ],
+      "teacher_agreement": null,
+      "teacher_labels": 0
+    }
+  ],
+  "eval_results": {
+    "metric_name": "survived",
+    "seeds": [
+      1043,
+      1044,
+      1045,
+      1046,
+      1047,
+      1048,
+      1049,
+      1050
+    ],
+    "use_biological_feedback": false,
+    "avg_metric": 0.25,
+    "avg_return": -12.927499999999991,
+    "avg_damage": 102.75,
+    "avg_kills": 0.0,
+    "episode_metrics": [
+      {
+        "episode_return": -8.749999999999988,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 1.0,
+        "damage_taken": 96.0,
+        "steps": 80,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          80,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      },
+      {
+        "episode_return": -15.539999999999988,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 0.0,
+        "damage_taken": 102.0,
+        "steps": 79,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          79,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      },
+      {
+        "episode_return": -15.169999999999987,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 0.0,
+        "damage_taken": 108.0,
+        "steps": 80,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          80,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      },
+      {
+        "episode_return": -12.439999999999994,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 0.0,
+        "damage_taken": 108.0,
+        "steps": 47,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          47,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      },
+      {
+        "episode_return": -13.689999999999994,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 0.0,
+        "damage_taken": 114.0,
+        "steps": 52,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          52,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      },
+      {
+        "episode_return": -15.429999999999993,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 0.0,
+        "damage_taken": 114.0,
+        "steps": 47,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          47,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      },
+      {
+        "episode_return": -15.439999999999992,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 0.0,
+        "damage_taken": 102.0,
+        "steps": 48,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          48,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      },
+      {
+        "episode_return": -6.959999999999987,
+        "health_gained": 0.0,
+        "kills": 0,
+        "survived": 1.0,
+        "damage_taken": 78.0,
+        "steps": 80,
+        "positive_events": 0.0,
+        "negative_events": 0.0,
+        "action_counts": [
+          0,
+          0,
+          80,
+          0,
+          0,
+          0
+        ],
+        "teacher_agreement": null,
+        "teacher_labels": 0
+      }
+    ]
+  }
+}
