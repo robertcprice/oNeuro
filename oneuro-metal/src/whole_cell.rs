@@ -27,13 +27,13 @@ use crate::whole_cell_data::{
     WholeCellChromosomeState, WholeCellComplexAssemblyState, WholeCellComplexSpec,
     WholeCellContractSchema, WholeCellGenomeAssetPackage, WholeCellGenomeAssetSummary,
     WholeCellGenomeFeature, WholeCellGenomeProcessRegistry, WholeCellGenomeProcessRegistrySummary,
-    WholeCellLatticeState, WholeCellLocalChemistrySpec, WholeCellMoleculePoolSpec,
-    WholeCellNamedComplexState, WholeCellOrganismExpressionState, WholeCellOrganismProfile,
-    WholeCellOrganismSpec, WholeCellOrganismSummary, WholeCellProcessWeights, WholeCellProgramSpec,
-    WholeCellProvenance, WholeCellReactionClass, WholeCellReactionRuntimeState,
-    WholeCellSavedCoreState, WholeCellSavedState, WholeCellSchedulerState, WholeCellSolverStage,
-    WholeCellSpeciesClass, WholeCellSpeciesRuntimeState, WholeCellStageClockState,
-    WholeCellTranscriptionUnitState,
+    WholeCellLatticeState, WholeCellLocalChemistrySpec, WholeCellMembraneDivisionState,
+    WholeCellMoleculePoolSpec, WholeCellNamedComplexState, WholeCellOrganismExpressionState,
+    WholeCellOrganismProfile, WholeCellOrganismSpec, WholeCellOrganismSummary,
+    WholeCellProcessWeights, WholeCellProgramSpec, WholeCellProvenance, WholeCellReactionClass,
+    WholeCellReactionRuntimeState, WholeCellSavedCoreState, WholeCellSavedState,
+    WholeCellSchedulerState, WholeCellSolverStage, WholeCellSpeciesClass,
+    WholeCellSpeciesRuntimeState, WholeCellStageClockState, WholeCellTranscriptionUnitState,
 };
 use crate::whole_cell_submodels::{
     LocalChemistryReport, LocalChemistrySiteReport, LocalMDProbeReport, LocalMDProbeRequest,
@@ -154,6 +154,7 @@ pub struct WholeCellSnapshot {
     pub replicated_bp: u32,
     pub chromosome_separation_nm: f32,
     pub chromosome_state: WholeCellChromosomeState,
+    pub membrane_division_state: WholeCellMembraneDivisionState,
     pub radius_nm: f32,
     pub surface_area_nm2: f32,
     pub volume_nm3: f32,
@@ -1321,6 +1322,7 @@ pub struct WholeCellSimulator {
     replicated_bp: u32,
     chromosome_separation_nm: f32,
     chromosome_state: WholeCellChromosomeState,
+    membrane_division_state: WholeCellMembraneDivisionState,
     radius_nm: f32,
     surface_area_nm2: f32,
     volume_nm3: f32,
@@ -1879,6 +1881,329 @@ impl WholeCellSimulator {
             * radius_scale
             * (0.35 + 1.45 * self.chromosome_state.segregation_progress);
         self.chromosome_separation_nm = target_separation.max(10.0);
+    }
+
+    fn membrane_cardiolipin_share(&self) -> f32 {
+        self.organism_data
+            .as_ref()
+            .map(|organism| (0.08 + 0.40 * organism.composition.lipid_fraction).clamp(0.08, 0.32))
+            .unwrap_or(0.16)
+    }
+
+    fn seeded_membrane_division_state(&self) -> WholeCellMembraneDivisionState {
+        let preferred_area_nm2 = self.surface_area_nm2.max(1.0);
+        let cardiolipin_share = self.membrane_cardiolipin_share();
+        let division_progress = self.division_progress.clamp(0.0, 0.99);
+        let septum_radius_fraction = (1.0 - division_progress).clamp(0.01, 1.0);
+        let septum_localization = (0.08 + 0.22 * division_progress).clamp(0.05, 0.60);
+        let divisome_order_progress = (0.06 + 0.28 * division_progress).clamp(0.0, 1.0);
+        let ring_occupancy = (0.05 + 0.30 * division_progress).clamp(0.0, 1.0);
+        let chromosome_occlusion = (1.0 - self.chromosome_state.segregation_progress)
+            .clamp(0.0, 1.0)
+            * (0.35 + 0.65 * self.chromosome_state.replicated_fraction.clamp(0.0, 1.0));
+        let membrane_protein_insertion = Self::saturating_signal(
+            self.complex_assembly.membrane_complexes
+                + 0.35 * self.complex_assembly.atp_band_complexes,
+            self.complex_assembly.membrane_target.max(8.0),
+        );
+        WholeCellMembraneDivisionState {
+            membrane_area_nm2: preferred_area_nm2,
+            preferred_membrane_area_nm2: preferred_area_nm2,
+            phospholipid_inventory_nm2: preferred_area_nm2 * (1.0 - cardiolipin_share),
+            cardiolipin_inventory_nm2: preferred_area_nm2 * cardiolipin_share,
+            septal_lipid_inventory_nm2: preferred_area_nm2 * septum_localization * 0.08,
+            membrane_protein_insertion,
+            insertion_debt: 0.0,
+            curvature_stress: (0.10 + 0.25 * division_progress).clamp(0.0, 1.5),
+            septum_localization,
+            divisome_occupancy: divisome_order_progress * ring_occupancy,
+            divisome_order_progress,
+            ring_occupancy,
+            ring_tension: (0.10 + 0.50 * division_progress).clamp(0.0, 1.5),
+            constriction_force: 0.0,
+            septum_radius_fraction,
+            septum_thickness_nm: (0.018 * self.radius_nm).clamp(3.0, 12.0),
+            envelope_integrity: 1.0,
+            osmotic_balance: 1.0,
+            chromosome_occlusion,
+            failure_pressure: 0.0,
+            scission_events: 0,
+        }
+    }
+
+    fn normalize_membrane_division_state(
+        &self,
+        mut state: WholeCellMembraneDivisionState,
+    ) -> WholeCellMembraneDivisionState {
+        let seeded = self.seeded_membrane_division_state();
+        state.preferred_membrane_area_nm2 = state
+            .preferred_membrane_area_nm2
+            .max(seeded.preferred_membrane_area_nm2.max(1.0));
+        state.membrane_area_nm2 = state
+            .membrane_area_nm2
+            .clamp(1.0, state.preferred_membrane_area_nm2 * 1.5);
+        state.phospholipid_inventory_nm2 = state.phospholipid_inventory_nm2.max(0.0);
+        state.cardiolipin_inventory_nm2 = state.cardiolipin_inventory_nm2.max(0.0);
+        state.septal_lipid_inventory_nm2 = state.septal_lipid_inventory_nm2.max(0.0);
+        state.membrane_protein_insertion = state.membrane_protein_insertion.clamp(0.0, 1.5);
+        state.insertion_debt = state.insertion_debt.clamp(0.0, 2.0);
+        state.curvature_stress = state.curvature_stress.clamp(0.0, 2.0);
+        state.septum_localization = state.septum_localization.clamp(0.0, 1.0);
+        state.divisome_occupancy = state.divisome_occupancy.clamp(0.0, 1.0);
+        state.divisome_order_progress = state.divisome_order_progress.clamp(0.0, 1.0);
+        state.ring_occupancy = state.ring_occupancy.clamp(0.0, 1.0);
+        state.ring_tension = state.ring_tension.clamp(0.0, 2.0);
+        state.constriction_force = state.constriction_force.clamp(0.0, 2.0);
+        state.septum_radius_fraction = state.septum_radius_fraction.clamp(0.01, 1.0);
+        state.septum_thickness_nm = state.septum_thickness_nm.clamp(2.0, 20.0);
+        state.envelope_integrity = state.envelope_integrity.clamp(0.10, 1.20);
+        state.osmotic_balance = state.osmotic_balance.clamp(0.65, 1.35);
+        state.chromosome_occlusion = state.chromosome_occlusion.clamp(0.0, 1.5);
+        state.failure_pressure = state.failure_pressure.clamp(0.0, 2.0);
+        state
+    }
+
+    fn synchronize_membrane_division_summary(&mut self) {
+        self.membrane_division_state =
+            self.normalize_membrane_division_state(self.membrane_division_state.clone());
+        self.surface_area_nm2 = self.membrane_division_state.membrane_area_nm2.max(1.0);
+        self.radius_nm = (self.surface_area_nm2 / (4.0 * PI)).sqrt();
+        self.volume_nm3 =
+            Self::volume_from_radius(self.radius_nm) * self.membrane_division_state.osmotic_balance;
+        self.division_progress =
+            (1.0 - self.membrane_division_state.septum_radius_fraction).clamp(0.0, 0.99);
+    }
+
+    fn membrane_chromosome_occlusion(&self) -> f32 {
+        ((1.0 - self.chromosome_state.segregation_progress).clamp(0.0, 1.0)
+            * (0.45 + 0.55 * self.chromosome_state.replicated_fraction.clamp(0.0, 1.0))
+            * (0.70 + 0.30 * self.chromosome_state.compaction_fraction.clamp(0.0, 1.0)))
+        .clamp(0.0, 1.5)
+    }
+
+    fn update_membrane_division_state(
+        &mut self,
+        dt: f32,
+        membrane_growth_nm2: f32,
+        constriction_flux: f32,
+        constriction_drive: f32,
+    ) {
+        let inventory = self.assembly_inventory();
+        let mut state =
+            self.normalize_membrane_division_state(self.membrane_division_state.clone());
+        let dt_scale = (dt / self.config.dt_ms.max(0.05)).clamp(0.5, 6.0);
+        let membrane_support =
+            Self::finite_scale(self.organism_expression.membrane_support, 1.0, 0.55, 1.55);
+        let constriction_support = Self::finite_scale(
+            self.organism_expression.process_scales.constriction,
+            1.0,
+            0.55,
+            1.55,
+        );
+        let membrane_process_scale = Self::finite_scale(
+            self.organism_expression.process_scales.membrane,
+            1.0,
+            0.55,
+            1.55,
+        );
+        let constriction_process_scale = Self::finite_scale(
+            self.organism_expression.process_scales.constriction,
+            1.0,
+            0.55,
+            1.55,
+        );
+        let crowding = self.organism_expression.crowding_penalty.clamp(0.65, 1.10);
+        let cardiolipin_share = self.membrane_cardiolipin_share();
+        let membrane_complex_signal = Self::saturating_signal(
+            inventory.membrane_complexes + 0.35 * inventory.atp_band_complexes,
+            inventory.membrane_target.max(8.0),
+        );
+        let ring_component_signal = Self::saturating_signal(
+            inventory.ftsz_polymer + 0.40 * inventory.membrane_complexes,
+            inventory.ftsz_target.max(12.0),
+        );
+        let occlusion = self.membrane_chromosome_occlusion();
+        let occlusion_gate = (1.0 - 0.75 * occlusion).clamp(0.05, 1.0);
+        let protein_insertion_support = Self::finite_scale(
+            0.42 * membrane_support
+                + 0.20 * membrane_process_scale
+                + 0.28 * membrane_complex_signal
+                + 0.10 * self.md_membrane_scale.max(0.0)
+                + 0.10 * self.quantum_profile.membrane_synthesis_efficiency,
+            1.0,
+            0.25,
+            1.85,
+        );
+        let membrane_growth_efficiency = Self::finite_scale(
+            0.46 * membrane_support
+                + 0.24 * protein_insertion_support
+                + 0.15 * crowding
+                + 0.15 * self.quantum_profile.membrane_synthesis_efficiency,
+            1.0,
+            0.25,
+            1.90,
+        );
+        let phospholipid_supply =
+            membrane_growth_nm2.max(0.0) * membrane_growth_efficiency * (1.0 - cardiolipin_share);
+        let cardiolipin_supply = membrane_growth_nm2.max(0.0)
+            * membrane_growth_efficiency
+            * cardiolipin_share
+            * (0.75 + 0.25 * state.curvature_stress);
+        state.phospholipid_inventory_nm2 = (state.phospholipid_inventory_nm2
+            + dt_scale
+                * (phospholipid_supply
+                    - 0.020 * state.septal_lipid_inventory_nm2
+                    - 0.015 * state.insertion_debt * state.preferred_membrane_area_nm2))
+            .max(0.0);
+        state.cardiolipin_inventory_nm2 = (state.cardiolipin_inventory_nm2
+            + dt_scale
+                * (cardiolipin_supply
+                    - 0.008 * state.septal_lipid_inventory_nm2
+                    - 0.006 * state.curvature_stress * state.cardiolipin_inventory_nm2))
+            .max(0.0);
+        state.membrane_protein_insertion = (state.membrane_protein_insertion
+            + dt_scale
+                * (0.060 * protein_insertion_support
+                    - state.membrane_protein_insertion * (0.030 + 0.020 * state.failure_pressure)))
+            .clamp(0.0, 1.5);
+        state.insertion_debt = (state.insertion_debt
+            + dt_scale
+                * (0.060 * (1.0 - state.membrane_protein_insertion)
+                    + 0.040 * membrane_complex_signal
+                    - 0.070 * protein_insertion_support))
+            .clamp(0.0, 2.0);
+        state.septum_localization = (state.septum_localization
+            + dt_scale
+                * (0.090 * state.membrane_protein_insertion + 0.080 * ring_component_signal
+                    - 0.045 * state.septum_localization * (1.0 + occlusion)))
+            .clamp(0.0, 1.0);
+        state.divisome_order_progress = (state.divisome_order_progress
+            + dt_scale
+                * (0.100 * state.septum_localization * membrane_process_scale
+                    + 0.080 * protein_insertion_support
+                    + 0.060 * membrane_complex_signal * membrane_process_scale
+                    - 0.040 * state.divisome_order_progress * (1.0 + state.failure_pressure)))
+            .clamp(0.0, 1.0);
+        state.divisome_occupancy = (state.divisome_occupancy
+            + dt_scale
+                * (0.110
+                    * state.divisome_order_progress
+                    * ring_component_signal
+                    * constriction_process_scale
+                    * occlusion_gate
+                    - 0.038 * state.divisome_occupancy * (1.0 + state.failure_pressure)))
+            .clamp(0.0, 1.0);
+        state.ring_occupancy = (state.ring_occupancy
+            + dt_scale
+                * (0.130
+                    * ring_component_signal
+                    * state.divisome_order_progress
+                    * constriction_process_scale
+                    * occlusion_gate
+                    - 0.040 * state.ring_occupancy * (1.0 + state.failure_pressure)))
+            .clamp(0.0, 1.0);
+        state.curvature_stress = (0.62 * state.curvature_stress
+            + 0.38
+                * ((1.0 - state.septum_radius_fraction)
+                    + 0.35 * (1.0 - crowding)
+                    + 0.22 * state.insertion_debt
+                    - 0.18
+                        * Self::saturating_signal(
+                            state.cardiolipin_inventory_nm2,
+                            state.preferred_membrane_area_nm2.max(1.0) * cardiolipin_share,
+                        )))
+        .clamp(0.0, 2.0);
+        state.ring_tension = Self::finite_scale(
+            0.42 * constriction_support
+                + 0.28 * state.ring_occupancy
+                + 0.20 * state.divisome_occupancy
+                + 0.10 * self.quantum_profile.translation_efficiency,
+            1.0,
+            0.15,
+            2.0,
+        );
+        let constriction_signal = Self::saturating_signal(
+            constriction_drive.max(0.0) + 6.0 * constriction_flux.max(0.0),
+            0.35,
+        );
+        state.constriction_force = constriction_signal
+            * state.divisome_occupancy
+            * state.ring_tension
+            * constriction_process_scale
+            * state.envelope_integrity
+            * occlusion_gate;
+        let septal_supply = (0.020 * state.phospholipid_inventory_nm2
+            + 0.018 * state.cardiolipin_inventory_nm2 * (0.70 + 0.30 * state.curvature_stress))
+            * state.septum_localization
+            / state.preferred_membrane_area_nm2.max(1.0);
+        state.septal_lipid_inventory_nm2 = (state.septal_lipid_inventory_nm2
+            + dt_scale
+                * (septal_supply * state.preferred_membrane_area_nm2
+                    - 0.020 * state.septal_lipid_inventory_nm2
+                    - 0.010 * state.constriction_force * state.septal_lipid_inventory_nm2))
+            .max(0.0);
+        let previous_septum_radius_fraction = state.septum_radius_fraction;
+        state.septum_radius_fraction = (state.septum_radius_fraction
+            - dt_scale
+                * (0.12
+                    * state.constriction_force
+                    * membrane_process_scale
+                    * constriction_process_scale
+                    * (0.55 + 0.45 * state.septum_localization)
+                    * (0.55 + 0.45 * state.divisome_order_progress))
+            + dt_scale * 0.0025 * occlusion)
+            .clamp(0.01, 1.0);
+        state.septum_thickness_nm = (state.septum_thickness_nm
+            + dt_scale
+                * (0.040 * state.septum_localization
+                    + 0.030
+                        * Self::saturating_signal(
+                            state.septal_lipid_inventory_nm2,
+                            0.08 * state.preferred_membrane_area_nm2.max(1.0),
+                        )
+                    - 0.020 * state.constriction_force))
+            .clamp(2.0, 20.0);
+        state.failure_pressure = (0.34 * state.curvature_stress
+            + 0.24 * state.insertion_debt
+            + 0.18 * occlusion
+            + 0.14 * (1.0 - crowding).max(0.0)
+            + 0.10 * (1.0 - state.envelope_integrity).max(0.0))
+        .clamp(0.0, 2.0);
+        state.envelope_integrity = (state.envelope_integrity
+            + dt_scale
+                * (0.028 * state.membrane_protein_insertion
+                    + 0.020
+                        * Self::saturating_signal(
+                            state.septal_lipid_inventory_nm2,
+                            0.06 * state.preferred_membrane_area_nm2.max(1.0),
+                        )
+                    - 0.030 * state.failure_pressure
+                    - 0.012 * state.constriction_force * state.curvature_stress))
+            .clamp(0.10, 1.20);
+        state.osmotic_balance = (0.72
+            + 0.16 * Self::saturating_signal(self.atp_mm + self.glucose_mm, 1.8)
+            + 0.12 * state.envelope_integrity
+            - 0.10 * state.failure_pressure)
+            .clamp(0.65, 1.35);
+        state.preferred_membrane_area_nm2 = (state.preferred_membrane_area_nm2
+            + dt_scale * membrane_growth_nm2.max(0.0) * membrane_growth_efficiency)
+            .max(1.0);
+        state.membrane_area_nm2 = (state.membrane_area_nm2
+            + dt_scale
+                * (membrane_growth_nm2.max(0.0) * membrane_growth_efficiency
+                    - 0.025 * state.constriction_force * state.curvature_stress))
+            .clamp(1.0, state.preferred_membrane_area_nm2 * 1.20);
+        state.chromosome_occlusion = occlusion;
+        if previous_septum_radius_fraction > 0.06
+            && state.septum_radius_fraction <= 0.06
+            && state.divisome_occupancy > 0.60
+            && state.envelope_integrity > 0.70
+        {
+            state.scission_events = state.scission_events.saturating_add(1);
+        }
+        self.membrane_division_state = self.normalize_membrane_division_state(state);
+        self.synchronize_membrane_division_summary();
+        self.synchronize_chromosome_summary();
     }
 
     fn chromosome_copy_number_for_state(state: &WholeCellChromosomeState, midpoint_bp: u32) -> f32 {
@@ -5736,6 +6061,10 @@ impl WholeCellSimulator {
         self.chromosome_state.clone()
     }
 
+    pub fn membrane_division_state(&self) -> WholeCellMembraneDivisionState {
+        self.membrane_division_state.clone()
+    }
+
     pub fn named_complexes_state(&self) -> Vec<WholeCellNamedComplexState> {
         self.named_complexes.clone()
     }
@@ -5763,6 +6092,7 @@ impl WholeCellSimulator {
         self.organism_process_registry = saved.organism_process_registry.clone();
         self.organism_expression = saved.organism_expression.clone();
         self.chromosome_state = saved.chromosome_state.clone();
+        self.membrane_division_state = saved.membrane_division_state.clone();
         self.organism_species = saved.organism_species.clone();
         self.organism_reactions = saved.organism_reactions.clone();
         self.complex_assembly = saved.complex_assembly;
@@ -5835,6 +6165,13 @@ impl WholeCellSimulator {
                 self.seeded_chromosome_state()
             };
             self.synchronize_chromosome_summary();
+            self.membrane_division_state =
+                if self.membrane_division_state.preferred_membrane_area_nm2 > 1.0 {
+                    self.normalize_membrane_division_state(self.membrane_division_state.clone())
+                } else {
+                    self.seeded_membrane_division_state()
+                };
+            self.synchronize_membrane_division_summary();
             if !self.named_complexes.is_empty() {
                 if let Some(assets) = self.organism_assets.as_ref() {
                     self.complex_assembly = self.aggregate_named_complex_assembly_state(assets);
@@ -5850,6 +6187,8 @@ impl WholeCellSimulator {
             self.named_complexes.clear();
             self.chromosome_state = self.seeded_chromosome_state();
             self.synchronize_chromosome_summary();
+            self.membrane_division_state = self.seeded_membrane_division_state();
+            self.synchronize_membrane_division_summary();
             if self.complex_assembly.total_complexes() <= 1.0e-6 {
                 self.initialize_complex_assembly_state();
             }
@@ -5985,6 +6324,7 @@ impl WholeCellSimulator {
             replicated_bp: 0,
             chromosome_separation_nm: 40.0,
             chromosome_state: WholeCellChromosomeState::default(),
+            membrane_division_state: WholeCellMembraneDivisionState::default(),
             radius_nm,
             surface_area_nm2,
             volume_nm3,
@@ -6008,6 +6348,8 @@ impl WholeCellSimulator {
         simulator.sync_from_lattice();
         simulator.chromosome_state = simulator.seeded_chromosome_state();
         simulator.synchronize_chromosome_summary();
+        simulator.membrane_division_state = simulator.seeded_membrane_division_state();
+        simulator.synchronize_membrane_division_summary();
         simulator.refresh_organism_expression_state();
         simulator.initialize_complex_assembly_state();
         simulator.initialize_runtime_process_state();
@@ -6076,6 +6418,12 @@ impl WholeCellSimulator {
             .map(|state| simulator.normalize_chromosome_state(state))
             .unwrap_or_else(|| simulator.seeded_chromosome_state());
         simulator.synchronize_chromosome_summary();
+        simulator.membrane_division_state = spec
+            .membrane_division_state
+            .clone()
+            .map(|state| simulator.normalize_membrane_division_state(state))
+            .unwrap_or_else(|| simulator.seeded_membrane_division_state());
+        simulator.synchronize_membrane_division_summary();
 
         simulator.disable_local_chemistry();
         if let Some(local) = local_chemistry {
@@ -6159,6 +6507,7 @@ impl WholeCellSimulator {
             organism_process_registry: self.organism_process_registry.clone(),
             organism_expression: self.organism_expression.clone(),
             chromosome_state: self.chromosome_state.clone(),
+            membrane_division_state: self.membrane_division_state.clone(),
             organism_species: self.organism_species.clone(),
             organism_reactions: self.organism_reactions.clone(),
             complex_assembly: self.complex_assembly,
@@ -6530,6 +6879,7 @@ impl WholeCellSimulator {
             replicated_bp: self.replicated_bp,
             chromosome_separation_nm: self.chromosome_separation_nm,
             chromosome_state: self.chromosome_state.clone(),
+            membrane_division_state: self.membrane_division_state.clone(),
             radius_nm: self.radius_nm,
             surface_area_nm2: self.surface_area_nm2,
             volume_nm3: self.volume_nm3,
@@ -6884,16 +7234,17 @@ impl WholeCellSimulator {
         let membrane_growth_nm2 =
             MEMBRANE_GROWTH_RULE.evaluate(ctx.scalar()) * organism_scales.membrane_scale;
 
-        self.surface_area_nm2 += membrane_growth_nm2;
-        self.radius_nm = (self.surface_area_nm2 / (4.0 * PI)).sqrt();
-        self.volume_nm3 = 4.0 / 3.0 * PI * self.radius_nm.powi(3);
-
         let constriction_flux =
             CONSTRICTION_FLUX_RULE.evaluate(ctx.scalar()) * organism_scales.constriction_scale;
         ctx.set(WholeCellRuleSignal::ConstrictionFlux, constriction_flux);
         let constriction_drive =
             CONSTRICTION_DRIVE_RULE.evaluate(ctx.scalar()) * organism_scales.constriction_scale;
-        self.division_progress = (self.division_progress + constriction_drive).min(0.99);
+        self.update_membrane_division_state(
+            dt,
+            membrane_growth_nm2,
+            constriction_flux,
+            constriction_drive,
+        );
 
         self.lattice.apply_uniform_delta(
             IntracellularSpecies::MembranePrecursors,
@@ -7428,10 +7779,13 @@ mod tests {
 
         let baseline_snapshot = baseline.snapshot();
         let accelerated_snapshot = accelerated.snapshot();
+        let baseline_membrane = baseline.membrane_division_state();
+        let accelerated_membrane = accelerated.membrane_division_state();
 
         assert!(accelerated_snapshot.atp_mm >= baseline_snapshot.atp_mm);
         assert!(accelerated_snapshot.ftsz > baseline_snapshot.ftsz);
-        assert!(accelerated_snapshot.division_progress > baseline_snapshot.division_progress);
+        assert!(accelerated_snapshot.surface_area_nm2 > baseline_snapshot.surface_area_nm2);
+        assert!(accelerated_membrane.constriction_force > baseline_membrane.constriction_force);
     }
 
     #[test]
@@ -8295,6 +8649,80 @@ mod tests {
     }
 
     #[test]
+    fn test_membrane_division_state_persists_across_restart() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+
+        sim.run(16);
+
+        let original = sim.membrane_division_state();
+        assert!(original.membrane_area_nm2 > 0.0);
+        assert!(original.preferred_membrane_area_nm2 > 0.0);
+        assert!(original.envelope_integrity > 0.0);
+
+        let saved = sim.save_state_json().expect("serialize saved state");
+        let restored =
+            WholeCellSimulator::from_saved_state_json(&saved).expect("restore saved state");
+        let reloaded = restored.membrane_division_state();
+
+        assert!((reloaded.membrane_area_nm2 - original.membrane_area_nm2).abs() < 1.0e-6);
+        assert!(
+            (reloaded.preferred_membrane_area_nm2 - original.preferred_membrane_area_nm2).abs()
+                < 1.0e-6
+        );
+        assert!((reloaded.divisome_occupancy - original.divisome_occupancy).abs() < 1.0e-6);
+        assert!((reloaded.ring_tension - original.ring_tension).abs() < 1.0e-6);
+        assert!((reloaded.chromosome_occlusion - original.chromosome_occlusion).abs() < 1.0e-6);
+        assert!((reloaded.failure_pressure - original.failure_pressure).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_chromosome_occlusion_penalizes_division_mechanics() {
+        let mut occluded =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let mut cleared =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+
+        for sim in [&mut occluded, &mut cleared] {
+            let genome_bp = sim.chromosome_state.chromosome_length_bp.max(1);
+            sim.chromosome_state.replicated_bp = genome_bp / 2;
+            sim.chromosome_state.forks = WholeCellSimulator::chromosome_forks_from_progress(
+                genome_bp,
+                sim.chromosome_state.origin_bp,
+                sim.chromosome_state.terminus_bp,
+                genome_bp / 2,
+            );
+            sim.chromosome_state = sim.normalize_chromosome_state(sim.chromosome_state.clone());
+            sim.synchronize_chromosome_summary();
+            sim.membrane_division_state = sim.seeded_membrane_division_state();
+            sim.synchronize_membrane_division_summary();
+        }
+
+        occluded.chromosome_state.segregation_progress = 0.0;
+        occluded.chromosome_state.compaction_fraction = 0.85;
+        occluded.chromosome_state =
+            occluded.normalize_chromosome_state(occluded.chromosome_state.clone());
+        occluded.synchronize_chromosome_summary();
+
+        cleared.chromosome_state.segregation_progress = 0.90;
+        cleared.chromosome_state.compaction_fraction = 0.35;
+        cleared.chromosome_state =
+            cleared.normalize_chromosome_state(cleared.chromosome_state.clone());
+        cleared.synchronize_chromosome_summary();
+
+        occluded.run(24);
+        cleared.run(24);
+
+        let occluded_state = occluded.membrane_division_state();
+        let cleared_state = cleared.membrane_division_state();
+
+        assert!(occluded_state.chromosome_occlusion > cleared_state.chromosome_occlusion);
+        assert!(cleared_state.divisome_occupancy > occluded_state.divisome_occupancy);
+        assert!(cleared_state.ring_occupancy > occluded_state.ring_occupancy);
+        assert!(cleared.snapshot().division_progress > occluded.snapshot().division_progress);
+    }
+
+    #[test]
     fn test_complex_assembly_state_accumulates_from_inventory_and_preserves_targets() {
         let mut sim =
             WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
@@ -8519,9 +8947,13 @@ mod tests {
 
         let baseline_snapshot = baseline.snapshot();
         let constrained_snapshot = constrained.snapshot();
+        let baseline_membrane = baseline.membrane_division_state();
+        let constrained_membrane = constrained.membrane_division_state();
 
         assert!(baseline_snapshot.replicated_bp >= constrained_snapshot.replicated_bp);
-        assert!(baseline_snapshot.division_progress > constrained_snapshot.division_progress);
+        assert!(baseline_membrane.divisome_occupancy > constrained_membrane.divisome_occupancy);
+        assert!(baseline_membrane.ring_tension > constrained_membrane.ring_tension);
+        assert!(baseline_snapshot.division_progress >= constrained_snapshot.division_progress);
         assert!(baseline_snapshot.surface_area_nm2 > constrained_snapshot.surface_area_nm2);
     }
 }

@@ -3602,6 +3602,7 @@ fn representative_calibration_snapshot() -> WholeCellSnapshot {
         replicated_bp: 126_000,
         chromosome_separation_nm: 72.0,
         chromosome_state: crate::whole_cell_data::WholeCellChromosomeState::default(),
+        membrane_division_state: crate::whole_cell_data::WholeCellMembraneDivisionState::default(),
         radius_nm: 210.0,
         surface_area_nm2: 554_176.9,
         volume_nm3: 38_792_384.0,

@@ -239,3 +239,25 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `membrane/division runtime and deeper native solver ownership still need to replace the remaining aggregate geometry and atomistic orchestration channels`
+
+### 2026-03-11 - Phase 6 / Explicit Membrane and Division Runtime Slice
+
+- Summary:
+  - added explicit restartable membrane/division state with lipid inventories, insertion debt, curvature stress, septum localization, divisome occupancy/order, ring mechanics, envelope integrity, osmotic balance, chromosome occlusion, and scission bookkeeping
+  - moved geometry and division progression onto that membrane/division subsystem so surface area, volume, and division progress are now synchronized summaries of explicit local membrane state instead of the old scalar geometry channel
+  - coupled membrane growth and constriction to local primitive signals from membrane precursors, membrane complexes, FtsZ/divisome assemblies, crowding, chromosome occlusion, and envelope stress, and added restart and occlusion tests around the new subsystem
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/lib.rs`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `oneuro-metal/src/whole_cell_submodels.rs`
+- Tests run:
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `membrane and division now flow through explicit local state, but envelope turnover, cell-wall synthesis, and division completion still need deeper native ownership in the next slice`

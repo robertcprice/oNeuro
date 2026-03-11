@@ -897,6 +897,75 @@ impl Default for WholeCellChromosomeState {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellMembraneDivisionState {
+    pub membrane_area_nm2: f32,
+    pub preferred_membrane_area_nm2: f32,
+    pub phospholipid_inventory_nm2: f32,
+    pub cardiolipin_inventory_nm2: f32,
+    pub septal_lipid_inventory_nm2: f32,
+    #[serde(default)]
+    pub membrane_protein_insertion: f32,
+    #[serde(default)]
+    pub insertion_debt: f32,
+    #[serde(default)]
+    pub curvature_stress: f32,
+    #[serde(default)]
+    pub septum_localization: f32,
+    #[serde(default)]
+    pub divisome_occupancy: f32,
+    #[serde(default)]
+    pub divisome_order_progress: f32,
+    #[serde(default)]
+    pub ring_occupancy: f32,
+    #[serde(default)]
+    pub ring_tension: f32,
+    #[serde(default)]
+    pub constriction_force: f32,
+    #[serde(default = "default_septum_radius_fraction")]
+    pub septum_radius_fraction: f32,
+    #[serde(default = "default_septum_thickness_nm")]
+    pub septum_thickness_nm: f32,
+    #[serde(default = "default_envelope_integrity")]
+    pub envelope_integrity: f32,
+    #[serde(default = "default_osmotic_balance")]
+    pub osmotic_balance: f32,
+    #[serde(default)]
+    pub chromosome_occlusion: f32,
+    #[serde(default)]
+    pub failure_pressure: f32,
+    #[serde(default)]
+    pub scission_events: u32,
+}
+
+impl Default for WholeCellMembraneDivisionState {
+    fn default() -> Self {
+        Self {
+            membrane_area_nm2: 1.0,
+            preferred_membrane_area_nm2: 1.0,
+            phospholipid_inventory_nm2: 1.0,
+            cardiolipin_inventory_nm2: 0.1,
+            septal_lipid_inventory_nm2: 0.0,
+            membrane_protein_insertion: 0.0,
+            insertion_debt: 0.0,
+            curvature_stress: 0.0,
+            septum_localization: 0.0,
+            divisome_occupancy: 0.0,
+            divisome_order_progress: 0.0,
+            ring_occupancy: 0.0,
+            ring_tension: 0.0,
+            constriction_force: 0.0,
+            septum_radius_fraction: default_septum_radius_fraction(),
+            septum_thickness_nm: default_septum_thickness_nm(),
+            envelope_integrity: default_envelope_integrity(),
+            osmotic_balance: default_osmotic_balance(),
+            chromosome_occlusion: 0.0,
+            failure_pressure: 0.0,
+            scission_events: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellTranscriptionUnitState {
     pub name: String,
     pub gene_count: usize,
@@ -1147,6 +1216,8 @@ pub struct WholeCellProgramSpec {
     pub organism_process_registry: Option<WholeCellGenomeProcessRegistry>,
     #[serde(default)]
     pub chromosome_state: Option<WholeCellChromosomeState>,
+    #[serde(default)]
+    pub membrane_division_state: Option<WholeCellMembraneDivisionState>,
     pub config: WholeCellConfig,
     pub initial_lattice: WholeCellInitialLatticeSpec,
     pub initial_state: WholeCellInitialStateSpec,
@@ -1268,6 +1339,22 @@ fn default_compaction_fraction() -> f32 {
     0.35
 }
 
+fn default_septum_radius_fraction() -> f32 {
+    1.0
+}
+
+fn default_septum_thickness_nm() -> f32 {
+    4.0
+}
+
+fn default_envelope_integrity() -> f32 {
+    1.0
+}
+
+fn default_osmotic_balance() -> f32 {
+    1.0
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellSavedCoreState {
     pub time_ms: f32,
@@ -1317,6 +1404,8 @@ pub struct WholeCellSavedState {
     pub organism_process_registry: Option<WholeCellGenomeProcessRegistry>,
     #[serde(default)]
     pub chromosome_state: WholeCellChromosomeState,
+    #[serde(default)]
+    pub membrane_division_state: WholeCellMembraneDivisionState,
     #[serde(default)]
     pub organism_species: Vec<WholeCellSpeciesRuntimeState>,
     #[serde(default)]
@@ -2671,6 +2760,7 @@ fn build_program_spec_from_organism(
         organism_assets: Some(assets),
         organism_process_registry: Some(process_registry),
         chromosome_state: None,
+        membrane_division_state: None,
         config: WholeCellConfig::default(),
         initial_lattice: WholeCellInitialLatticeSpec {
             atp: pool_concentration(&organism.pools, "ATP", 1.2),
@@ -3258,6 +3348,7 @@ mod tests {
             organism_expression: WholeCellOrganismExpressionState::default(),
             organism_process_registry: spec.organism_process_registry.clone(),
             chromosome_state: WholeCellChromosomeState::default(),
+            membrane_division_state: WholeCellMembraneDivisionState::default(),
             organism_species: Vec::new(),
             organism_reactions: Vec::new(),
             complex_assembly: WholeCellComplexAssemblyState::default(),
