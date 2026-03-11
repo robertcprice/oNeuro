@@ -2452,6 +2452,43 @@ fn find_pool_species_id_by_field(
         .map(|pool| pool_species_id(&pool.species))
 }
 
+fn asset_class_for_pool(pool: &WholeCellMoleculePoolSpec) -> WholeCellAssetClass {
+    if let Some(field) = pool_bulk_field(pool) {
+        transport_asset_class_for_bulk_field(field)
+    } else {
+        let lowered = pool.species.to_ascii_lowercase();
+        if lowered.contains("membrane") || lowered.contains("lipid") {
+            WholeCellAssetClass::Membrane
+        } else if lowered.contains("atp")
+            || lowered.contains("oxygen")
+            || lowered.contains("glucose")
+        {
+            WholeCellAssetClass::Energy
+        } else if lowered.contains("amino") {
+            WholeCellAssetClass::Translation
+        } else if lowered.contains("nucleotide") {
+            WholeCellAssetClass::Replication
+        } else {
+            WholeCellAssetClass::Generic
+        }
+    }
+}
+
+fn compartment_for_pool(pool: &WholeCellMoleculePoolSpec) -> &'static str {
+    if let Some(field) = pool_bulk_field(pool) {
+        match field {
+            WholeCellBulkField::MembranePrecursors => "membrane",
+            _ => "cytosol",
+        }
+    } else if pool.species.to_ascii_lowercase().contains("membrane")
+        || pool.species.to_ascii_lowercase().contains("lipid")
+    {
+        "membrane"
+    } else {
+        "cytosol"
+    }
+}
+
 fn total_complex_stoichiometry(complex: &WholeCellComplexSpec) -> f32 {
     complex
         .components
@@ -2858,29 +2895,8 @@ pub fn compile_genome_process_registry(
     for pool in &package.pools {
         let species_name = pool.species.clone();
         let bulk_field = pool_bulk_field(pool);
-        let asset_class = if species_name.to_ascii_lowercase().contains("membrane")
-            || species_name.to_ascii_lowercase().contains("lipid")
-        {
-            WholeCellAssetClass::Membrane
-        } else if species_name.to_ascii_lowercase().contains("atp")
-            || species_name.to_ascii_lowercase().contains("oxygen")
-            || species_name.to_ascii_lowercase().contains("glucose")
-        {
-            WholeCellAssetClass::Energy
-        } else if species_name.to_ascii_lowercase().contains("amino") {
-            WholeCellAssetClass::Translation
-        } else if species_name.to_ascii_lowercase().contains("nucleotide") {
-            WholeCellAssetClass::Replication
-        } else {
-            WholeCellAssetClass::Generic
-        };
-        let compartment = if species_name.to_ascii_lowercase().contains("membrane")
-            || species_name.to_ascii_lowercase().contains("lipid")
-        {
-            "membrane"
-        } else {
-            "cytosol"
-        };
+        let asset_class = asset_class_for_pool(pool);
+        let compartment = compartment_for_pool(pool);
         let spatial_scope = registry_spatial_scope(asset_class, compartment, &[]);
         let patch_domain = registry_patch_domain(asset_class, compartment, &[], &species_name);
         species.push(WholeCellSpeciesSpec {
@@ -4958,6 +4974,35 @@ mod tests {
                         .starts_with("pool_nucleoid_track_adp_")
                 })
         }));
+    }
+
+    #[test]
+    fn explicit_pool_bulk_field_overrides_name_heuristics_in_registry_compilation() {
+        let mut package = bundled_syn3a_genome_asset_package().expect("bundled asset package");
+        package.pools.push(WholeCellMoleculePoolSpec {
+            species: "opaque_pool_alpha".to_string(),
+            bulk_field: Some(WholeCellBulkField::MembranePrecursors),
+            concentration_mm: 0.22,
+            count: 900.0,
+        });
+
+        let registry = compile_genome_process_registry(&package);
+        let species = registry
+            .species
+            .iter()
+            .find(|species| species.id == "pool_opaque_pool_alpha")
+            .expect("compiled opaque pool");
+
+        assert_eq!(
+            species.bulk_field,
+            Some(WholeCellBulkField::MembranePrecursors)
+        );
+        assert_eq!(species.asset_class, WholeCellAssetClass::Membrane);
+        assert_eq!(species.compartment, "membrane");
+        assert_eq!(
+            species.spatial_scope,
+            WholeCellSpatialScope::MembraneAdjacent
+        );
     }
 
     #[test]

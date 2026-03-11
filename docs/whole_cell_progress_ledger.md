@@ -218,6 +218,22 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Remaining blockers:
   - `named assemblies now carry richer local state, but chromosome runtime, membrane mechanics, and explicit solver ownership still need to take over more of the remaining aggregate process channels`
 
+### 2026-03-11 - Phase 7 / Metadata-First Pool Classification Slice
+
+- Summary:
+  - switched pool-species registry classification to prefer explicit `bulk_field` metadata for asset-class and compartment selection before any legacy string heuristic fallback
+  - added an opaque-pool regression so pools with non-semantic names still compile into the correct membrane/cytosol execution path when their metadata is explicit
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy pool-field inference still exists as a compatibility fallback when bundle metadata is absent; the next slice is removing more of that fallback chain from registry compilation and runtime anchoring`
+
 ### 2026-03-11 - Phase 5 / Explicit Chromosome Runtime Slice
 
 - Summary:
