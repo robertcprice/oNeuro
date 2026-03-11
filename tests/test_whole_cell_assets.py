@@ -69,5 +69,7 @@ def test_rust_bundle_manifest_ingestion_if_available():
     assert "\"pool_transport\"" in compiled_registry
     assert "\"rna_degradation\"" in compiled_registry
     assert "\"protein_degradation\"" in compiled_registry
+    assert "\"stress_response\"" in compiled_registry
+    assert "\"complex_repair\"" in compiled_registry
     assert summary is not None
     assert summary["organism"] == "Mgen-minimal-demo"

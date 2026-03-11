@@ -368,10 +368,12 @@ pub enum WholeCellReactionClass {
     Translation,
     RnaDegradation,
     ProteinDegradation,
+    StressResponse,
     SubunitPoolFormation,
     ComplexNucleation,
     ComplexElongation,
     ComplexMaturation,
+    ComplexRepair,
     ComplexTurnover,
 }
 
@@ -408,6 +410,8 @@ pub struct WholeCellReactionSpec {
     pub nominal_rate: f32,
     #[serde(default)]
     pub catalyst: Option<String>,
+    #[serde(default)]
+    pub operon: Option<String>,
     #[serde(default)]
     pub reactants: Vec<WholeCellReactionParticipantSpec>,
     #[serde(default)]
@@ -460,6 +464,8 @@ pub struct WholeCellReactionRuntimeState {
     #[serde(default)]
     pub catalyst: Option<String>,
     #[serde(default)]
+    pub operon: Option<String>,
+    #[serde(default)]
     pub reactants: Vec<WholeCellReactionParticipantSpec>,
     #[serde(default)]
     pub products: Vec<WholeCellReactionParticipantSpec>,
@@ -489,7 +495,9 @@ pub struct WholeCellGenomeProcessRegistrySummary {
     pub translation_reaction_count: usize,
     pub transport_reaction_count: usize,
     pub degradation_reaction_count: usize,
+    pub stress_reaction_count: usize,
     pub assembly_reaction_count: usize,
+    pub repair_reaction_count: usize,
     pub turnover_reaction_count: usize,
 }
 
@@ -553,6 +561,11 @@ impl From<&WholeCellGenomeProcessRegistry> for WholeCellGenomeProcessRegistrySum
                 )
             })
             .count();
+        let stress_reaction_count = registry
+            .reactions
+            .iter()
+            .filter(|reaction| reaction.reaction_class == WholeCellReactionClass::StressResponse)
+            .count();
         let assembly_reaction_count = registry
             .reactions
             .iter()
@@ -565,6 +578,11 @@ impl From<&WholeCellGenomeProcessRegistry> for WholeCellGenomeProcessRegistrySum
                         | WholeCellReactionClass::ComplexMaturation
                 )
             })
+            .count();
+        let repair_reaction_count = registry
+            .reactions
+            .iter()
+            .filter(|reaction| reaction.reaction_class == WholeCellReactionClass::ComplexRepair)
             .count();
         let turnover_reaction_count = registry
             .reactions
@@ -584,7 +602,9 @@ impl From<&WholeCellGenomeProcessRegistry> for WholeCellGenomeProcessRegistrySum
             translation_reaction_count,
             transport_reaction_count,
             degradation_reaction_count,
+            stress_reaction_count,
             assembly_reaction_count,
+            repair_reaction_count,
             turnover_reaction_count,
         }
     }
@@ -628,6 +648,7 @@ pub fn initialize_runtime_reaction_state(
             asset_class: reaction.asset_class,
             nominal_rate: reaction.nominal_rate.max(0.0),
             catalyst: reaction.catalyst.clone(),
+            operon: reaction.operon.clone(),
             reactants: reaction.reactants.clone(),
             products: reaction.products.clone(),
             subsystem_targets: reaction.subsystem_targets.clone(),
@@ -1700,6 +1721,8 @@ pub fn compile_genome_process_registry(
 ) -> WholeCellGenomeProcessRegistry {
     let mut species = Vec::new();
     let mut reactions = Vec::new();
+    let atp_pool = find_pool_species_id_by_hint(package, "atp");
+    let adp_pool = find_pool_species_id_by_hint(package, "adp");
     let nucleotide_pool = find_pool_species_id_by_hint(package, "nucleotide");
     let amino_pool = find_pool_species_id_by_hint(package, "amino");
 
@@ -1856,6 +1879,7 @@ pub fn compile_genome_process_registry(
             asset_class: transport_asset_class_for_bulk_field(field),
             nominal_rate: bulk_field_transport_rate(field),
             catalyst: None,
+            operon: None,
             reactants: Vec::new(),
             products: vec![WholeCellReactionParticipantSpec {
                 species_id: pool_id,
@@ -1894,11 +1918,53 @@ pub fn compile_genome_process_registry(
                 ),
                 nominal_rate: operon.basal_activity.max(0.01),
                 catalyst: None,
+                operon: Some(operon.name.clone()),
                 reactants,
                 products,
                 subsystem_targets: Vec::new(),
             });
         }
+
+        let mut stress_reactants = Vec::new();
+        if let Some(species_id) = atp_pool.as_ref() {
+            stress_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (operon.genes.len().max(1) as f32).sqrt().max(1.0),
+            });
+        }
+        if let Some(species_id) = amino_pool.as_ref() {
+            stress_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: 0.40 * (operon.genes.len().max(1) as f32).sqrt().max(1.0),
+            });
+        }
+        let mut stress_products = Vec::new();
+        if let Some(species_id) = adp_pool.as_ref() {
+            stress_products.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (operon.genes.len().max(1) as f32).sqrt().max(1.0),
+            });
+        }
+        reactions.push(WholeCellReactionSpec {
+            id: format!(
+                "{}_stress_response",
+                canonical_species_fragment(&operon.name)
+            ),
+            name: format!("{} stress response", operon.name),
+            reaction_class: WholeCellReactionClass::StressResponse,
+            asset_class: inferred_asset_class(
+                operon.process_weights,
+                &Vec::<Syn3ASubsystemPreset>::new(),
+                &operon.name,
+            ),
+            nominal_rate: (0.012 + 0.005 * (operon.genes.len().max(1) as f32).sqrt())
+                .clamp(0.004, 4.0),
+            catalyst: None,
+            operon: Some(operon.name.clone()),
+            reactants: stress_reactants,
+            products: stress_products,
+            subsystem_targets: Vec::new(),
+        });
     }
 
     for protein in &package.proteins {
@@ -1919,6 +1985,7 @@ pub fn compile_genome_process_registry(
             asset_class: protein.asset_class,
             nominal_rate: (0.04 + 0.002 * protein.translation_cost.max(0.0)).clamp(0.01, 8.0),
             catalyst: Some(protein.rna_id.clone()),
+            operon: Some(protein.operon.clone()),
             reactants,
             products: vec![WholeCellReactionParticipantSpec {
                 species_id: protein.id.clone(),
@@ -1944,6 +2011,7 @@ pub fn compile_genome_process_registry(
             nominal_rate: (0.010 + 0.0025 * (rna.length_nt.max(1) as f32 / 120.0).sqrt())
                 .clamp(0.005, 4.0),
             catalyst: None,
+            operon: Some(rna.operon.clone()),
             reactants: vec![WholeCellReactionParticipantSpec {
                 species_id: rna.id.clone(),
                 stoichiometry: 1.0,
@@ -1969,6 +2037,7 @@ pub fn compile_genome_process_registry(
             nominal_rate: (0.008 + 0.0020 * (protein.aa_length.max(1) as f32 / 90.0).sqrt())
                 .clamp(0.004, 4.0),
             catalyst: None,
+            operon: Some(protein.operon.clone()),
             reactants: vec![WholeCellReactionParticipantSpec {
                 species_id: protein.id.clone(),
                 stoichiometry: 1.0,
@@ -1994,6 +2063,7 @@ pub fn compile_genome_process_registry(
             asset_class: complex.asset_class,
             nominal_rate: (0.05 + 0.015 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
+            operon: Some(complex.operon.clone()),
             reactants: complex
                 .components
                 .iter()
@@ -2015,6 +2085,7 @@ pub fn compile_genome_process_registry(
             asset_class: complex.asset_class,
             nominal_rate: (0.03 + 0.010 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
+            operon: Some(complex.operon.clone()),
             reactants: vec![WholeCellReactionParticipantSpec {
                 species_id: subunit_pool_id.clone(),
                 stoichiometry: 1.0,
@@ -2032,6 +2103,7 @@ pub fn compile_genome_process_registry(
             asset_class: complex.asset_class,
             nominal_rate: (0.04 + 0.012 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
+            operon: Some(complex.operon.clone()),
             reactants: vec![
                 WholeCellReactionParticipantSpec {
                     species_id: nucleation_id.clone(),
@@ -2055,6 +2127,7 @@ pub fn compile_genome_process_registry(
             asset_class: complex.asset_class,
             nominal_rate: (0.05 + 0.015 * complex.basal_abundance.max(0.1).sqrt()).clamp(0.01, 8.0),
             catalyst: None,
+            operon: Some(complex.operon.clone()),
             reactants: vec![WholeCellReactionParticipantSpec {
                 species_id: elongation_id.clone(),
                 stoichiometry: 1.0,
@@ -2065,6 +2138,44 @@ pub fn compile_genome_process_registry(
             }],
             subsystem_targets: complex.subsystem_targets.clone(),
         });
+        let mut repair_reactants = vec![WholeCellReactionParticipantSpec {
+            species_id: subunit_pool_id.clone(),
+            stoichiometry: 0.5 * total_stoichiometry.max(1.0),
+        }];
+        if let Some(species_id) = atp_pool.as_ref() {
+            repair_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: 0.40 * total_stoichiometry.sqrt().max(1.0),
+            });
+        }
+        if let Some(species_id) = amino_pool.as_ref() {
+            repair_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: 0.25 * total_stoichiometry.sqrt().max(1.0),
+            });
+        }
+        let mut repair_products = vec![WholeCellReactionParticipantSpec {
+            species_id: mature_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = adp_pool.as_ref() {
+            repair_products.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: 0.30 * total_stoichiometry.sqrt().max(1.0),
+            });
+        }
+        reactions.push(WholeCellReactionSpec {
+            id: format!("{}_repair", canonical_species_fragment(&complex.id)),
+            name: format!("{} repair", complex.name),
+            reaction_class: WholeCellReactionClass::ComplexRepair,
+            asset_class: complex.asset_class,
+            nominal_rate: (0.018 + 0.008 * total_stoichiometry.sqrt()).clamp(0.004, 4.0),
+            catalyst: None,
+            operon: Some(complex.operon.clone()),
+            reactants: repair_reactants,
+            products: repair_products,
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_turnover", canonical_species_fragment(&complex.id)),
             name: format!("{} turnover", complex.name),
@@ -2072,6 +2183,7 @@ pub fn compile_genome_process_registry(
             asset_class: complex.asset_class,
             nominal_rate: (0.02 + 0.010 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
+            operon: Some(complex.operon.clone()),
             reactants: vec![WholeCellReactionParticipantSpec {
                 species_id: mature_id,
                 stoichiometry: 1.0,
@@ -2785,7 +2897,9 @@ mod tests {
             summary.degradation_reaction_count,
             package.rnas.len() + package.proteins.len()
         );
+        assert_eq!(summary.stress_reaction_count, package.operons.len());
         assert!(summary.assembly_reaction_count >= package.complexes.len() * 4);
+        assert_eq!(summary.repair_reaction_count, package.complexes.len());
         assert_eq!(summary.turnover_reaction_count, package.complexes.len());
         assert!(registry.species.iter().any(|species| {
             species.id == "pool_glucose" && species.bulk_field == Some(WholeCellBulkField::Glucose)
@@ -2810,6 +2924,14 @@ mod tests {
             .reactions
             .iter()
             .any(|reaction| reaction.reaction_class == WholeCellReactionClass::ProteinDegradation));
+        assert!(registry
+            .reactions
+            .iter()
+            .any(|reaction| reaction.reaction_class == WholeCellReactionClass::StressResponse));
+        assert!(registry
+            .reactions
+            .iter()
+            .any(|reaction| reaction.reaction_class == WholeCellReactionClass::ComplexRepair));
         assert!(registry
             .reactions
             .iter()
