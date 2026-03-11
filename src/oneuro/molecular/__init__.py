@@ -67,6 +67,18 @@ from oneuro.molecular.consciousness import ConsciousnessMonitor, ConsciousnessMe
 from oneuro.molecular.brain_regions import (
     Region, CorticalColumn, ThalamicNucleus, Hippocampus, BasalGanglia, RegionalBrain,
 )
+from oneuro.molecular.validation import (
+    CurrentClampMetrics,
+    PlasticityMetrics,
+    ReferenceRange,
+    SynapticResponseMetrics,
+    ValidationCheck,
+    ValidationReport,
+    measure_current_clamp,
+    measure_dopamine_gated_plasticity,
+    measure_synaptic_response,
+    run_validation_suite,
+)
 
 # Phase 5: GPU backends
 try:
@@ -151,6 +163,16 @@ __all__ = [
     "Hippocampus",
     "BasalGanglia",
     "RegionalBrain",
+    "ReferenceRange",
+    "ValidationCheck",
+    "CurrentClampMetrics",
+    "SynapticResponseMetrics",
+    "PlasticityMetrics",
+    "ValidationReport",
+    "measure_current_clamp",
+    "measure_synaptic_response",
+    "measure_dopamine_gated_plasticity",
+    "run_validation_suite",
     # Phase 5: GPU backends
     "CUDAMolecularBrain",
     "CUDARegionalBrain",
