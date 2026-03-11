@@ -358,7 +358,10 @@
         "segregation": 0.03,
         "membrane": 0.82,
         "constriction": 0.05
-      }
+      },
+      "subsystem_targets": ["AtpSynthaseMembraneBand"],
+      "asset_class": "energy",
+      "complex_family": "atp_synthase"
     },
     {
       "name": "ribosome_biogenesis_operon",
@@ -372,7 +375,10 @@
         "segregation": 0.02,
         "membrane": 0.03,
         "constriction": 0.02
-      }
+      },
+      "subsystem_targets": ["RibosomePolysomeCluster"],
+      "asset_class": "translation",
+      "complex_family": "ribosome"
     },
     {
       "name": "translation_factor_operon",
@@ -386,7 +392,10 @@
         "segregation": 0.02,
         "membrane": 0.03,
         "constriction": 0.02
-      }
+      },
+      "subsystem_targets": ["RibosomePolysomeCluster"],
+      "asset_class": "translation",
+      "complex_family": "generic"
     },
     {
       "name": "replication_cycle_operon",
@@ -400,7 +409,10 @@
         "segregation": 0.34,
         "membrane": 0.02,
         "constriction": 0.02
-      }
+      },
+      "subsystem_targets": ["ReplisomeTrack"],
+      "asset_class": "replication",
+      "complex_family": "replisome"
     },
     {
       "name": "partitioning_unit",
@@ -414,7 +426,10 @@
         "segregation": 1.00,
         "membrane": 0.02,
         "constriction": 0.02
-      }
+      },
+      "subsystem_targets": ["ReplisomeTrack"],
+      "asset_class": "replication",
+      "complex_family": "replisome"
     },
     {
       "name": "membrane_homeostasis_operon",
@@ -428,7 +443,10 @@
         "segregation": 0.02,
         "membrane": 1.00,
         "constriction": 0.22
-      }
+      },
+      "subsystem_targets": ["AtpSynthaseMembraneBand", "FtsZSeptumRing"],
+      "asset_class": "energy",
+      "complex_family": "atp_synthase"
     },
     {
       "name": "division_ring_operon",
@@ -442,7 +460,10 @@
         "segregation": 0.03,
         "membrane": 0.70,
         "constriction": 1.00
-      }
+      },
+      "subsystem_targets": ["FtsZSeptumRing"],
+      "asset_class": "constriction",
+      "complex_family": "divisome"
     },
     {
       "name": "carbon_energy_unit",
@@ -456,7 +477,10 @@
         "segregation": 0.02,
         "membrane": 0.10,
         "constriction": 0.03
-      }
+      },
+      "subsystem_targets": ["AtpSynthaseMembraneBand"],
+      "asset_class": "energy",
+      "complex_family": "atp_synthase"
     },
     {
       "name": "quality_control_unit",
@@ -470,7 +494,9 @@
         "segregation": 0.04,
         "membrane": 0.04,
         "constriction": 0.04
-      }
+      },
+      "asset_class": "quality_control",
+      "complex_family": "chaperone_client"
     }
   ]
 }

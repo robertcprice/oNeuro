@@ -227,6 +227,12 @@ pub struct WholeCellTranscriptionUnitSpec {
     pub basal_activity: f32,
     #[serde(default)]
     pub process_weights: WholeCellProcessWeights,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub asset_class: Option<WholeCellAssetClass>,
+    #[serde(default)]
+    pub complex_family: Option<WholeCellAssemblyFamily>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -314,6 +320,12 @@ pub struct WholeCellOperonSpec {
     pub polycistronic: bool,
     #[serde(default)]
     pub process_weights: WholeCellProcessWeights,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub asset_class: Option<WholeCellAssetClass>,
+    #[serde(default)]
+    pub complex_family: Option<WholeCellAssemblyFamily>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2681,6 +2693,10 @@ fn with_compiled_chromosome_domains(mut spec: WholeCellOrganismSpec) -> WholeCel
     let mut operons = Vec::new();
     for transcription_unit in &spec.transcription_units {
         let (promoter_bp, terminator_bp) = operon_bounds(&spec, &transcription_unit.genes);
+        let subsystem_targets = transcription_unit_subsystem_targets(&spec, transcription_unit);
+        let asset_class = transcription_unit_asset_class(transcription_unit, &subsystem_targets);
+        let complex_family =
+            transcription_unit_complex_family(transcription_unit, asset_class, &subsystem_targets);
         operons.push(WholeCellOperonSpec {
             name: transcription_unit.name.clone(),
             genes: transcription_unit.genes.clone(),
@@ -2689,6 +2705,9 @@ fn with_compiled_chromosome_domains(mut spec: WholeCellOrganismSpec) -> WholeCel
             basal_activity: transcription_unit.basal_activity.max(0.0),
             polycistronic: transcription_unit.genes.len() > 1,
             process_weights: transcription_unit.process_weights.clamped(),
+            subsystem_targets,
+            asset_class: Some(asset_class),
+            complex_family: Some(complex_family),
         });
     }
     for gene in &spec.genes {
@@ -2710,6 +2729,17 @@ fn with_compiled_chromosome_domains(mut spec: WholeCellOrganismSpec) -> WholeCel
             basal_activity: gene.basal_expression.max(0.0),
             polycistronic: false,
             process_weights: gene.process_weights.clamped(),
+            subsystem_targets: gene.subsystem_targets.clone(),
+            asset_class: Some(inferred_asset_class(
+                gene.process_weights,
+                &gene.subsystem_targets,
+                &gene.gene,
+            )),
+            complex_family: Some(inferred_complex_family(
+                inferred_asset_class(gene.process_weights, &gene.subsystem_targets, &gene.gene),
+                &gene.subsystem_targets,
+                &gene.gene,
+            )),
         });
     }
     spec.chromosome_domains = compile_chromosome_domains(&spec, &operons);
@@ -2727,6 +2757,42 @@ fn push_unique_subsystem_targets(
     }
 }
 
+fn transcription_unit_subsystem_targets(
+    spec: &WholeCellOrganismSpec,
+    transcription_unit: &WholeCellTranscriptionUnitSpec,
+) -> Vec<Syn3ASubsystemPreset> {
+    let mut subsystem_targets = transcription_unit.subsystem_targets.clone();
+    for gene_name in &transcription_unit.genes {
+        if let Some(gene) = spec.genes.iter().find(|gene| gene.gene == *gene_name) {
+            push_unique_subsystem_targets(&mut subsystem_targets, &gene.subsystem_targets);
+        }
+    }
+    subsystem_targets
+}
+
+fn transcription_unit_asset_class(
+    transcription_unit: &WholeCellTranscriptionUnitSpec,
+    subsystem_targets: &[Syn3ASubsystemPreset],
+) -> WholeCellAssetClass {
+    transcription_unit.asset_class.unwrap_or_else(|| {
+        inferred_asset_class(
+            transcription_unit.process_weights,
+            subsystem_targets,
+            &transcription_unit.name,
+        )
+    })
+}
+
+fn transcription_unit_complex_family(
+    transcription_unit: &WholeCellTranscriptionUnitSpec,
+    asset_class: WholeCellAssetClass,
+    subsystem_targets: &[Syn3ASubsystemPreset],
+) -> WholeCellAssemblyFamily {
+    transcription_unit.complex_family.unwrap_or_else(|| {
+        inferred_complex_family(asset_class, subsystem_targets, &transcription_unit.name)
+    })
+}
+
 pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGenomeAssetPackage {
     let spec = with_compiled_chromosome_domains(with_normalized_pool_metadata(spec.clone()));
     let mut gene_to_operon = HashMap::<String, String>::new();
@@ -2737,6 +2803,10 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
         for gene_name in &transcription_unit.genes {
             gene_to_operon.insert(gene_name.clone(), transcription_unit.name.clone());
         }
+        let subsystem_targets = transcription_unit_subsystem_targets(&spec, transcription_unit);
+        let asset_class = transcription_unit_asset_class(transcription_unit, &subsystem_targets);
+        let complex_family =
+            transcription_unit_complex_family(transcription_unit, asset_class, &subsystem_targets);
         operons.push(WholeCellOperonSpec {
             name: transcription_unit.name.clone(),
             genes: transcription_unit.genes.clone(),
@@ -2745,6 +2815,9 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             basal_activity: transcription_unit.basal_activity.max(0.0),
             polycistronic: transcription_unit.genes.len() > 1,
             process_weights: transcription_unit.process_weights.clamped(),
+            subsystem_targets,
+            asset_class: Some(asset_class),
+            complex_family: Some(complex_family),
         });
     }
 
@@ -2753,6 +2826,8 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             continue;
         }
         gene_to_operon.insert(gene.gene.clone(), gene.gene.clone());
+        let asset_class =
+            inferred_asset_class(gene.process_weights, &gene.subsystem_targets, &gene.gene);
         operons.push(WholeCellOperonSpec {
             name: gene.gene.clone(),
             genes: vec![gene.gene.clone()],
@@ -2761,6 +2836,13 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             basal_activity: gene.basal_expression.max(0.0),
             polycistronic: false,
             process_weights: gene.process_weights.clamped(),
+            subsystem_targets: gene.subsystem_targets.clone(),
+            asset_class: Some(asset_class),
+            complex_family: Some(inferred_complex_family(
+                asset_class,
+                &gene.subsystem_targets,
+                &gene.gene,
+            )),
         });
     }
 
@@ -2804,7 +2886,7 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
     for operon in &operons {
         let mut components = Vec::new();
         let mut process_weights = operon.process_weights;
-        let mut subsystem_targets = Vec::new();
+        let mut subsystem_targets = operon.subsystem_targets.clone();
         for gene_name in &operon.genes {
             components.push(WholeCellComplexComponentSpec {
                 protein_id: format!("{}_protein", gene_name),
@@ -2815,8 +2897,12 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
                 push_unique_subsystem_targets(&mut subsystem_targets, &gene.subsystem_targets);
             }
         }
-        let asset_class = inferred_asset_class(process_weights, &subsystem_targets, &operon.name);
-        let family = inferred_complex_family(asset_class, &subsystem_targets, &operon.name);
+        let asset_class = operon.asset_class.unwrap_or_else(|| {
+            inferred_asset_class(process_weights, &subsystem_targets, &operon.name)
+        });
+        let family = operon.complex_family.unwrap_or_else(|| {
+            inferred_complex_family(asset_class, &subsystem_targets, &operon.name)
+        });
         complexes.push(WholeCellComplexSpec {
             id: format!("{}_complex", operon.name),
             name: format!("{} complex", operon.name),
@@ -4793,6 +4879,71 @@ mod tests {
             .complexes
             .iter()
             .any(|complex| !complex.subsystem_targets.is_empty()));
+    }
+
+    #[test]
+    fn explicit_transcription_unit_metadata_overrides_name_heuristics() {
+        let mut organism = bundled_syn3a_organism_spec().expect("bundled organism");
+        organism.genes.push(WholeCellGenomeFeature {
+            gene: "opaque_control_gene".to_string(),
+            start_bp: 200_100,
+            end_bp: 200_360,
+            strand: 1,
+            essential: false,
+            basal_expression: 0.62,
+            translation_cost: 1.0,
+            nucleotide_cost: 1.0,
+            process_weights: WholeCellProcessWeights {
+                translation: 1.0,
+                ..WholeCellProcessWeights::default()
+            },
+            subsystem_targets: Vec::new(),
+        });
+        organism
+            .transcription_units
+            .push(WholeCellTranscriptionUnitSpec {
+                name: "opaque_control_unit".to_string(),
+                genes: vec!["opaque_control_gene".to_string()],
+                basal_activity: 0.68,
+                process_weights: WholeCellProcessWeights {
+                    translation: 1.0,
+                    ..WholeCellProcessWeights::default()
+                },
+                subsystem_targets: vec![Syn3ASubsystemPreset::FtsZSeptumRing],
+                asset_class: Some(WholeCellAssetClass::QualityControl),
+                complex_family: Some(WholeCellAssemblyFamily::ChaperoneClient),
+            });
+
+        let package = compile_genome_asset_package(&organism);
+        let operon = package
+            .operons
+            .iter()
+            .find(|operon| operon.name == "opaque_control_unit")
+            .expect("compiled opaque operon");
+        let complex = package
+            .complexes
+            .iter()
+            .find(|complex| complex.operon == "opaque_control_unit")
+            .expect("compiled opaque complex");
+
+        assert_eq!(
+            operon.asset_class,
+            Some(WholeCellAssetClass::QualityControl)
+        );
+        assert_eq!(
+            operon.complex_family,
+            Some(WholeCellAssemblyFamily::ChaperoneClient)
+        );
+        assert_eq!(
+            operon.subsystem_targets,
+            vec![Syn3ASubsystemPreset::FtsZSeptumRing]
+        );
+        assert_eq!(complex.asset_class, WholeCellAssetClass::QualityControl);
+        assert_eq!(complex.family, WholeCellAssemblyFamily::ChaperoneClient);
+        assert_eq!(
+            complex.subsystem_targets,
+            vec![Syn3ASubsystemPreset::FtsZSeptumRing]
+        );
     }
 
     #[test]

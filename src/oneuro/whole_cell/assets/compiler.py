@@ -217,6 +217,24 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
         for gene_name in genes_in_unit:
             gene_to_operon[gene_name] = unit["name"]
         promoter_bp, terminator_bp = _operon_bounds(genes, genes_in_unit)
+        subsystem_targets: list[str] = list(unit.get("subsystem_targets", []))
+        for gene_name in genes_in_unit:
+            gene = next((entry for entry in genes if entry["gene"] == gene_name), None)
+            if gene is None:
+                continue
+            for target in gene.get("subsystem_targets", []):
+                if target not in subsystem_targets:
+                    subsystem_targets.append(target)
+        asset_class = unit.get("asset_class") or _infer_asset_class(
+            unit.get("process_weights", {}),
+            subsystem_targets,
+            unit["name"],
+        )
+        complex_family = unit.get("complex_family") or _infer_complex_family(
+            asset_class,
+            subsystem_targets,
+            unit["name"],
+        )
         operons.append(
             {
                 "name": unit["name"],
@@ -226,6 +244,9 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
                 "basal_activity": float(unit.get("basal_activity", 1.0)),
                 "polycistronic": len(genes_in_unit) > 1,
                 "process_weights": _clamp_process_weights(unit.get("process_weights", {})),
+                "subsystem_targets": subsystem_targets,
+                "asset_class": asset_class,
+                "complex_family": complex_family,
             }
         )
 
@@ -233,6 +254,11 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
         if gene["gene"] in gene_to_operon:
             continue
         gene_to_operon[gene["gene"]] = gene["gene"]
+        asset_class = _infer_asset_class(
+            gene.get("process_weights", {}),
+            gene.get("subsystem_targets", []),
+            gene["gene"],
+        )
         operons.append(
             {
                 "name": gene["gene"],
@@ -242,6 +268,13 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
                 "basal_activity": float(gene.get("basal_expression", 1.0)),
                 "polycistronic": False,
                 "process_weights": _clamp_process_weights(gene.get("process_weights", {})),
+                "subsystem_targets": list(gene.get("subsystem_targets", [])),
+                "asset_class": asset_class,
+                "complex_family": _infer_complex_family(
+                    asset_class,
+                    gene.get("subsystem_targets", []),
+                    gene["gene"],
+                ),
             }
         )
 
@@ -291,7 +324,7 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
     for operon in operons:
         components = []
         process_weights = _clamp_process_weights(operon.get("process_weights", {}))
-        subsystem_targets: list[str] = []
+        subsystem_targets: list[str] = list(operon.get("subsystem_targets", []))
         for gene_name in operon["genes"]:
             components.append({"protein_id": f"{gene_name}_protein", "stoichiometry": 1})
             gene = next((entry for entry in genes if entry["gene"] == gene_name), None)
@@ -305,7 +338,12 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
             for target in gene.get("subsystem_targets", []):
                 if target not in subsystem_targets:
                     subsystem_targets.append(target)
-        asset_class = _infer_asset_class(process_weights, subsystem_targets, operon["name"])
+        asset_class = operon.get("asset_class") or _infer_asset_class(
+            process_weights, subsystem_targets, operon["name"]
+        )
+        complex_family = operon.get("complex_family") or _infer_complex_family(
+            asset_class, subsystem_targets, operon["name"]
+        )
         complexes.append(
             {
                 "id": f"{operon['name']}_complex",
@@ -323,8 +361,13 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
                     ),
                 ),
                 "asset_class": asset_class,
+                "family": complex_family,
                 "process_weights": process_weights,
                 "subsystem_targets": subsystem_targets,
+                "membrane_inserted": complex_family
+                in {"atp_synthase", "transporter", "membrane_enzyme", "divisome"},
+                "chromosome_coupled": complex_family in {"replisome", "rna_polymerase"},
+                "division_coupled": complex_family == "divisome",
             }
         )
 
@@ -544,6 +587,47 @@ def _infer_asset_class(
     ]
     ranked.sort(key=lambda item: item[1], reverse=True)
     return ranked[0][0] if ranked and ranked[0][1] > 0.0 else "generic"
+
+
+def _infer_complex_family(
+    asset_class: str,
+    subsystem_targets: Iterable[str],
+    operon_name: str,
+) -> str:
+    targets = set(subsystem_targets)
+    lowered = operon_name.lower()
+    if "RibosomePolysomeCluster" in targets or "ribosome" in lowered:
+        return "ribosome"
+    if (
+        "ReplisomeTrack" in targets
+        or "replisome" in lowered
+        or "replication" in lowered
+        or "dna" in lowered
+    ):
+        return "replisome"
+    if (
+        "AtpSynthaseMembraneBand" in targets
+        or "atp_synthase" in lowered
+        or "respir" in lowered
+    ):
+        return "atp_synthase"
+    if (
+        "FtsZSeptumRing" in targets
+        or "ftsz" in lowered
+        or "division" in lowered
+        or "sept" in lowered
+        or "divisome" in lowered
+    ):
+        return "divisome"
+    if "rnap" in lowered or "rna_polymerase" in lowered or "sigma" in lowered:
+        return "rna_polymerase"
+    if "chaperone" in lowered or "fold" in lowered or "client" in lowered:
+        return "chaperone_client"
+    if "transport" in lowered or "porin" in lowered or "pump" in lowered:
+        return "transporter"
+    if asset_class in {"membrane", "constriction"}:
+        return "membrane_enzyme"
+    return "generic"
 
 
 def _read_fasta(path: Path) -> Dict[str, Any]:

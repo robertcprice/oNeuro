@@ -11,7 +11,10 @@
       "segregation": 0.03,
       "membrane": 0.76,
       "constriction": 0.05
-    }
+    },
+    "subsystem_targets": ["AtpSynthaseMembraneBand", "FtsZSeptumRing"],
+    "asset_class": "energy",
+    "complex_family": "atp_synthase"
   },
   {
     "name": "ribosome_operon",
@@ -25,7 +28,10 @@
       "segregation": 0.02,
       "membrane": 0.03,
       "constriction": 0.02
-    }
+    },
+    "subsystem_targets": ["RibosomePolysomeCluster"],
+    "asset_class": "translation",
+    "complex_family": "ribosome"
   },
   {
     "name": "division_operon",
@@ -39,7 +45,9 @@
       "segregation": 0.2,
       "membrane": 0.64,
       "constriction": 0.92
-    }
+    },
+    "subsystem_targets": ["FtsZSeptumRing"],
+    "asset_class": "constriction",
+    "complex_family": "divisome"
   }
 ]
-
