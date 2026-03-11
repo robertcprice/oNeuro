@@ -1422,6 +1422,10 @@ pub struct WholeCellOrganismBundleManifest {
     #[serde(default)]
     pub organism_spec_json: Option<String>,
     #[serde(default)]
+    pub require_explicit_gene_semantics: bool,
+    #[serde(default)]
+    pub require_explicit_transcription_unit_semantics: bool,
+    #[serde(default)]
     pub metadata_json: Option<String>,
     #[serde(default)]
     pub genome_fasta: Option<String>,
@@ -4753,6 +4757,50 @@ fn merge_transcription_unit_semantic_annotations(
     }
 }
 
+fn validate_explicit_gene_semantics(genes: &[WholeCellGenomeFeature]) -> Result<(), String> {
+    let missing: Vec<String> = genes
+        .iter()
+        .filter(|gene| {
+            gene.asset_class.is_none()
+                || gene.complex_family.is_none()
+                || gene.subsystem_targets.is_empty()
+        })
+        .map(|gene| gene.gene.clone())
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "bundle requires explicit gene semantics but {} gene(s) are incomplete: {}",
+            missing.len(),
+            missing.join(", ")
+        ))
+    }
+}
+
+fn validate_explicit_transcription_unit_semantics(
+    units: &[WholeCellTranscriptionUnitSpec],
+) -> Result<(), String> {
+    let missing: Vec<String> = units
+        .iter()
+        .filter(|unit| {
+            unit.asset_class.is_none()
+                || unit.complex_family.is_none()
+                || unit.subsystem_targets.is_empty()
+        })
+        .map(|unit| unit.name.clone())
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "bundle requires explicit transcription unit semantics but {} unit(s) are incomplete: {}",
+            missing.len(),
+            missing.join(", ")
+        ))
+    }
+}
+
 fn pool_concentration_for_field(
     pools: &[WholeCellMoleculePoolSpec],
     field: WholeCellBulkField,
@@ -4932,6 +4980,9 @@ pub fn compile_organism_spec_from_bundle_manifest_path(
         })?;
         merge_gene_semantic_annotations(&mut genes, &annotations);
     }
+    if manifest.require_explicit_gene_semantics {
+        validate_explicit_gene_semantics(&genes)?;
+    }
 
     let mut transcription_units = if let Some(transcription_units_json) =
         manifest.transcription_units_json.as_deref()
@@ -4962,6 +5013,9 @@ pub fn compile_organism_spec_from_bundle_manifest_path(
             )
         })?;
         merge_transcription_unit_semantic_annotations(&mut transcription_units, &annotations);
+    }
+    if manifest.require_explicit_transcription_unit_semantics {
+        validate_explicit_transcription_unit_semantics(&transcription_units)?;
     }
 
     let pools = if let Some(pools_json) = manifest.pools_json.as_deref() {

@@ -1,8 +1,12 @@
+import json
 from pathlib import Path
+
+import pytest
 
 from oneuro.whole_cell import (
     RustWholeCellSimulator,
     available_bundles,
+    compile_bundle_manifest,
     compile_named_bundle,
     write_compiled_bundle,
 )
@@ -141,3 +145,26 @@ def test_rust_bundle_manifest_ingestion_if_available():
     assert "\"bulk_field\"" in compiled_spec
     assert summary is not None
     assert summary["organism"] == "Mgen-minimal-demo"
+
+
+def test_explicit_semantic_bundle_rejects_missing_gene_overlay(tmp_path):
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    source_dir = Path("src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo").resolve()
+    for name in [
+        "metadata.json",
+        "genome.fasta",
+        "features.gff3",
+        "gene_products.json",
+        "transcription_units.json",
+        "transcription_unit_semantics.json",
+        "pools.json",
+    ]:
+        (bundle_dir / name).write_text((source_dir / name).read_text(), encoding="ascii")
+    manifest = json.loads((source_dir / "manifest.json").read_text(encoding="ascii"))
+    (bundle_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2), encoding="ascii"
+    )
+
+    with pytest.raises(ValueError, match="missing gene_semantics_json"):
+        compile_bundle_manifest(bundle_dir / "manifest.json")

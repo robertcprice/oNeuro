@@ -201,6 +201,10 @@ def _compile_structured_bundle(
         )
         for unit in transcription_units
     ]
+    if manifest.get("require_explicit_gene_semantics"):
+        _validate_explicit_gene_semantics(compiled_genes)
+    if manifest.get("require_explicit_transcription_unit_semantics"):
+        _validate_explicit_transcription_unit_semantics(compiled_transcription_units)
 
     return {
         "organism": manifest.get("organism") or metadata["organism"],
@@ -252,6 +256,38 @@ def _merge_transcription_unit_semantics(
         merged["asset_class"] = semantic_annotation.get("asset_class")
         merged["complex_family"] = semantic_annotation.get("complex_family")
     return merged
+
+
+def _validate_explicit_gene_semantics(genes: list[Dict[str, Any]]) -> None:
+    missing = [
+        gene["gene"]
+        for gene in genes
+        if not gene.get("asset_class")
+        or not gene.get("complex_family")
+        or not gene.get("subsystem_targets")
+    ]
+    if missing:
+        raise ValueError(
+            "bundle requires explicit gene semantics but "
+            f"{len(missing)} gene(s) are incomplete: {', '.join(missing)}"
+        )
+
+
+def _validate_explicit_transcription_unit_semantics(
+    transcription_units: list[Dict[str, Any]],
+) -> None:
+    missing = [
+        unit["name"]
+        for unit in transcription_units
+        if not unit.get("asset_class")
+        or not unit.get("complex_family")
+        or not unit.get("subsystem_targets")
+    ]
+    if missing:
+        raise ValueError(
+            "bundle requires explicit transcription unit semantics but "
+            f"{len(missing)} unit(s) are incomplete: {', '.join(missing)}"
+        )
 
 
 def _with_compiled_chromosome_domains(spec: Dict[str, Any]) -> Dict[str, Any]:
@@ -791,6 +827,8 @@ def _load_optional_json(
     if key not in manifest:
         return None
     path = _resolve_manifest_path(manifest_path, manifest[key])
+    if not path.exists():
+        raise ValueError(f"bundle manifest references missing {key}: {path}")
     source_hashes[key] = _sha256_path(path)
     return _load_json(path)
 

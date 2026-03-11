@@ -1,6 +1,8 @@
 {
   "organism": "Mgen-minimal-demo",
   "source_dataset": "mgen_minimal_demo",
+  "require_explicit_gene_semantics": true,
+  "require_explicit_transcription_unit_semantics": true,
   "metadata_json": "metadata.json",
   "genome_fasta": "genome.fasta",
   "gene_features_gff": "features.gff3",

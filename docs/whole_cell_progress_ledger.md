@@ -930,3 +930,27 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the structured bundle path now supports explicit source-side semantic overlays, but the richer upstream datasets still need broader semantic annotation coverage so ingress normalization can eventually become a compatibility-only path rather than part of the normal bundle workflow`
+
+### 2026-03-11 - Phase 7 / Strict Explicit-Semantic Bundle Slice
+
+- Summary:
+  - added manifest-level `require_explicit_gene_semantics` and `require_explicit_transcription_unit_semantics` controls so structured bundles can opt out of silent semantic recovery and fail fast when source-side semantic coverage is incomplete
+  - taught both the Rust and Python bundle compilers to validate explicit semantic completeness before continuing, and normalized missing overlay-file handling into a consistent bundle-compiler error on the Python path
+  - enabled strict explicit semantics on the demo structured bundle and added a regression proving compilation fails when a required gene-semantic overlay is omitted
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/manifest.json`
+  - `src/oneuro/whole_cell/assets/compiler.py`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `python3 -m py_compile src/oneuro/whole_cell/assets/compiler.py tests/test_whole_cell_assets.py`
+  - `rustfmt oneuro-metal/src/whole_cell_data.rs`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `strict explicit semantics now exists for structured bundles, but the richer upstream organism sources still need more direct semantic annotation coverage before the inference path can be demoted to compatibility-only status across the broader pipeline`
