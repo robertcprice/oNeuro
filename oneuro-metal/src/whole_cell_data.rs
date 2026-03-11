@@ -390,6 +390,8 @@ pub enum WholeCellSpeciesClass {
 #[serde(rename_all = "snake_case")]
 pub enum WholeCellReactionClass {
     PoolTransport,
+    MembranePatchTransfer,
+    MembranePatchTurnover,
     Transcription,
     Translation,
     RnaDegradation,
@@ -611,7 +613,13 @@ impl From<&WholeCellGenomeProcessRegistry> for WholeCellGenomeProcessRegistrySum
         let transport_reaction_count = registry
             .reactions
             .iter()
-            .filter(|reaction| reaction.reaction_class == WholeCellReactionClass::PoolTransport)
+            .filter(|reaction| {
+                matches!(
+                    reaction.reaction_class,
+                    WholeCellReactionClass::PoolTransport
+                        | WholeCellReactionClass::MembranePatchTransfer
+                )
+            })
             .count();
         let degradation_reaction_count = registry
             .reactions
@@ -650,7 +658,13 @@ impl From<&WholeCellGenomeProcessRegistry> for WholeCellGenomeProcessRegistrySum
         let turnover_reaction_count = registry
             .reactions
             .iter()
-            .filter(|reaction| reaction.reaction_class == WholeCellReactionClass::ComplexTurnover)
+            .filter(|reaction| {
+                matches!(
+                    reaction.reaction_class,
+                    WholeCellReactionClass::ComplexTurnover
+                        | WholeCellReactionClass::MembranePatchTurnover
+                )
+            })
             .count();
         Self {
             organism: registry.organism.clone(),
@@ -1978,6 +1992,10 @@ fn pool_species_id(species: &str) -> String {
     format!("pool_{}", canonical_species_fragment(species))
 }
 
+fn membrane_patch_pool_species_id(patch_name: &str) -> String {
+    format!("pool_{}_membrane_precursors", canonical_species_fragment(patch_name))
+}
+
 fn complex_stage_species_id(complex_id: &str, stage: &str) -> String {
     format!("{}_{}", canonical_species_fragment(complex_id), stage)
 }
@@ -2243,6 +2261,11 @@ pub fn compile_genome_process_registry(
     let adp_pool = find_pool_species_id_by_hint(package, "adp");
     let nucleotide_pool = find_pool_species_id_by_hint(package, "nucleotide");
     let amino_pool = find_pool_species_id_by_hint(package, "amino");
+    let membrane_precursor_pool = package
+        .pools
+        .iter()
+        .find(|pool| infer_pool_bulk_field(&pool.species) == Some(WholeCellBulkField::MembranePrecursors))
+        .map(|pool| (pool_species_id(&pool.species), pool));
 
     for pool in &package.pools {
         let species_name = pool.species.clone();
@@ -2414,6 +2437,155 @@ pub fn compile_genome_process_registry(
             spatial_scope,
             patch_domain,
         });
+    }
+
+    if let Some((global_membrane_pool_id, membrane_pool)) = membrane_precursor_pool.as_ref() {
+        let membrane_complex_count = package
+            .complexes
+            .iter()
+            .filter(|complex| complex.membrane_inserted)
+            .count() as f32;
+        let band_target_signal = package
+            .complexes
+            .iter()
+            .filter(|complex| {
+                registry_patch_domain(
+                    complex.asset_class,
+                    registry_compartment_for_asset_class(
+                        complex.asset_class,
+                        &complex.subsystem_targets,
+                    ),
+                    &complex.subsystem_targets,
+                    &complex.name,
+                ) == WholeCellPatchDomain::MembraneBand
+            })
+            .count() as f32;
+        let septum_target_signal = package
+            .complexes
+            .iter()
+            .filter(|complex| {
+                registry_patch_domain(
+                    complex.asset_class,
+                    registry_compartment_for_asset_class(
+                        complex.asset_class,
+                        &complex.subsystem_targets,
+                    ),
+                    &complex.subsystem_targets,
+                    &complex.name,
+                ) == WholeCellPatchDomain::SeptumPatch
+            })
+            .count() as f32;
+        let patch_specs = [
+            (
+                "membrane_band",
+                "membrane band precursors",
+                WholeCellAssetClass::Membrane,
+                WholeCellSpatialScope::MembraneAdjacent,
+                WholeCellPatchDomain::MembraneBand,
+                vec![Syn3ASubsystemPreset::AtpSynthaseMembraneBand],
+                (band_target_signal.max(1.0), 0.12f32, 0.055f32, 0.020f32),
+            ),
+            (
+                "polar_patch",
+                "polar membrane precursors",
+                WholeCellAssetClass::Membrane,
+                WholeCellSpatialScope::MembraneAdjacent,
+                WholeCellPatchDomain::PolarPatch,
+                Vec::<Syn3ASubsystemPreset>::new(),
+                ((0.35 * membrane_complex_count).max(1.0), 0.08f32, 0.040f32, 0.018f32),
+            ),
+            (
+                "septum_patch",
+                "septum membrane precursors",
+                WholeCellAssetClass::Constriction,
+                WholeCellSpatialScope::SeptumLocal,
+                WholeCellPatchDomain::SeptumPatch,
+                vec![Syn3ASubsystemPreset::FtsZSeptumRing],
+                (septum_target_signal.max(1.0), 0.10f32, 0.065f32, 0.024f32),
+            ),
+        ];
+
+        for (patch_name, species_name, asset_class, spatial_scope, patch_domain, subsystem_targets, (target_signal, basal_scale, transfer_rate, turnover_rate)) in patch_specs {
+            let patch_species_id = membrane_patch_pool_species_id(patch_name);
+            let basal_abundance = (membrane_pool.count.max(0.0)
+                + 24.0 * membrane_pool.concentration_mm.max(0.0))
+                * (basal_scale + 0.018 * target_signal.sqrt());
+            species.push(WholeCellSpeciesSpec {
+                id: patch_species_id.clone(),
+                name: species_name.to_string(),
+                species_class: WholeCellSpeciesClass::Pool,
+                compartment: "membrane".to_string(),
+                asset_class,
+                basal_abundance: basal_abundance.clamp(0.0, 1024.0),
+                bulk_field: Some(WholeCellBulkField::MembranePrecursors),
+                operon: None,
+                parent_complex: None,
+                subsystem_targets: subsystem_targets.clone(),
+                spatial_scope,
+                patch_domain,
+            });
+
+            let mut transfer_reactants = vec![WholeCellReactionParticipantSpec {
+                species_id: global_membrane_pool_id.clone(),
+                stoichiometry: 1.0,
+            }];
+            if let Some(species_id) = atp_pool.as_ref() {
+                transfer_reactants.push(WholeCellReactionParticipantSpec {
+                    species_id: species_id.clone(),
+                    stoichiometry: (0.40 + 0.10 * target_signal.sqrt()).clamp(0.25, 1.2),
+                });
+            }
+            let mut transfer_products = vec![WholeCellReactionParticipantSpec {
+                species_id: patch_species_id.clone(),
+                stoichiometry: 1.0,
+            }];
+            if let Some(species_id) = adp_pool.as_ref() {
+                transfer_products.push(WholeCellReactionParticipantSpec {
+                    species_id: species_id.clone(),
+                    stoichiometry: (0.24 + 0.08 * target_signal.sqrt()).clamp(0.12, 0.8),
+                });
+            }
+            reactions.push(WholeCellReactionSpec {
+                id: format!(
+                    "{}_patch_transfer",
+                    canonical_species_fragment(&patch_species_id)
+                ),
+                name: format!("{} patch transfer", species_name),
+                reaction_class: WholeCellReactionClass::MembranePatchTransfer,
+                asset_class,
+                nominal_rate: (transfer_rate + 0.010 * target_signal.sqrt()).clamp(0.01, 4.0),
+                catalyst: None,
+                operon: None,
+                reactants: transfer_reactants,
+                products: transfer_products,
+                subsystem_targets: subsystem_targets.clone(),
+                spatial_scope,
+                patch_domain,
+            });
+            reactions.push(WholeCellReactionSpec {
+                id: format!(
+                    "{}_patch_turnover",
+                    canonical_species_fragment(&patch_species_id)
+                ),
+                name: format!("{} patch turnover", species_name),
+                reaction_class: WholeCellReactionClass::MembranePatchTurnover,
+                asset_class,
+                nominal_rate: (turnover_rate + 0.006 * target_signal.sqrt()).clamp(0.004, 2.0),
+                catalyst: None,
+                operon: None,
+                reactants: vec![WholeCellReactionParticipantSpec {
+                    species_id: patch_species_id,
+                    stoichiometry: 1.0,
+                }],
+                products: vec![WholeCellReactionParticipantSpec {
+                    species_id: global_membrane_pool_id.clone(),
+                    stoichiometry: 1.0,
+                }],
+                subsystem_targets,
+                spatial_scope,
+                patch_domain,
+            });
+        }
     }
 
     for pool in &package.pools {
@@ -3542,7 +3714,7 @@ mod tests {
         assert_eq!(summary.stress_reaction_count, package.operons.len());
         assert!(summary.assembly_reaction_count >= package.complexes.len() * 4);
         assert_eq!(summary.repair_reaction_count, package.complexes.len());
-        assert_eq!(summary.turnover_reaction_count, package.complexes.len());
+        assert!(summary.turnover_reaction_count >= package.complexes.len());
         assert!(registry.species.iter().any(|species| {
             species.id == "pool_glucose" && species.bulk_field == Some(WholeCellBulkField::Glucose)
         }));
@@ -3629,6 +3801,26 @@ mod tests {
                 .subsystem_targets
                 .contains(&Syn3ASubsystemPreset::ReplisomeTrack)
                 && reaction.patch_domain == WholeCellPatchDomain::NucleoidTrack
+        }));
+        assert!(registry
+            .species
+            .iter()
+            .any(|species| species.id == "pool_membrane_band_membrane_precursors"));
+        assert!(registry
+            .species
+            .iter()
+            .any(|species| species.id == "pool_polar_patch_membrane_precursors"));
+        assert!(registry
+            .species
+            .iter()
+            .any(|species| species.id == "pool_septum_patch_membrane_precursors"));
+        assert!(registry.reactions.iter().any(|reaction| {
+            reaction.reaction_class == WholeCellReactionClass::MembranePatchTransfer
+                && reaction.patch_domain == WholeCellPatchDomain::MembraneBand
+        }));
+        assert!(registry.reactions.iter().any(|reaction| {
+            reaction.reaction_class == WholeCellReactionClass::MembranePatchTurnover
+                && reaction.patch_domain == WholeCellPatchDomain::SeptumPatch
         }));
     }
 

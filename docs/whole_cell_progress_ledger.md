@@ -350,3 +350,26 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `compiled patch domains now drive localized membrane behavior, but membrane patch reactions, richer compartment scopes, and chromosome-local execution still need broader compiled-species coverage and tighter multiscale coupling in later slices`
+
+### 2026-03-11 - Phase 7 / Compiled Membrane Patch Precursor Reactions Slice
+
+- Summary:
+  - compiled explicit membrane patch precursor pool species for membrane bands, poles, and septum patches, so localized precursor ownership now lives in the organism process registry instead of being inferred only inside the membrane updater
+  - added compiled `membrane_patch_transfer` and `membrane_patch_turnover` reactions, then extended the native spatial coupling cache so bulk-field concentration and species availability are resolved from both `spatial_scope` and `patch_domain`
+  - fixed registry bulk-field delta application to use participant locality rather than reaction locality, so patch transfer now moves precursor mass into patch-local domains instead of subtracting and re-adding inside the same locality bucket
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q bundled_syn3a_process_registry_compiles_from_assets --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_membrane_patch_transfer_moves_precursors_into_band_zone --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q gpu::whole_cell_rdme --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `membrane precursor ownership now runs through compiled patch-local reactions, but ATP, nucleotide, amino, and broader compartment-local chemistry still need to be pushed onto the same generic compiled-locality path`
