@@ -160,6 +160,26 @@ impl IntracellularLattice {
         self.current[self.channel_range(species)].to_vec()
     }
 
+    /// Replace a species channel with explicit values.
+    pub fn set_species(
+        &mut self,
+        species: IntracellularSpecies,
+        values: &[f32],
+    ) -> Result<(), String> {
+        let expected = self.total_voxels();
+        if values.len() != expected {
+            return Err(format!(
+                "species channel length mismatch: expected {}, got {}",
+                expected,
+                values.len()
+            ));
+        }
+        let range = self.channel_range(species);
+        self.current[range.clone()].copy_from_slice(values);
+        self.next[range].copy_from_slice(values);
+        Ok(())
+    }
+
     /// Swap read/write buffers after an RDME update.
     pub fn swap_buffers(&mut self) {
         std::mem::swap(&mut self.current, &mut self.next);

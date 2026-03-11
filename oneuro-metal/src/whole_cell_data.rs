@@ -10,6 +10,8 @@ use crate::whole_cell_submodels::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 const BUNDLED_SYN3A_PROGRAM_JSON: &str = include_str!("../specs/whole_cell_syn3a_reference.json");
@@ -334,6 +336,269 @@ pub struct WholeCellGenomeAssetPackage {
     pub pools: Vec<WholeCellMoleculePoolSpec>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WholeCellSpeciesClass {
+    Pool,
+    Rna,
+    Protein,
+    ComplexSubunitPool,
+    ComplexNucleationIntermediate,
+    ComplexElongationIntermediate,
+    ComplexMature,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WholeCellReactionClass {
+    Transcription,
+    Translation,
+    SubunitPoolFormation,
+    ComplexNucleation,
+    ComplexElongation,
+    ComplexMaturation,
+    ComplexTurnover,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellSpeciesSpec {
+    pub id: String,
+    pub name: String,
+    pub species_class: WholeCellSpeciesClass,
+    pub compartment: String,
+    pub asset_class: WholeCellAssetClass,
+    pub basal_abundance: f32,
+    #[serde(default)]
+    pub operon: Option<String>,
+    #[serde(default)]
+    pub parent_complex: Option<String>,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellReactionParticipantSpec {
+    pub species_id: String,
+    pub stoichiometry: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellReactionSpec {
+    pub id: String,
+    pub name: String,
+    pub reaction_class: WholeCellReactionClass,
+    pub asset_class: WholeCellAssetClass,
+    pub nominal_rate: f32,
+    #[serde(default)]
+    pub catalyst: Option<String>,
+    #[serde(default)]
+    pub reactants: Vec<WholeCellReactionParticipantSpec>,
+    #[serde(default)]
+    pub products: Vec<WholeCellReactionParticipantSpec>,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellGenomeProcessRegistry {
+    pub organism: String,
+    #[serde(default)]
+    pub species: Vec<WholeCellSpeciesSpec>,
+    #[serde(default)]
+    pub reactions: Vec<WholeCellReactionSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellSpeciesRuntimeState {
+    pub id: String,
+    pub name: String,
+    pub species_class: WholeCellSpeciesClass,
+    pub compartment: String,
+    pub asset_class: WholeCellAssetClass,
+    pub basal_abundance: f32,
+    #[serde(default)]
+    pub operon: Option<String>,
+    #[serde(default)]
+    pub parent_complex: Option<String>,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    pub count: f32,
+    #[serde(default)]
+    pub anchor_count: f32,
+    #[serde(default)]
+    pub synthesis_rate: f32,
+    #[serde(default)]
+    pub turnover_rate: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellReactionRuntimeState {
+    pub id: String,
+    pub name: String,
+    pub reaction_class: WholeCellReactionClass,
+    pub asset_class: WholeCellAssetClass,
+    pub nominal_rate: f32,
+    #[serde(default)]
+    pub catalyst: Option<String>,
+    #[serde(default)]
+    pub reactants: Vec<WholeCellReactionParticipantSpec>,
+    #[serde(default)]
+    pub products: Vec<WholeCellReactionParticipantSpec>,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub current_flux: f32,
+    #[serde(default)]
+    pub cumulative_extent: f32,
+    #[serde(default)]
+    pub reactant_satisfaction: f32,
+    #[serde(default = "default_scale")]
+    pub catalyst_support: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WholeCellGenomeProcessRegistrySummary {
+    pub organism: String,
+    pub species_count: usize,
+    pub pool_species_count: usize,
+    pub rna_species_count: usize,
+    pub protein_species_count: usize,
+    pub complex_species_count: usize,
+    pub assembly_intermediate_species_count: usize,
+    pub reaction_count: usize,
+    pub transcription_reaction_count: usize,
+    pub translation_reaction_count: usize,
+    pub assembly_reaction_count: usize,
+    pub turnover_reaction_count: usize,
+}
+
+impl From<&WholeCellGenomeProcessRegistry> for WholeCellGenomeProcessRegistrySummary {
+    fn from(registry: &WholeCellGenomeProcessRegistry) -> Self {
+        let pool_species_count = registry
+            .species
+            .iter()
+            .filter(|species| species.species_class == WholeCellSpeciesClass::Pool)
+            .count();
+        let rna_species_count = registry
+            .species
+            .iter()
+            .filter(|species| species.species_class == WholeCellSpeciesClass::Rna)
+            .count();
+        let protein_species_count = registry
+            .species
+            .iter()
+            .filter(|species| species.species_class == WholeCellSpeciesClass::Protein)
+            .count();
+        let complex_species_count = registry
+            .species
+            .iter()
+            .filter(|species| species.species_class == WholeCellSpeciesClass::ComplexMature)
+            .count();
+        let assembly_intermediate_species_count = registry
+            .species
+            .iter()
+            .filter(|species| {
+                matches!(
+                    species.species_class,
+                    WholeCellSpeciesClass::ComplexSubunitPool
+                        | WholeCellSpeciesClass::ComplexNucleationIntermediate
+                        | WholeCellSpeciesClass::ComplexElongationIntermediate
+                )
+            })
+            .count();
+        let transcription_reaction_count = registry
+            .reactions
+            .iter()
+            .filter(|reaction| reaction.reaction_class == WholeCellReactionClass::Transcription)
+            .count();
+        let translation_reaction_count = registry
+            .reactions
+            .iter()
+            .filter(|reaction| reaction.reaction_class == WholeCellReactionClass::Translation)
+            .count();
+        let assembly_reaction_count = registry
+            .reactions
+            .iter()
+            .filter(|reaction| {
+                matches!(
+                    reaction.reaction_class,
+                    WholeCellReactionClass::SubunitPoolFormation
+                        | WholeCellReactionClass::ComplexNucleation
+                        | WholeCellReactionClass::ComplexElongation
+                        | WholeCellReactionClass::ComplexMaturation
+                )
+            })
+            .count();
+        let turnover_reaction_count = registry
+            .reactions
+            .iter()
+            .filter(|reaction| reaction.reaction_class == WholeCellReactionClass::ComplexTurnover)
+            .count();
+        Self {
+            organism: registry.organism.clone(),
+            species_count: registry.species.len(),
+            pool_species_count,
+            rna_species_count,
+            protein_species_count,
+            complex_species_count,
+            assembly_intermediate_species_count,
+            reaction_count: registry.reactions.len(),
+            transcription_reaction_count,
+            translation_reaction_count,
+            assembly_reaction_count,
+            turnover_reaction_count,
+        }
+    }
+}
+
+pub fn initialize_runtime_species_state(
+    registry: &WholeCellGenomeProcessRegistry,
+) -> Vec<WholeCellSpeciesRuntimeState> {
+    registry
+        .species
+        .iter()
+        .map(|species| WholeCellSpeciesRuntimeState {
+            id: species.id.clone(),
+            name: species.name.clone(),
+            species_class: species.species_class,
+            compartment: species.compartment.clone(),
+            asset_class: species.asset_class,
+            basal_abundance: species.basal_abundance.max(0.0),
+            operon: species.operon.clone(),
+            parent_complex: species.parent_complex.clone(),
+            subsystem_targets: species.subsystem_targets.clone(),
+            count: species.basal_abundance.max(0.0),
+            anchor_count: species.basal_abundance.max(0.0),
+            synthesis_rate: 0.0,
+            turnover_rate: 0.0,
+        })
+        .collect()
+}
+
+pub fn initialize_runtime_reaction_state(
+    registry: &WholeCellGenomeProcessRegistry,
+) -> Vec<WholeCellReactionRuntimeState> {
+    registry
+        .reactions
+        .iter()
+        .map(|reaction| WholeCellReactionRuntimeState {
+            id: reaction.id.clone(),
+            name: reaction.name.clone(),
+            reaction_class: reaction.reaction_class,
+            asset_class: reaction.asset_class,
+            nominal_rate: reaction.nominal_rate.max(0.0),
+            catalyst: reaction.catalyst.clone(),
+            reactants: reaction.reactants.clone(),
+            products: reaction.products.clone(),
+            subsystem_targets: reaction.subsystem_targets.clone(),
+            current_flux: 0.0,
+            cumulative_extent: 0.0,
+            reactant_satisfaction: 1.0,
+            catalyst_support: 1.0,
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WholeCellGenomeAssetSummary {
     pub organism: String,
@@ -506,12 +771,26 @@ pub struct WholeCellNamedComplexState {
     pub asset_class: WholeCellAssetClass,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub subunit_pool: f32,
+    #[serde(default)]
+    pub nucleation_intermediate: f32,
+    #[serde(default)]
+    pub elongation_intermediate: f32,
     pub abundance: f32,
     pub target_abundance: f32,
     pub assembly_rate: f32,
     pub degradation_rate: f32,
+    #[serde(default)]
+    pub nucleation_rate: f32,
+    #[serde(default)]
+    pub elongation_rate: f32,
+    #[serde(default)]
+    pub maturation_rate: f32,
     pub component_satisfaction: f32,
     pub structural_support: f32,
+    #[serde(default)]
+    pub assembly_progress: f32,
 }
 
 impl Default for WholeCellComplexAssemblyState {
@@ -631,6 +910,60 @@ pub struct WholeCellProgramSpec {
     pub local_chemistry: Option<WholeCellLocalChemistrySpec>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WholeCellOrganismBundleManifest {
+    #[serde(default)]
+    pub organism: Option<String>,
+    #[serde(default)]
+    pub source_dataset: Option<String>,
+    #[serde(default)]
+    pub organism_spec_json: Option<String>,
+    #[serde(default)]
+    pub metadata_json: Option<String>,
+    #[serde(default)]
+    pub genome_fasta: Option<String>,
+    #[serde(default)]
+    pub gene_features_json: Option<String>,
+    #[serde(default)]
+    pub gene_features_gff: Option<String>,
+    #[serde(default)]
+    pub gene_products_json: Option<String>,
+    #[serde(default)]
+    pub transcription_units_json: Option<String>,
+    #[serde(default)]
+    pub pools_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellOrganismBundleMetadata {
+    pub organism: String,
+    #[serde(default)]
+    pub chromosome_length_bp: Option<u32>,
+    #[serde(default)]
+    pub origin_bp: u32,
+    #[serde(default)]
+    pub terminus_bp: u32,
+    pub geometry: WholeCellGeometryPrior,
+    pub composition: WholeCellCompositionPrior,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellGeneProductAnnotation {
+    pub gene: String,
+    #[serde(default)]
+    pub essential: bool,
+    #[serde(default = "default_expression_level")]
+    pub basal_expression: f32,
+    #[serde(default = "default_translation_cost")]
+    pub translation_cost: f32,
+    #[serde(default = "default_nucleotide_cost")]
+    pub nucleotide_cost: f32,
+    #[serde(default)]
+    pub process_weights: WholeCellProcessWeights,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellSavedCoreState {
     pub time_ms: f32,
@@ -676,6 +1009,10 @@ pub struct WholeCellSavedState {
     pub organism_assets: Option<WholeCellGenomeAssetPackage>,
     #[serde(default)]
     pub organism_expression: WholeCellOrganismExpressionState,
+    #[serde(default)]
+    pub organism_species: Vec<WholeCellSpeciesRuntimeState>,
+    #[serde(default)]
+    pub organism_reactions: Vec<WholeCellReactionRuntimeState>,
     #[serde(default)]
     pub complex_assembly: WholeCellComplexAssemblyState,
     #[serde(default)]
@@ -1036,6 +1373,68 @@ fn inferred_asset_class(
         .unwrap_or(WholeCellAssetClass::Generic)
 }
 
+fn canonical_species_fragment(name: &str) -> String {
+    let mut fragment = String::with_capacity(name.len());
+    let mut last_was_underscore = false;
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            fragment.push(ch.to_ascii_lowercase());
+            last_was_underscore = false;
+        } else if !last_was_underscore {
+            fragment.push('_');
+            last_was_underscore = true;
+        }
+    }
+    fragment.trim_matches('_').to_string()
+}
+
+fn pool_species_id(species: &str) -> String {
+    format!("pool_{}", canonical_species_fragment(species))
+}
+
+fn complex_stage_species_id(complex_id: &str, stage: &str) -> String {
+    format!("{}_{}", canonical_species_fragment(complex_id), stage)
+}
+
+fn registry_compartment_for_asset_class(
+    asset_class: WholeCellAssetClass,
+    subsystem_targets: &[Syn3ASubsystemPreset],
+) -> &'static str {
+    if subsystem_targets.contains(&Syn3ASubsystemPreset::ReplisomeTrack) {
+        "chromosome"
+    } else if subsystem_targets.contains(&Syn3ASubsystemPreset::AtpSynthaseMembraneBand)
+        || subsystem_targets.contains(&Syn3ASubsystemPreset::FtsZSeptumRing)
+        || matches!(
+            asset_class,
+            WholeCellAssetClass::Membrane | WholeCellAssetClass::Constriction
+        )
+    {
+        "membrane"
+    } else {
+        "cytosol"
+    }
+}
+
+fn find_pool_species_id_by_hint(
+    package: &WholeCellGenomeAssetPackage,
+    hint: &str,
+) -> Option<String> {
+    package
+        .pools
+        .iter()
+        .find(|pool| pool.species.to_ascii_lowercase().contains(hint))
+        .map(|pool| pool_species_id(&pool.species))
+}
+
+fn total_complex_stoichiometry(complex: &WholeCellComplexSpec) -> f32 {
+    complex
+        .components
+        .iter()
+        .map(|component| component.stoichiometry.max(1) as f32)
+        .sum::<f32>()
+        .max(1.0)
+}
+
 fn operon_bounds(spec: &WholeCellOrganismSpec, genes: &[String]) -> (u32, u32) {
     let mut promoter_bp = u32::MAX;
     let mut terminator_bp = 0u32;
@@ -1180,9 +1579,676 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
     }
 }
 
-pub fn parse_program_spec_json(spec_json: &str) -> Result<WholeCellProgramSpec, String> {
-    let mut spec: WholeCellProgramSpec = serde_json::from_str(spec_json)
-        .map_err(|error| format!("failed to parse program spec: {error}"))?;
+pub fn compile_genome_process_registry(
+    package: &WholeCellGenomeAssetPackage,
+) -> WholeCellGenomeProcessRegistry {
+    let mut species = Vec::new();
+    let mut reactions = Vec::new();
+    let nucleotide_pool = find_pool_species_id_by_hint(package, "nucleotide");
+    let amino_pool = find_pool_species_id_by_hint(package, "amino");
+
+    for pool in &package.pools {
+        let species_name = pool.species.clone();
+        let asset_class = if species_name.to_ascii_lowercase().contains("membrane")
+            || species_name.to_ascii_lowercase().contains("lipid")
+        {
+            WholeCellAssetClass::Membrane
+        } else if species_name.to_ascii_lowercase().contains("atp")
+            || species_name.to_ascii_lowercase().contains("oxygen")
+            || species_name.to_ascii_lowercase().contains("glucose")
+        {
+            WholeCellAssetClass::Energy
+        } else if species_name.to_ascii_lowercase().contains("amino") {
+            WholeCellAssetClass::Translation
+        } else if species_name.to_ascii_lowercase().contains("nucleotide") {
+            WholeCellAssetClass::Replication
+        } else {
+            WholeCellAssetClass::Generic
+        };
+        let compartment = if species_name.to_ascii_lowercase().contains("membrane")
+            || species_name.to_ascii_lowercase().contains("lipid")
+        {
+            "membrane"
+        } else {
+            "cytosol"
+        };
+        species.push(WholeCellSpeciesSpec {
+            id: pool_species_id(&pool.species),
+            name: species_name,
+            species_class: WholeCellSpeciesClass::Pool,
+            compartment: compartment.to_string(),
+            asset_class,
+            basal_abundance: (pool.count.max(0.0) + 24.0 * pool.concentration_mm.max(0.0))
+                .clamp(0.0, 4096.0),
+            operon: None,
+            parent_complex: None,
+            subsystem_targets: Vec::new(),
+        });
+    }
+
+    for rna in &package.rnas {
+        let compartment = registry_compartment_for_asset_class(
+            rna.asset_class,
+            &Vec::<Syn3ASubsystemPreset>::new(),
+        );
+        species.push(WholeCellSpeciesSpec {
+            id: rna.id.clone(),
+            name: rna.id.clone(),
+            species_class: WholeCellSpeciesClass::Rna,
+            compartment: compartment.to_string(),
+            asset_class: rna.asset_class,
+            basal_abundance: rna.basal_abundance.max(0.0),
+            operon: Some(rna.operon.clone()),
+            parent_complex: None,
+            subsystem_targets: Vec::new(),
+        });
+    }
+
+    for protein in &package.proteins {
+        let compartment =
+            registry_compartment_for_asset_class(protein.asset_class, &protein.subsystem_targets);
+        species.push(WholeCellSpeciesSpec {
+            id: protein.id.clone(),
+            name: protein.id.clone(),
+            species_class: WholeCellSpeciesClass::Protein,
+            compartment: compartment.to_string(),
+            asset_class: protein.asset_class,
+            basal_abundance: protein.basal_abundance.max(0.0),
+            operon: Some(protein.operon.clone()),
+            parent_complex: None,
+            subsystem_targets: protein.subsystem_targets.clone(),
+        });
+    }
+
+    for complex in &package.complexes {
+        let compartment =
+            registry_compartment_for_asset_class(complex.asset_class, &complex.subsystem_targets);
+        let total_stoichiometry = total_complex_stoichiometry(complex);
+        let subunit_pool_id = complex_stage_species_id(&complex.id, "subunit_pool");
+        let nucleation_id = complex_stage_species_id(&complex.id, "nucleation");
+        let elongation_id = complex_stage_species_id(&complex.id, "elongation");
+        let mature_id = complex_stage_species_id(&complex.id, "mature");
+        species.push(WholeCellSpeciesSpec {
+            id: subunit_pool_id.clone(),
+            name: format!("{} subunit pool", complex.name),
+            species_class: WholeCellSpeciesClass::ComplexSubunitPool,
+            compartment: compartment.to_string(),
+            asset_class: complex.asset_class,
+            basal_abundance: (complex.basal_abundance.max(0.0) * total_stoichiometry.sqrt())
+                .clamp(0.0, 2048.0),
+            operon: Some(complex.operon.clone()),
+            parent_complex: Some(complex.id.clone()),
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+        species.push(WholeCellSpeciesSpec {
+            id: nucleation_id.clone(),
+            name: format!("{} nucleation intermediate", complex.name),
+            species_class: WholeCellSpeciesClass::ComplexNucleationIntermediate,
+            compartment: compartment.to_string(),
+            asset_class: complex.asset_class,
+            basal_abundance: (0.10 * complex.basal_abundance.max(0.0) * total_stoichiometry.sqrt())
+                .clamp(0.0, 512.0),
+            operon: Some(complex.operon.clone()),
+            parent_complex: Some(complex.id.clone()),
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+        species.push(WholeCellSpeciesSpec {
+            id: elongation_id.clone(),
+            name: format!("{} elongation intermediate", complex.name),
+            species_class: WholeCellSpeciesClass::ComplexElongationIntermediate,
+            compartment: compartment.to_string(),
+            asset_class: complex.asset_class,
+            basal_abundance: (0.08 * complex.basal_abundance.max(0.0) * total_stoichiometry.sqrt())
+                .clamp(0.0, 512.0),
+            operon: Some(complex.operon.clone()),
+            parent_complex: Some(complex.id.clone()),
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+        species.push(WholeCellSpeciesSpec {
+            id: mature_id.clone(),
+            name: complex.name.clone(),
+            species_class: WholeCellSpeciesClass::ComplexMature,
+            compartment: compartment.to_string(),
+            asset_class: complex.asset_class,
+            basal_abundance: complex.basal_abundance.max(0.0),
+            operon: Some(complex.operon.clone()),
+            parent_complex: Some(complex.id.clone()),
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+    }
+
+    for operon in &package.operons {
+        let mut reactants = Vec::new();
+        if let Some(species_id) = nucleotide_pool.as_ref() {
+            reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (operon.genes.len().max(1) as f32).sqrt().max(1.0),
+            });
+        }
+        let products = package
+            .rnas
+            .iter()
+            .filter(|rna| rna.operon == operon.name)
+            .map(|rna| WholeCellReactionParticipantSpec {
+                species_id: rna.id.clone(),
+                stoichiometry: 1.0,
+            })
+            .collect::<Vec<_>>();
+        if !products.is_empty() {
+            reactions.push(WholeCellReactionSpec {
+                id: format!("{}_transcription", canonical_species_fragment(&operon.name)),
+                name: format!("{} transcription", operon.name),
+                reaction_class: WholeCellReactionClass::Transcription,
+                asset_class: inferred_asset_class(
+                    operon.process_weights,
+                    &Vec::<Syn3ASubsystemPreset>::new(),
+                    &operon.name,
+                ),
+                nominal_rate: operon.basal_activity.max(0.01),
+                catalyst: None,
+                reactants,
+                products,
+                subsystem_targets: Vec::new(),
+            });
+        }
+    }
+
+    for protein in &package.proteins {
+        let mut reactants = vec![WholeCellReactionParticipantSpec {
+            species_id: protein.rna_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = amino_pool.as_ref() {
+            reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (protein.aa_length.max(1) as f32 / 24.0).max(1.0),
+            });
+        }
+        reactions.push(WholeCellReactionSpec {
+            id: format!("{}_translation", canonical_species_fragment(&protein.id)),
+            name: format!("{} translation", protein.id),
+            reaction_class: WholeCellReactionClass::Translation,
+            asset_class: protein.asset_class,
+            nominal_rate: (0.04 + 0.002 * protein.translation_cost.max(0.0)).clamp(0.01, 8.0),
+            catalyst: Some(protein.rna_id.clone()),
+            reactants,
+            products: vec![WholeCellReactionParticipantSpec {
+                species_id: protein.id.clone(),
+                stoichiometry: 1.0,
+            }],
+            subsystem_targets: protein.subsystem_targets.clone(),
+        });
+    }
+
+    for complex in &package.complexes {
+        let total_stoichiometry = total_complex_stoichiometry(complex);
+        let subunit_pool_id = complex_stage_species_id(&complex.id, "subunit_pool");
+        let nucleation_id = complex_stage_species_id(&complex.id, "nucleation");
+        let elongation_id = complex_stage_species_id(&complex.id, "elongation");
+        let mature_id = complex_stage_species_id(&complex.id, "mature");
+        reactions.push(WholeCellReactionSpec {
+            id: format!(
+                "{}_subunit_pool_formation",
+                canonical_species_fragment(&complex.id)
+            ),
+            name: format!("{} subunit pool formation", complex.name),
+            reaction_class: WholeCellReactionClass::SubunitPoolFormation,
+            asset_class: complex.asset_class,
+            nominal_rate: (0.05 + 0.015 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
+            catalyst: None,
+            reactants: complex
+                .components
+                .iter()
+                .map(|component| WholeCellReactionParticipantSpec {
+                    species_id: component.protein_id.clone(),
+                    stoichiometry: component.stoichiometry.max(1) as f32,
+                })
+                .collect(),
+            products: vec![WholeCellReactionParticipantSpec {
+                species_id: subunit_pool_id.clone(),
+                stoichiometry: 1.0,
+            }],
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+        reactions.push(WholeCellReactionSpec {
+            id: format!("{}_nucleation", canonical_species_fragment(&complex.id)),
+            name: format!("{} nucleation", complex.name),
+            reaction_class: WholeCellReactionClass::ComplexNucleation,
+            asset_class: complex.asset_class,
+            nominal_rate: (0.03 + 0.010 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
+            catalyst: None,
+            reactants: vec![WholeCellReactionParticipantSpec {
+                species_id: subunit_pool_id.clone(),
+                stoichiometry: 1.0,
+            }],
+            products: vec![WholeCellReactionParticipantSpec {
+                species_id: nucleation_id.clone(),
+                stoichiometry: 1.0,
+            }],
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+        reactions.push(WholeCellReactionSpec {
+            id: format!("{}_elongation", canonical_species_fragment(&complex.id)),
+            name: format!("{} elongation", complex.name),
+            reaction_class: WholeCellReactionClass::ComplexElongation,
+            asset_class: complex.asset_class,
+            nominal_rate: (0.04 + 0.012 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
+            catalyst: None,
+            reactants: vec![
+                WholeCellReactionParticipantSpec {
+                    species_id: nucleation_id.clone(),
+                    stoichiometry: 1.0,
+                },
+                WholeCellReactionParticipantSpec {
+                    species_id: subunit_pool_id.clone(),
+                    stoichiometry: 0.5 * total_stoichiometry.max(1.0),
+                },
+            ],
+            products: vec![WholeCellReactionParticipantSpec {
+                species_id: elongation_id.clone(),
+                stoichiometry: 1.0,
+            }],
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+        reactions.push(WholeCellReactionSpec {
+            id: format!("{}_maturation", canonical_species_fragment(&complex.id)),
+            name: format!("{} maturation", complex.name),
+            reaction_class: WholeCellReactionClass::ComplexMaturation,
+            asset_class: complex.asset_class,
+            nominal_rate: (0.05 + 0.015 * complex.basal_abundance.max(0.1).sqrt()).clamp(0.01, 8.0),
+            catalyst: None,
+            reactants: vec![WholeCellReactionParticipantSpec {
+                species_id: elongation_id.clone(),
+                stoichiometry: 1.0,
+            }],
+            products: vec![WholeCellReactionParticipantSpec {
+                species_id: mature_id.clone(),
+                stoichiometry: 1.0,
+            }],
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+        reactions.push(WholeCellReactionSpec {
+            id: format!("{}_turnover", canonical_species_fragment(&complex.id)),
+            name: format!("{} turnover", complex.name),
+            reaction_class: WholeCellReactionClass::ComplexTurnover,
+            asset_class: complex.asset_class,
+            nominal_rate: (0.02 + 0.010 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
+            catalyst: None,
+            reactants: vec![WholeCellReactionParticipantSpec {
+                species_id: mature_id,
+                stoichiometry: 1.0,
+            }],
+            products: vec![WholeCellReactionParticipantSpec {
+                species_id: subunit_pool_id,
+                stoichiometry: 1.0,
+            }],
+            subsystem_targets: complex.subsystem_targets.clone(),
+        });
+    }
+
+    WholeCellGenomeProcessRegistry {
+        organism: package.organism.clone(),
+        species,
+        reactions,
+    }
+}
+
+fn resolve_manifest_relative_path(
+    manifest_path: &Path,
+    relative_path: &str,
+) -> Result<PathBuf, String> {
+    let trimmed = relative_path.trim();
+    if trimmed.is_empty() {
+        return Err("bundle manifest contained an empty relative path".to_string());
+    }
+    Ok(manifest_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(trimmed)
+        .canonicalize()
+        .unwrap_or_else(|_| {
+            manifest_path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(trimmed)
+        }))
+}
+
+fn read_text_file(path: &Path, label: &str) -> Result<String, String> {
+    fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {label} {}: {error}", path.display()))
+}
+
+fn parse_fasta_sequence_length(path: &Path) -> Result<u32, String> {
+    let contents = read_text_file(path, "FASTA file")?;
+    let mut length = 0usize;
+    let mut saw_header = false;
+    for raw_line in contents.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('>') {
+            saw_header = true;
+            continue;
+        }
+        length += line.len();
+    }
+    if !saw_header || length == 0 {
+        return Err(format!("invalid FASTA file: {}", path.display()));
+    }
+    Ok(length.min(u32::MAX as usize) as u32)
+}
+
+fn parse_gff_attributes(attributes: &str) -> HashMap<String, String> {
+    let mut parsed = HashMap::new();
+    for entry in attributes.split(';') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let (key, value) = if let Some((key, value)) = trimmed.split_once('=') {
+            (key.trim(), value.trim())
+        } else if let Some((key, value)) = trimmed.split_once(' ') {
+            (key.trim(), value.trim())
+        } else {
+            (trimmed, "")
+        };
+        parsed.insert(key.to_string(), value.to_string());
+    }
+    parsed
+}
+
+fn parse_gff_gene_features(path: &Path) -> Result<Vec<WholeCellGenomeFeature>, String> {
+    let contents = read_text_file(path, "GFF3 file")?;
+    let mut genes = Vec::new();
+    for raw_line in contents.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() != 9 {
+            return Err(format!("invalid GFF3 row in {}: {}", path.display(), line));
+        }
+        let feature_type = parts[2].trim().to_ascii_lowercase();
+        if feature_type != "gene" && feature_type != "cds" {
+            continue;
+        }
+        let attributes = parse_gff_attributes(parts[8]);
+        let gene = attributes
+            .get("gene")
+            .or_else(|| attributes.get("Name"))
+            .or_else(|| attributes.get("ID"))
+            .cloned()
+            .ok_or_else(|| format!("missing gene identifier in {}", path.display()))?;
+        genes.push(WholeCellGenomeFeature {
+            gene,
+            start_bp: parts[3].parse::<u32>().map_err(|error| {
+                format!(
+                    "invalid GFF start coordinate in {}: {error}",
+                    path.display()
+                )
+            })?,
+            end_bp: parts[4].parse::<u32>().map_err(|error| {
+                format!("invalid GFF end coordinate in {}: {error}", path.display())
+            })?,
+            strand: if parts[6].trim() == "-" { -1 } else { 1 },
+            essential: false,
+            basal_expression: default_expression_level(),
+            translation_cost: default_translation_cost(),
+            nucleotide_cost: default_nucleotide_cost(),
+            process_weights: WholeCellProcessWeights::default(),
+            subsystem_targets: Vec::new(),
+        });
+    }
+    Ok(genes)
+}
+
+fn merge_gene_product_annotations(
+    genes: &mut [WholeCellGenomeFeature],
+    annotations: &[WholeCellGeneProductAnnotation],
+) {
+    let annotation_map: HashMap<&str, &WholeCellGeneProductAnnotation> = annotations
+        .iter()
+        .map(|annotation| (annotation.gene.as_str(), annotation))
+        .collect();
+    for gene in genes {
+        if let Some(annotation) = annotation_map.get(gene.gene.as_str()) {
+            gene.essential = annotation.essential;
+            gene.basal_expression = annotation.basal_expression;
+            gene.translation_cost = annotation.translation_cost;
+            gene.nucleotide_cost = annotation.nucleotide_cost;
+            gene.process_weights = annotation.process_weights.clamped();
+            gene.subsystem_targets = annotation.subsystem_targets.clone();
+        }
+    }
+}
+
+fn pool_concentration(pools: &[WholeCellMoleculePoolSpec], name: &str, fallback: f32) -> f32 {
+    pools
+        .iter()
+        .find(|pool| pool.species.eq_ignore_ascii_case(name))
+        .map(|pool| pool.concentration_mm.max(0.0))
+        .unwrap_or(fallback)
+}
+
+fn build_program_spec_from_organism(
+    organism: WholeCellOrganismSpec,
+    source_dataset: Option<String>,
+) -> Result<WholeCellProgramSpec, String> {
+    let assets = compile_genome_asset_package(&organism);
+    let mut spec = WholeCellProgramSpec {
+        program_name: Some(format!(
+            "{}_bundle_native",
+            organism
+                .organism
+                .to_ascii_lowercase()
+                .replace([' ', '-'], "_")
+        )),
+        contract: WholeCellContractSchema::default(),
+        provenance: WholeCellProvenance {
+            source_dataset,
+            backend: Some("rust_bundle_compiler".to_string()),
+            notes: vec!["compiled from whole-cell organism bundle manifest".to_string()],
+            ..WholeCellProvenance::default()
+        },
+        organism_data_ref: None,
+        organism_data: Some(organism.clone()),
+        organism_assets: Some(assets),
+        config: WholeCellConfig::default(),
+        initial_lattice: WholeCellInitialLatticeSpec {
+            atp: pool_concentration(&organism.pools, "ATP", 1.2),
+            amino_acids: pool_concentration(&organism.pools, "amino_acids", 0.95),
+            nucleotides: pool_concentration(&organism.pools, "nucleotides", 0.80),
+            membrane_precursors: pool_concentration(&organism.pools, "membrane_precursors", 0.35),
+        },
+        initial_state: WholeCellInitialStateSpec {
+            adp_mm: pool_concentration(&organism.pools, "ADP", 0.2),
+            glucose_mm: pool_concentration(&organism.pools, "glucose", 1.0),
+            oxygen_mm: pool_concentration(&organism.pools, "oxygen", 0.85),
+            genome_bp: organism.chromosome_length_bp.max(1),
+            replicated_bp: 0,
+            chromosome_separation_nm: (organism.geometry.radius_nm
+                * organism.geometry.chromosome_radius_fraction.max(0.1))
+            .max(10.0),
+            radius_nm: organism.geometry.radius_nm.max(50.0),
+            division_progress: 0.0,
+            metabolic_load: 1.0,
+        },
+        quantum_profile: WholeCellQuantumProfile::default(),
+        local_chemistry: None,
+    };
+    hydrate_program_spec(&mut spec)?;
+    Ok(spec)
+}
+
+fn parse_bundle_manifest_json(
+    manifest_json: &str,
+) -> Result<WholeCellOrganismBundleManifest, String> {
+    serde_json::from_str(manifest_json)
+        .map_err(|error| format!("failed to parse organism bundle manifest: {error}"))
+}
+
+pub fn compile_organism_spec_from_bundle_manifest_path(
+    manifest_path: &str,
+) -> Result<WholeCellOrganismSpec, String> {
+    let manifest_path = Path::new(manifest_path).canonicalize().map_err(|error| {
+        format!("failed to resolve bundle manifest path {manifest_path}: {error}")
+    })?;
+    let manifest_json = read_text_file(&manifest_path, "bundle manifest")?;
+    let manifest = parse_bundle_manifest_json(&manifest_json)?;
+
+    if let Some(spec_relative) = manifest.organism_spec_json.as_deref() {
+        let spec_path = resolve_manifest_relative_path(&manifest_path, spec_relative)?;
+        return parse_organism_spec_json(&read_text_file(&spec_path, "organism spec JSON")?);
+    }
+
+    let metadata_relative = manifest
+        .metadata_json
+        .as_deref()
+        .ok_or_else(|| "bundle manifest missing metadata_json".to_string())?;
+    let metadata_path = resolve_manifest_relative_path(&manifest_path, metadata_relative)?;
+    let metadata: WholeCellOrganismBundleMetadata =
+        serde_json::from_str(&read_text_file(&metadata_path, "bundle metadata JSON")?).map_err(
+            |error| {
+                format!(
+                    "failed to parse bundle metadata {}: {error}",
+                    metadata_path.display()
+                )
+            },
+        )?;
+
+    let chromosome_length_bp = if let Some(genome_fasta) = manifest.genome_fasta.as_deref() {
+        let fasta_path = resolve_manifest_relative_path(&manifest_path, genome_fasta)?;
+        parse_fasta_sequence_length(&fasta_path)?
+    } else {
+        metadata.chromosome_length_bp.ok_or_else(|| {
+            "bundle metadata missing chromosome_length_bp and genome_fasta".to_string()
+        })?
+    };
+
+    let mut genes = if let Some(features_json) = manifest.gene_features_json.as_deref() {
+        let features_path = resolve_manifest_relative_path(&manifest_path, features_json)?;
+        serde_json::from_str::<Vec<WholeCellGenomeFeature>>(&read_text_file(
+            &features_path,
+            "gene feature JSON",
+        )?)
+        .map_err(|error| {
+            format!(
+                "failed to parse gene features {}: {error}",
+                features_path.display()
+            )
+        })?
+    } else if let Some(features_gff) = manifest.gene_features_gff.as_deref() {
+        let gff_path = resolve_manifest_relative_path(&manifest_path, features_gff)?;
+        parse_gff_gene_features(&gff_path)?
+    } else {
+        return Err("bundle manifest missing gene feature source".to_string());
+    };
+
+    if let Some(gene_products_json) = manifest.gene_products_json.as_deref() {
+        let products_path = resolve_manifest_relative_path(&manifest_path, gene_products_json)?;
+        let annotations: Vec<WholeCellGeneProductAnnotation> = serde_json::from_str(
+            &read_text_file(&products_path, "gene product JSON")?,
+        )
+        .map_err(|error| {
+            format!(
+                "failed to parse gene products {}: {error}",
+                products_path.display()
+            )
+        })?;
+        merge_gene_product_annotations(&mut genes, &annotations);
+    }
+
+    let transcription_units = if let Some(transcription_units_json) =
+        manifest.transcription_units_json.as_deref()
+    {
+        let units_path = resolve_manifest_relative_path(&manifest_path, transcription_units_json)?;
+        serde_json::from_str::<Vec<WholeCellTranscriptionUnitSpec>>(&read_text_file(
+            &units_path,
+            "transcription unit JSON",
+        )?)
+        .map_err(|error| {
+            format!(
+                "failed to parse transcription units {}: {error}",
+                units_path.display()
+            )
+        })?
+    } else {
+        Vec::new()
+    };
+
+    let pools = if let Some(pools_json) = manifest.pools_json.as_deref() {
+        let pools_path = resolve_manifest_relative_path(&manifest_path, pools_json)?;
+        serde_json::from_str::<Vec<WholeCellMoleculePoolSpec>>(&read_text_file(
+            &pools_path,
+            "pool JSON",
+        )?)
+        .map_err(|error| {
+            format!(
+                "failed to parse molecule pools {}: {error}",
+                pools_path.display()
+            )
+        })?
+    } else {
+        Vec::new()
+    };
+
+    Ok(WholeCellOrganismSpec {
+        organism: manifest
+            .organism
+            .clone()
+            .unwrap_or_else(|| metadata.organism.clone()),
+        chromosome_length_bp: chromosome_length_bp.max(1),
+        origin_bp: metadata.origin_bp.min(chromosome_length_bp.max(1)),
+        terminus_bp: metadata.terminus_bp.min(chromosome_length_bp.max(1)),
+        geometry: metadata.geometry,
+        composition: metadata.composition,
+        pools,
+        genes,
+        transcription_units,
+    })
+}
+
+pub fn compile_program_spec_from_bundle_manifest_path(
+    manifest_path: &str,
+) -> Result<WholeCellProgramSpec, String> {
+    let manifest_path_obj = Path::new(manifest_path).canonicalize().map_err(|error| {
+        format!("failed to resolve bundle manifest path {manifest_path}: {error}")
+    })?;
+    let manifest_json = read_text_file(&manifest_path_obj, "bundle manifest")?;
+    let manifest = parse_bundle_manifest_json(&manifest_json)?;
+    let organism = compile_organism_spec_from_bundle_manifest_path(manifest_path)?;
+    build_program_spec_from_organism(organism, manifest.source_dataset.clone())
+}
+
+pub fn compile_program_spec_json_from_bundle_manifest_path(
+    manifest_path: &str,
+) -> Result<String, String> {
+    let spec = compile_program_spec_from_bundle_manifest_path(manifest_path)?;
+    serde_json::to_string_pretty(&spec)
+        .map_err(|error| format!("failed to serialize compiled program spec: {error}"))
+}
+
+pub fn compile_organism_spec_json_from_bundle_manifest_path(
+    manifest_path: &str,
+) -> Result<String, String> {
+    let organism = compile_organism_spec_from_bundle_manifest_path(manifest_path)?;
+    serde_json::to_string_pretty(&organism)
+        .map_err(|error| format!("failed to serialize compiled organism spec: {error}"))
+}
+
+pub fn compile_genome_asset_package_json_from_bundle_manifest_path(
+    manifest_path: &str,
+) -> Result<String, String> {
+    let organism = compile_organism_spec_from_bundle_manifest_path(manifest_path)?;
+    let assets = compile_genome_asset_package(&organism);
+    serde_json::to_string_pretty(&assets)
+        .map_err(|error| format!("failed to serialize compiled genome asset package: {error}"))
+}
+
+fn hydrate_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
     if spec.organism_data.is_none() {
         if let Some(reference) = spec.organism_data_ref.as_deref() {
             spec.organism_data = Some(resolve_bundled_organism_spec(reference)?);
@@ -1195,7 +2261,14 @@ pub fn parse_program_spec_json(spec_json: &str) -> Result<WholeCellProgramSpec, 
             spec.organism_assets = Some(resolve_bundled_genome_asset_package(reference)?);
         }
     }
-    populate_program_contract_metadata(&mut spec)?;
+    populate_program_contract_metadata(spec)?;
+    Ok(())
+}
+
+pub fn parse_program_spec_json(spec_json: &str) -> Result<WholeCellProgramSpec, String> {
+    let mut spec: WholeCellProgramSpec = serde_json::from_str(spec_json)
+        .map_err(|error| format!("failed to parse program spec: {error}"))?;
+    hydrate_program_spec(&mut spec)?;
     Ok(spec)
 }
 
@@ -1304,6 +2377,16 @@ pub fn default_syn3a_seed_spec() -> Result<WholeCellProgramSpec, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn bundle_manifest_path(name: &str) -> String {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../src/oneuro/whole_cell/assets/bundles")
+            .join(name)
+            .join("manifest.json")
+            .display()
+            .to_string()
+    }
 
     #[test]
     fn bundled_syn3a_program_spec_resolves_organism_data() {
@@ -1411,6 +2494,40 @@ mod tests {
     }
 
     #[test]
+    fn bundled_syn3a_process_registry_compiles_from_assets() {
+        let package = bundled_syn3a_genome_asset_package().expect("bundled asset package");
+        let registry = compile_genome_process_registry(&package);
+        let summary = WholeCellGenomeProcessRegistrySummary::from(&registry);
+
+        assert_eq!(registry.organism, "JCVI-syn3A");
+        assert!(summary.species_count > package.proteins.len());
+        assert_eq!(summary.rna_species_count, package.rnas.len());
+        assert_eq!(summary.protein_species_count, package.proteins.len());
+        assert_eq!(summary.complex_species_count, package.complexes.len());
+        assert!(summary.assembly_intermediate_species_count >= package.complexes.len() * 3);
+        assert!(summary.transcription_reaction_count >= package.operons.len());
+        assert!(summary.translation_reaction_count >= package.proteins.len());
+        assert!(summary.assembly_reaction_count >= package.complexes.len() * 4);
+        assert_eq!(summary.turnover_reaction_count, package.complexes.len());
+        assert!(registry
+            .species
+            .iter()
+            .any(|species| species.id == "ribosome_biogenesis_operon_complex_mature"));
+        assert!(registry
+            .species
+            .iter()
+            .any(|species| species.id == "ribosome_biogenesis_operon_complex_subunit_pool"));
+        assert!(registry
+            .reactions
+            .iter()
+            .any(|reaction| reaction.id == "ribosome_biogenesis_operon_complex_maturation"));
+        assert!(registry
+            .reactions
+            .iter()
+            .any(|reaction| reaction.id == "ftsz_ring_polymerization_core_protein_translation"));
+    }
+
+    #[test]
     fn saved_state_json_hydrates_contract_defaults() {
         let spec = bundled_syn3a_program_spec().expect("bundled spec");
         let mut saved = WholeCellSavedState {
@@ -1421,6 +2538,8 @@ mod tests {
             organism_data: spec.organism_data.clone(),
             organism_assets: spec.organism_assets.clone(),
             organism_expression: WholeCellOrganismExpressionState::default(),
+            organism_species: Vec::new(),
+            organism_reactions: Vec::new(),
             complex_assembly: WholeCellComplexAssemblyState::default(),
             named_complexes: Vec::new(),
             config: spec.config.clone(),
@@ -1477,5 +2596,42 @@ mod tests {
         );
         assert!(reparsed.provenance.organism_asset_hash.is_some());
         assert!(reparsed.provenance.run_manifest_hash.is_some());
+    }
+
+    #[test]
+    fn compile_syn3a_bundle_manifest_path_hydrates_program_spec() {
+        let manifest_path = bundle_manifest_path("jcvi_syn3a");
+        let spec =
+            compile_program_spec_from_bundle_manifest_path(&manifest_path).expect("compiled spec");
+        let organism = spec.organism_data.as_ref().expect("compiled organism");
+        let assets = spec.organism_assets.as_ref().expect("compiled assets");
+
+        assert_eq!(organism.organism, "JCVI-syn3A");
+        assert_eq!(assets.proteins.len(), organism.genes.len());
+        assert!(assets.complexes.len() >= organism.transcription_units.len());
+        assert_eq!(
+            spec.provenance.source_dataset.as_deref(),
+            Some("bundled_syn3a_organism_spec")
+        );
+        assert!(spec.provenance.organism_asset_hash.is_some());
+    }
+
+    #[test]
+    fn compile_demo_bundle_manifest_path_from_gff_and_fasta() {
+        let manifest_path = bundle_manifest_path("mgen_minimal_demo");
+        let organism = compile_organism_spec_from_bundle_manifest_path(&manifest_path)
+            .expect("compiled demo organism");
+        let assets_json =
+            compile_genome_asset_package_json_from_bundle_manifest_path(&manifest_path)
+                .expect("compiled demo assets json");
+        let assets =
+            parse_genome_asset_package_json(&assets_json).expect("parsed demo assets package");
+
+        assert_eq!(organism.organism, "Mgen-minimal-demo");
+        assert_eq!(organism.genes.len(), 4);
+        assert_eq!(organism.transcription_units.len(), 3);
+        assert!(organism.chromosome_length_bp > 1000);
+        assert_eq!(assets.proteins.len(), 4);
+        assert!(assets.operons.iter().any(|operon| operon.polycistronic));
     }
 }

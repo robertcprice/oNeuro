@@ -16,6 +16,29 @@ pub enum FluxChannel {
     Waste,
 }
 
+impl FluxChannel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Neutral => "neutral",
+            Self::Substrate => "substrate",
+            Self::Energy => "energy",
+            Self::Biosynthetic => "biosynthetic",
+            Self::Waste => "waste",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_lowercase().as_str() {
+            "neutral" => Some(Self::Neutral),
+            "substrate" => Some(Self::Substrate),
+            "energy" => Some(Self::Energy),
+            "biosynthetic" | "biosynthesis" => Some(Self::Biosynthetic),
+            "waste" => Some(Self::Waste),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ReactionTerm {
     pub species: TerrariumSpecies,
@@ -210,6 +233,26 @@ pub enum SpatialChannel {
     RadialCenterProximity,
     VerticalMidplaneProximity,
     BoundaryProximity,
+}
+
+impl SpatialChannel {
+    pub fn from_name(name: &str) -> Option<Self> {
+        let normalized = name.trim().to_lowercase();
+        if let Some(species_name) = normalized.strip_prefix("species:") {
+            return TerrariumSpecies::from_name(species_name).map(Self::Species);
+        }
+
+        match normalized.as_str() {
+            "hydration" => Some(Self::Hydration),
+            "microbial_activity" | "microbes" => Some(Self::MicrobialActivity),
+            "plant_drive" | "plants" => Some(Self::PlantDrive),
+            "center_proximity" | "center" => Some(Self::CenterProximity),
+            "radial_center_proximity" | "radial_center" => Some(Self::RadialCenterProximity),
+            "vertical_midplane_proximity" | "midplane" => Some(Self::VerticalMidplaneProximity),
+            "boundary_proximity" | "boundary" => Some(Self::BoundaryProximity),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -902,5 +945,22 @@ mod tests {
         assert!(flux.byproduct_load > 0.0);
         assert!(after_glucose < before_glucose);
         assert!(after_co2 > before_co2);
+    }
+
+    #[test]
+    fn declarative_channel_names_parse_cleanly() {
+        assert_eq!(
+            FluxChannel::from_name("biosynthetic"),
+            Some(FluxChannel::Biosynthetic)
+        );
+        assert_eq!(
+            SpatialChannel::from_name("species:oxygen_gas"),
+            Some(SpatialChannel::Species(TerrariumSpecies::OxygenGas))
+        );
+        assert_eq!(
+            SpatialChannel::from_name("vertical_midplane_proximity"),
+            Some(SpatialChannel::VerticalMidplaneProximity)
+        );
+        assert!(SpatialChannel::from_name("unknown_channel").is_none());
     }
 }

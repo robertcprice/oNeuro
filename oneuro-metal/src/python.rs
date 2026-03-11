@@ -36,6 +36,11 @@ use crate::terrarium::{BatchedAtomTerrarium, TerrariumSpecies};
 use crate::terrarium_field::TerrariumSensoryField;
 use crate::types::*;
 use crate::whole_cell::{WholeCellConfig, WholeCellQuantumProfile, WholeCellSimulator};
+use crate::whole_cell_data::{
+    compile_genome_asset_package_json_from_bundle_manifest_path,
+    compile_organism_spec_json_from_bundle_manifest_path,
+    compile_program_spec_json_from_bundle_manifest_path,
+};
 use crate::whole_cell_submodels::{
     LocalMDProbeRequest, Syn3ASubsystemPreset, WholeCellChemistrySite,
 };
@@ -2926,6 +2931,34 @@ impl PyWholeCellSimulator {
                 ..WholeCellConfig::default()
             }),
         }
+    }
+
+    #[staticmethod]
+    fn from_bundle_manifest_path(manifest_path: &str) -> PyResult<Self> {
+        Ok(Self {
+            inner: WholeCellSimulator::from_bundle_manifest_path(manifest_path)
+                .map_err(PyValueError::new_err)?,
+        })
+    }
+
+    #[staticmethod]
+    fn compile_bundle_manifest_program_spec_json(manifest_path: &str) -> PyResult<String> {
+        compile_program_spec_json_from_bundle_manifest_path(manifest_path)
+            .map_err(PyValueError::new_err)
+    }
+
+    #[staticmethod]
+    fn compile_bundle_manifest_organism_spec_json(manifest_path: &str) -> PyResult<String> {
+        compile_organism_spec_json_from_bundle_manifest_path(manifest_path)
+            .map_err(PyValueError::new_err)
+    }
+
+    #[staticmethod]
+    fn compile_bundle_manifest_genome_asset_package_json(
+        manifest_path: &str,
+    ) -> PyResult<String> {
+        compile_genome_asset_package_json_from_bundle_manifest_path(manifest_path)
+            .map_err(PyValueError::new_err)
     }
 
     fn step(&mut self) {

@@ -485,6 +485,8 @@ def test_rust_whole_cell_bundled_spec_and_restart_if_available():
     sim = RustWholeCellSimulator.from_program_spec_json(spec_json)
     summary = sim.organism_summary()
     asset_summary = sim.organism_asset_summary()
+    process_registry_summary = sim.organism_process_registry_summary()
+    process_registry = sim.organism_process_registry()
     profile = sim.organism_profile()
     expression = sim.organism_expression_state()
     complex_assembly = sim.complex_assembly_state()
@@ -506,6 +508,25 @@ def test_rust_whole_cell_bundled_spec_and_restart_if_available():
     assert asset_summary["operon_count"] >= summary["transcription_unit_count"]
     assert asset_summary["protein_count"] == summary["gene_count"]
     assert asset_summary["targeted_complex_count"] >= 4
+    assert process_registry_summary is not None
+    assert process_registry_summary["species_count"] > asset_summary["protein_count"]
+    assert process_registry_summary["rna_species_count"] == asset_summary["rna_count"]
+    assert process_registry_summary["protein_species_count"] == asset_summary["protein_count"]
+    assert process_registry_summary["complex_species_count"] == asset_summary["complex_count"]
+    assert (
+        process_registry_summary["assembly_intermediate_species_count"]
+        >= asset_summary["complex_count"] * 3
+    )
+    assert process_registry_summary["translation_reaction_count"] >= asset_summary["protein_count"]
+    assert process_registry is not None
+    assert any(
+        species["id"] == "ribosome_biogenesis_operon_complex_mature"
+        for species in process_registry["species"]
+    )
+    assert any(
+        reaction["id"] == "ribosome_biogenesis_operon_complex_maturation"
+        for reaction in process_registry["reactions"]
+    )
     assert profile is not None
     assert profile["process_scales"]["translation"] > 0.9
     assert profile["metabolic_burden_scale"] > 0.9
@@ -522,8 +543,12 @@ def test_rust_whole_cell_bundled_spec_and_restart_if_available():
     assert len(named_complexes) == asset_summary["complex_count"]
     assert any(
         state["id"] == "ribosome_biogenesis_operon_complex"
+        and state["subunit_pool"] > 0.0
+        and state["nucleation_intermediate"] > 0.0
+        and state["elongation_intermediate"] > 0.0
         and state["abundance"] > 0.0
         and state["component_satisfaction"] > 0.0
+        and state["assembly_progress"] > 0.0
         for state in named_complexes
     )
     assert restored_complex["ribosome_complexes"] == pytest.approx(
@@ -537,6 +562,17 @@ def test_rust_whole_cell_bundled_spec_and_restart_if_available():
     ) == pytest.approx(
         next(
             state["abundance"]
+            for state in sim.named_complexes_state()
+            if state["id"] == "ribosome_biogenesis_operon_complex"
+        )
+    )
+    assert next(
+        state["subunit_pool"]
+        for state in restored_named_complexes
+        if state["id"] == "ribosome_biogenesis_operon_complex"
+    ) == pytest.approx(
+        next(
+            state["subunit_pool"]
             for state in sim.named_complexes_state()
             if state["id"] == "ribosome_biogenesis_operon_complex"
         )

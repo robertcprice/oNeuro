@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from oneuro.whole_cell import (
+    RustWholeCellSimulator,
     available_bundles,
     compile_named_bundle,
     write_compiled_bundle,
@@ -44,3 +45,21 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     assert Path(written["organism_spec"]).exists()
     assert Path(written["genome_assets"]).exists()
     assert Path(written["summary"]).exists()
+
+
+def test_rust_bundle_manifest_ingestion_if_available():
+    if RustWholeCellSimulator is None:
+        return
+
+    manifest_path = Path(
+        "src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/manifest.json"
+    ).resolve()
+    compiled_spec = RustWholeCellSimulator.compile_bundle_manifest_program_spec_json(
+        str(manifest_path)
+    )
+    sim = RustWholeCellSimulator.from_bundle_manifest_path(str(manifest_path))
+    summary = sim.organism_summary()
+
+    assert "\"Mgen-minimal-demo\"" in compiled_spec
+    assert summary is not None
+    assert summary["organism"] == "Mgen-minimal-demo"

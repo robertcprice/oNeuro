@@ -59,9 +59,11 @@ pub mod terrarium;
 pub mod terrarium_field;
 pub mod terrarium_world;
 pub mod whole_cell;
+pub mod whole_cell_data;
 pub mod whole_cell_submodels;
 
 // ===== High-level orchestration =====
+pub mod atomistic_topology;
 pub mod brain_regions;
 pub mod consciousness;
 pub mod dishbrain_pong;
@@ -97,6 +99,10 @@ pub mod world;
 pub mod python;
 
 // ===== Re-exports =====
+pub use atomistic_topology::{
+    atomistic_assembly_templates, atomistic_template_for_site_name, AtomisticAssemblyTemplate,
+    AtomisticTemplateDescriptor,
+};
 pub use brain_regions::{BrainRegion, RegionalBrain};
 pub use cellular_metabolism::CellularMetabolismSim;
 pub use consciousness::{ConsciousnessMetrics, ConsciousnessMonitor};
@@ -141,8 +147,28 @@ pub use whole_cell::{
     WholeCellBackend, WholeCellConfig, WholeCellQuantumProfile, WholeCellSimulator,
     WholeCellSnapshot,
 };
+pub use whole_cell_data::{
+    bundled_syn3a_genome_asset_package, bundled_syn3a_genome_asset_package_json,
+    bundled_syn3a_organism_spec, bundled_syn3a_organism_spec_json, bundled_syn3a_program_spec,
+    bundled_syn3a_program_spec_json, compile_genome_asset_package, default_syn3a_seed_spec,
+    derive_organism_profile, parse_genome_asset_package_json, parse_organism_spec_json,
+    parse_program_spec_json, parse_saved_state_json, resolve_bundled_genome_asset_package,
+    resolve_bundled_organism_spec, saved_state_to_json, WholeCellAssetClass, WholeCellCheckpoint,
+    WholeCellComplexAssemblyState, WholeCellComplexComponentSpec, WholeCellComplexSpec,
+    WholeCellCompositionPrior, WholeCellGenomeAssetPackage, WholeCellGenomeAssetSummary,
+    WholeCellGenomeFeature, WholeCellGeometryPrior, WholeCellInitialLatticeSpec,
+    WholeCellInitialStateSpec, WholeCellLatticeState, WholeCellLocalChemistryConfig,
+    WholeCellLocalChemistrySpec, WholeCellMoleculePoolSpec, WholeCellOperonSpec,
+    WholeCellOrganismExpressionState, WholeCellOrganismProfile, WholeCellOrganismSpec,
+    WholeCellOrganismSummary, WholeCellProcessWeights, WholeCellProgramSpec,
+    WholeCellProteinProductSpec, WholeCellRnaProductSpec, WholeCellSavedCoreState,
+    WholeCellSavedState, WholeCellSeedSpec, WholeCellTranscriptionUnitSpec,
+    WholeCellTranscriptionUnitState,
+};
 pub use whole_cell_submodels::{
-    LocalChemistryReport, LocalChemistrySiteReport, LocalMDProbeReport, LocalMDProbeRequest,
-    ScheduledSubsystemProbe, Syn3ASubsystemPreset, WholeCellChemistryBridge,
-    WholeCellChemistrySite, WholeCellSubsystemState,
+    default_whole_cell_derivation_calibration, LocalChemistryReport, LocalChemistrySiteReport,
+    LocalMDProbeReport, LocalMDProbeRequest, ScheduledSubsystemProbe, Syn3ASubsystemPreset,
+    WholeCellChemistryBridge, WholeCellChemistrySite, WholeCellDerivationCalibration,
+    WholeCellDerivationCalibrationFit, WholeCellDerivationCalibrationSample,
+    WholeCellSubsystemState,
 };

@@ -1,0 +1,37 @@
+{
+  "gains": {
+    "context_occupancy_gain": 1.0,
+    "context_stability_gain": 1.0,
+    "context_persistence_gain": 1.0,
+    "context_focus_gain": 1.0,
+    "context_turnover_gain": 1.0,
+    "context_probe_complexity_gain": 1.0,
+    "activity_resource_gain": 1.0,
+    "activity_focus_gain": 1.0,
+    "activity_structural_gain": 1.0,
+    "activity_state_gain": 1.0,
+    "activity_stress_gain": 1.0,
+    "support_bias_gain": 1.0,
+    "support_weight_gain": 1.0,
+    "support_turnover_gain": 1.0,
+    "scale_weight_gain": 1.0,
+    "scale_penalty_gain": 1.0,
+    "scale_structural_gain": 1.0,
+    "reaction_focus_gain": 1.0,
+    "reaction_channel_gain": 1.0,
+    "reaction_resource_gain": 1.0,
+    "reaction_spatial_gain": 1.0,
+    "reaction_structural_gain": 1.0
+  },
+  "search": {
+    "step_scales": [0.24, 0.12, 0.06, 0.03],
+    "gain_min": 0.4,
+    "gain_max": 1.8
+  },
+  "objective": {
+    "support": 1.0,
+    "scale": 1.25,
+    "demand": 0.8,
+    "activity": 0.5
+  }
+}

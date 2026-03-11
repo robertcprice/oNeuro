@@ -1,0 +1,251 @@
+[
+  {
+    "preset": "atp_synthase_membrane_band",
+    "chemistry_site": "atp_synthase_band",
+    "default_interval_steps": 12,
+    "default_probe_request": {
+      "site": "atp_synthase_band",
+      "n_atoms": 24,
+      "steps": 12,
+      "dt_ps": 0.001,
+      "box_size_angstrom": 16.0,
+      "temperature_k": 310.0
+    },
+    "localization": {
+      "name": "atp_membrane_localization",
+      "patch_radius": 2,
+      "cues": [
+        { "channel": "boundary_proximity", "weight": 0.72, "half_saturation": 1.0 },
+        { "channel": "radial_center_proximity", "weight": 0.46, "half_saturation": 1.0 },
+        { "channel": "species:oxygen_gas", "weight": 0.30, "half_saturation": 0.05 },
+        { "channel": "species:atp_flux", "weight": 0.18, "half_saturation": 0.04 },
+        { "channel": "hydration", "weight": -0.12, "half_saturation": 1.0 }
+      ],
+      "persistence_weight": 0.16,
+      "exclusion_padding": 1.0,
+      "exclusion_strength": 0.95
+    },
+    "assembly": {
+      "name": "atp_membrane_assembly",
+      "components": [
+        { "species": "oxygen_gas", "weight": 1.0, "half_saturation": 0.05 },
+        { "species": "atp_flux", "weight": 0.9, "half_saturation": 0.04 },
+        { "species": "phosphorus", "weight": 0.6, "half_saturation": 0.03 },
+        { "species": "glucose", "weight": 0.3, "half_saturation": 0.08 }
+      ],
+      "target_occupancy": 1.08,
+      "stability_scale": 0.46,
+      "baseline_turnover": 0.08
+    },
+    "process_focus": {
+      "energy": 1.0,
+      "translation": 0.08,
+      "replication": 0.04,
+      "segregation": 0.04,
+      "membrane": 0.86,
+      "constriction": 0.05
+    },
+    "reaction_program": [
+      {
+        "name": "oxidative_energy_transfer",
+        "substrates": [
+          { "species": "oxygen_gas", "stoich": 1.0, "channel": "substrate" },
+          { "species": "glucose", "stoich": 0.35, "channel": "substrate" }
+        ],
+        "products": [
+          { "species": "atp_flux", "stoich": 0.50, "channel": "energy" },
+          { "species": "proton", "stoich": 0.08, "channel": "waste" }
+        ],
+        "law": { "base_rate": 0.012 }
+      }
+    ]
+  },
+  {
+    "preset": "ribosome_polysome_cluster",
+    "chemistry_site": "ribosome_cluster",
+    "default_interval_steps": 10,
+    "default_probe_request": {
+      "site": "ribosome_cluster",
+      "n_atoms": 36,
+      "steps": 14,
+      "dt_ps": 0.001,
+      "box_size_angstrom": 18.0,
+      "temperature_k": 310.0
+    },
+    "localization": {
+      "name": "ribosome_cluster_localization",
+      "patch_radius": 2,
+      "cues": [
+        { "channel": "center_proximity", "weight": 0.62, "half_saturation": 1.0 },
+        { "channel": "species:glucose", "weight": 0.26, "half_saturation": 0.05 },
+        { "channel": "species:ammonium", "weight": 0.24, "half_saturation": 0.04 },
+        { "channel": "species:atp_flux", "weight": 0.18, "half_saturation": 0.04 },
+        { "channel": "boundary_proximity", "weight": -0.16, "half_saturation": 1.0 }
+      ],
+      "persistence_weight": 0.20,
+      "exclusion_padding": 1.0,
+      "exclusion_strength": 0.90
+    },
+    "assembly": {
+      "name": "ribosome_translation_assembly",
+      "components": [
+        { "species": "ammonium", "weight": 1.0, "half_saturation": 0.05 },
+        { "species": "atp_flux", "weight": 0.9, "half_saturation": 0.04 },
+        { "species": "glucose", "weight": 0.7, "half_saturation": 0.06 },
+        { "species": "nitrate", "weight": 0.6, "half_saturation": 0.05 }
+      ],
+      "target_occupancy": 1.05,
+      "stability_scale": 0.44,
+      "baseline_turnover": 0.10
+    },
+    "process_focus": {
+      "energy": 0.24,
+      "translation": 1.0,
+      "replication": 0.08,
+      "segregation": 0.04,
+      "membrane": 0.08,
+      "constriction": 0.04
+    },
+    "reaction_program": [
+      {
+        "name": "translation_polymerization",
+        "substrates": [
+          { "species": "glucose", "stoich": 0.95, "channel": "substrate" },
+          { "species": "ammonium", "stoich": 0.72, "channel": "biosynthetic" },
+          { "species": "atp_flux", "stoich": 0.82, "channel": "energy" }
+        ],
+        "products": [
+          { "species": "carbon_dioxide", "stoich": 0.20, "channel": "waste" },
+          { "species": "proton", "stoich": 0.06, "channel": "waste" }
+        ],
+        "law": { "base_rate": 0.014 }
+      }
+    ]
+  },
+  {
+    "preset": "replisome_track",
+    "chemistry_site": "chromosome_track",
+    "default_interval_steps": 14,
+    "default_probe_request": {
+      "site": "chromosome_track",
+      "n_atoms": 28,
+      "steps": 12,
+      "dt_ps": 0.001,
+      "box_size_angstrom": 16.0,
+      "temperature_k": 310.0
+    },
+    "localization": {
+      "name": "replisome_track_localization",
+      "patch_radius": 2,
+      "cues": [
+        { "channel": "center_proximity", "weight": 0.54, "half_saturation": 1.0 },
+        { "channel": "species:nitrate", "weight": 0.26, "half_saturation": 0.04 },
+        { "channel": "species:atp_flux", "weight": 0.20, "half_saturation": 0.04 },
+        { "channel": "species:glucose", "weight": 0.12, "half_saturation": 0.05 },
+        { "channel": "boundary_proximity", "weight": -0.14, "half_saturation": 1.0 }
+      ],
+      "persistence_weight": 0.22,
+      "exclusion_padding": 1.0,
+      "exclusion_strength": 0.96
+    },
+    "assembly": {
+      "name": "replisome_polymer_assembly",
+      "components": [
+        { "species": "nitrate", "weight": 1.0, "half_saturation": 0.05 },
+        { "species": "atp_flux", "weight": 0.8, "half_saturation": 0.04 },
+        { "species": "glucose", "weight": 0.5, "half_saturation": 0.08 },
+        { "species": "ammonium", "weight": 0.3, "half_saturation": 0.06 }
+      ],
+      "target_occupancy": 1.04,
+      "stability_scale": 0.45,
+      "baseline_turnover": 0.08
+    },
+    "process_focus": {
+      "energy": 0.20,
+      "translation": 0.06,
+      "replication": 1.0,
+      "segregation": 0.48,
+      "membrane": 0.04,
+      "constriction": 0.03
+    },
+    "reaction_program": [
+      {
+        "name": "nucleotide_polymerization",
+        "substrates": [
+          { "species": "nitrate", "stoich": 1.0, "channel": "biosynthetic" },
+          { "species": "atp_flux", "stoich": 0.72, "channel": "energy" },
+          { "species": "glucose", "stoich": 0.30, "channel": "substrate" }
+        ],
+        "products": [
+          { "species": "carbon_dioxide", "stoich": 0.10, "channel": "waste" },
+          { "species": "proton", "stoich": 0.05, "channel": "waste" }
+        ],
+        "law": { "base_rate": 0.016 }
+      }
+    ]
+  },
+  {
+    "preset": "ftsz_septum_ring",
+    "chemistry_site": "septum_ring",
+    "default_interval_steps": 8,
+    "default_probe_request": {
+      "site": "septum_ring",
+      "n_atoms": 32,
+      "steps": 14,
+      "dt_ps": 0.001,
+      "box_size_angstrom": 17.0,
+      "temperature_k": 310.0
+    },
+    "localization": {
+      "name": "septum_ring_localization",
+      "patch_radius": 3,
+      "cues": [
+        { "channel": "vertical_midplane_proximity", "weight": 0.64, "half_saturation": 1.0 },
+        { "channel": "radial_center_proximity", "weight": 0.46, "half_saturation": 1.0 },
+        { "channel": "species:phosphorus", "weight": 0.18, "half_saturation": 0.03 },
+        { "channel": "species:atp_flux", "weight": 0.12, "half_saturation": 0.04 },
+        { "channel": "species:glucose", "weight": 0.10, "half_saturation": 0.05 },
+        { "channel": "boundary_proximity", "weight": -0.12, "half_saturation": 1.0 }
+      ],
+      "persistence_weight": 0.24,
+      "exclusion_padding": 1.4,
+      "exclusion_strength": 1.05
+    },
+    "assembly": {
+      "name": "septum_membrane_assembly",
+      "components": [
+        { "species": "phosphorus", "weight": 1.0, "half_saturation": 0.03 },
+        { "species": "atp_flux", "weight": 0.8, "half_saturation": 0.04 },
+        { "species": "glucose", "weight": 0.6, "half_saturation": 0.06 },
+        { "species": "oxygen_gas", "weight": 0.4, "half_saturation": 0.06 }
+      ],
+      "target_occupancy": 1.10,
+      "stability_scale": 0.47,
+      "baseline_turnover": 0.09
+    },
+    "process_focus": {
+      "energy": 0.18,
+      "translation": 0.38,
+      "replication": 0.04,
+      "segregation": 0.06,
+      "membrane": 0.86,
+      "constriction": 1.0
+    },
+    "reaction_program": [
+      {
+        "name": "membrane_constriction_assembly",
+        "substrates": [
+          { "species": "phosphorus", "stoich": 0.92, "channel": "biosynthetic" },
+          { "species": "atp_flux", "stoich": 0.80, "channel": "energy" },
+          { "species": "glucose", "stoich": 0.52, "channel": "substrate" },
+          { "species": "oxygen_gas", "stoich": 0.26, "channel": "substrate" }
+        ],
+        "products": [
+          { "species": "proton", "stoich": 0.10, "channel": "waste" },
+          { "species": "carbon_dioxide", "stoich": 0.08, "channel": "waste" }
+        ],
+        "law": { "base_rate": 0.012 }
+      }
+    ]
+  }
+]

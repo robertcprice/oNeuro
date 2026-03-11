@@ -51,6 +51,24 @@ pub enum Element {
 }
 
 impl Element {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_ascii_lowercase().as_str() {
+            "h" | "hydrogen" => Some(Self::H),
+            "c" | "carbon" => Some(Self::C),
+            "n" | "nitrogen" => Some(Self::N),
+            "o" | "oxygen" => Some(Self::O),
+            "s" | "sulfur" => Some(Self::S),
+            "p" | "phosphorus" => Some(Self::P),
+            "fe" | "iron" => Some(Self::Fe),
+            "ca" | "calcium" => Some(Self::Ca),
+            "mg" | "magnesium" => Some(Self::Mg),
+            "na" | "sodium" => Some(Self::Na),
+            "k" | "potassium" => Some(Self::K),
+            "cl" | "chlorine" => Some(Self::Cl),
+            _ => None,
+        }
+    }
+
     /// Van der Waals radius (Å) and well depth (kcal/mol).
     pub fn lj_params(&self) -> (f32, f32) {
         match self {

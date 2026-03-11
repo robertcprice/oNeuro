@@ -66,3 +66,28 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `native Rust ingestion of these source bundles is still the next step; the current compiler is a POC that targets the frozen Rust contract`
+
+### 2026-03-11 - Phase 1 / Native Bundle Ingestion Slice
+
+- Summary:
+  - added native Rust ingestion for source-bundle manifests so the whole-cell runtime can compile organism specs, program specs, and genome asset packages directly from declared bundle sources, and exposed that path through the PyO3 simulator bindings
+  - tracked the bundled Syn3A native reference/spec JSON assets required by clean Rust builds
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/specs/whole_cell_atomistic_templates.json`
+  - `oneuro-metal/specs/whole_cell_derivation_calibration.json`
+  - `oneuro-metal/specs/whole_cell_subsystems.json`
+  - `oneuro-metal/specs/whole_cell_syn3a_organism.json`
+  - `oneuro-metal/specs/whole_cell_syn3a_reference.json`
+  - `oneuro-metal/src/python.rs`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && PYTHONPATH=src pytest -q tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `native source-bundle ingestion is in place; the next execution slice is compiling richer explicit species and reaction registries from these bundle manifests`
