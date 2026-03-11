@@ -438,3 +438,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the runtime now shares one locality-control path for new and legacy localized support reactions, but the remaining Phase 7 work is broader chromosome-local execution and eventually dropping the legacy membrane-only reaction enums once saved-state compatibility is formally versioned`
+
+### 2026-03-11 - Phase 7 / Localized Assembly Energy Slice
+
+- Summary:
+  - added explicit ATP consumption to compiled subunit-pool formation, nucleation, elongation, maturation, and turnover reactions so complex assembly/disassembly no longer bypasses the localized support chemistry that was added in the earlier Phase 7 slices
+  - routed those new ATP reactants through the localized pool compiler, which makes chromosome-local assembly in the bundled Syn3A registry consume `pool_nucleoid_track_atp` rather than falling back to the global ATP pool
+  - revalidated the registry, Rust runtime, and Python whole-cell bindings after the assembly-energy change so the new local-energy dependency is now part of the tested compiled execution path
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q bundled_syn3a_process_registry_compiles_from_assets --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `compiled assembly now consumes localized ATP, but broader chromosome-local execution still needs more chromosome-coupled reactions and solver updates to depend on compiled local pools rather than global scalar fallbacks`

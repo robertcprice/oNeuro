@@ -2985,6 +2985,45 @@ pub fn compile_genome_process_registry(
         let nucleation_id = complex_stage_species_id(&complex.id, "nucleation");
         let elongation_id = complex_stage_species_id(&complex.id, "elongation");
         let mature_id = complex_stage_species_id(&complex.id, "mature");
+        let assembly_energy_signal = (total_stoichiometry.max(1.0)
+            * (1.0 + 0.35 * complex.basal_abundance.max(0.1).sqrt()))
+        .max(1.0);
+        let localized_assembly_atp_pool = atp_pool.as_ref().map(|species_id| {
+            localized_pool_participant(
+                species_id,
+                WholeCellBulkField::ATP,
+                complex_spatial_scope,
+                complex_patch_domain,
+                assembly_energy_signal,
+                complex.asset_class,
+                &complex.subsystem_targets,
+            )
+        });
+        let assembly_adp_pool = adp_pool.clone();
+        let mut subunit_pool_reactants = complex
+            .components
+            .iter()
+            .map(|component| WholeCellReactionParticipantSpec {
+                species_id: component.protein_id.clone(),
+                stoichiometry: component.stoichiometry.max(1) as f32,
+            })
+            .collect::<Vec<_>>();
+        if let Some(species_id) = localized_assembly_atp_pool.as_ref() {
+            subunit_pool_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.16 * total_stoichiometry.sqrt()).clamp(0.12, 0.90),
+            });
+        }
+        let mut subunit_pool_products = vec![WholeCellReactionParticipantSpec {
+            species_id: subunit_pool_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = assembly_adp_pool.as_ref() {
+            subunit_pool_products.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.12 * total_stoichiometry.sqrt()).clamp(0.08, 0.75),
+            });
+        }
         reactions.push(WholeCellReactionSpec {
             id: format!(
                 "{}_subunit_pool_formation",
@@ -2996,22 +3035,32 @@ pub fn compile_genome_process_registry(
             nominal_rate: (0.05 + 0.015 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
             operon: Some(complex.operon.clone()),
-            reactants: complex
-                .components
-                .iter()
-                .map(|component| WholeCellReactionParticipantSpec {
-                    species_id: component.protein_id.clone(),
-                    stoichiometry: component.stoichiometry.max(1) as f32,
-                })
-                .collect(),
-            products: vec![WholeCellReactionParticipantSpec {
-                species_id: subunit_pool_id.clone(),
-                stoichiometry: 1.0,
-            }],
+            reactants: subunit_pool_reactants,
+            products: subunit_pool_products,
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
         });
+        let mut nucleation_reactants = vec![WholeCellReactionParticipantSpec {
+            species_id: subunit_pool_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = localized_assembly_atp_pool.as_ref() {
+            nucleation_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.18 * total_stoichiometry.sqrt()).clamp(0.14, 1.0),
+            });
+        }
+        let mut nucleation_products = vec![WholeCellReactionParticipantSpec {
+            species_id: nucleation_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = assembly_adp_pool.as_ref() {
+            nucleation_products.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.14 * total_stoichiometry.sqrt()).clamp(0.10, 0.85),
+            });
+        }
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_nucleation", canonical_species_fragment(&complex.id)),
             name: format!("{} nucleation", complex.name),
@@ -3020,18 +3069,38 @@ pub fn compile_genome_process_registry(
             nominal_rate: (0.03 + 0.010 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
             operon: Some(complex.operon.clone()),
-            reactants: vec![WholeCellReactionParticipantSpec {
-                species_id: subunit_pool_id.clone(),
-                stoichiometry: 1.0,
-            }],
-            products: vec![WholeCellReactionParticipantSpec {
-                species_id: nucleation_id.clone(),
-                stoichiometry: 1.0,
-            }],
+            reactants: nucleation_reactants,
+            products: nucleation_products,
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
         });
+        let mut elongation_reactants = vec![
+            WholeCellReactionParticipantSpec {
+                species_id: nucleation_id.clone(),
+                stoichiometry: 1.0,
+            },
+            WholeCellReactionParticipantSpec {
+                species_id: subunit_pool_id.clone(),
+                stoichiometry: 0.5 * total_stoichiometry.max(1.0),
+            },
+        ];
+        if let Some(species_id) = localized_assembly_atp_pool.as_ref() {
+            elongation_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.20 * total_stoichiometry.sqrt()).clamp(0.16, 1.2),
+            });
+        }
+        let mut elongation_products = vec![WholeCellReactionParticipantSpec {
+            species_id: elongation_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = assembly_adp_pool.as_ref() {
+            elongation_products.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.16 * total_stoichiometry.sqrt()).clamp(0.12, 0.95),
+            });
+        }
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_elongation", canonical_species_fragment(&complex.id)),
             name: format!("{} elongation", complex.name),
@@ -3040,24 +3109,34 @@ pub fn compile_genome_process_registry(
             nominal_rate: (0.04 + 0.012 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
             operon: Some(complex.operon.clone()),
-            reactants: vec![
-                WholeCellReactionParticipantSpec {
-                    species_id: nucleation_id.clone(),
-                    stoichiometry: 1.0,
-                },
-                WholeCellReactionParticipantSpec {
-                    species_id: subunit_pool_id.clone(),
-                    stoichiometry: 0.5 * total_stoichiometry.max(1.0),
-                },
-            ],
-            products: vec![WholeCellReactionParticipantSpec {
-                species_id: elongation_id.clone(),
-                stoichiometry: 1.0,
-            }],
+            reactants: elongation_reactants,
+            products: elongation_products,
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
         });
+        let mut maturation_reactants = vec![WholeCellReactionParticipantSpec {
+            species_id: elongation_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = localized_assembly_atp_pool.as_ref() {
+            maturation_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.14 + 0.06 * complex.basal_abundance.max(0.1).sqrt())
+                    .clamp(0.12, 1.0),
+            });
+        }
+        let mut maturation_products = vec![WholeCellReactionParticipantSpec {
+            species_id: mature_id.clone(),
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = assembly_adp_pool.as_ref() {
+            maturation_products.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.10 + 0.04 * complex.basal_abundance.max(0.1).sqrt())
+                    .clamp(0.08, 0.80),
+            });
+        }
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_maturation", canonical_species_fragment(&complex.id)),
             name: format!("{} maturation", complex.name),
@@ -3066,14 +3145,8 @@ pub fn compile_genome_process_registry(
             nominal_rate: (0.05 + 0.015 * complex.basal_abundance.max(0.1).sqrt()).clamp(0.01, 8.0),
             catalyst: None,
             operon: Some(complex.operon.clone()),
-            reactants: vec![WholeCellReactionParticipantSpec {
-                species_id: elongation_id.clone(),
-                stoichiometry: 1.0,
-            }],
-            products: vec![WholeCellReactionParticipantSpec {
-                species_id: mature_id.clone(),
-                stoichiometry: 1.0,
-            }],
+            reactants: maturation_reactants,
+            products: maturation_products,
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
@@ -3134,6 +3207,26 @@ pub fn compile_genome_process_registry(
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
         });
+        let mut turnover_reactants = vec![WholeCellReactionParticipantSpec {
+            species_id: mature_id,
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = localized_assembly_atp_pool.as_ref() {
+            turnover_reactants.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.10 * total_stoichiometry.sqrt()).clamp(0.06, 0.60),
+            });
+        }
+        let mut turnover_products = vec![WholeCellReactionParticipantSpec {
+            species_id: subunit_pool_id,
+            stoichiometry: 1.0,
+        }];
+        if let Some(species_id) = assembly_adp_pool.as_ref() {
+            turnover_products.push(WholeCellReactionParticipantSpec {
+                species_id: species_id.clone(),
+                stoichiometry: (0.08 * total_stoichiometry.sqrt()).clamp(0.05, 0.45),
+            });
+        }
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_turnover", canonical_species_fragment(&complex.id)),
             name: format!("{} turnover", complex.name),
@@ -3142,14 +3235,8 @@ pub fn compile_genome_process_registry(
             nominal_rate: (0.02 + 0.010 * total_stoichiometry.sqrt()).clamp(0.01, 8.0),
             catalyst: None,
             operon: Some(complex.operon.clone()),
-            reactants: vec![WholeCellReactionParticipantSpec {
-                species_id: mature_id,
-                stoichiometry: 1.0,
-            }],
-            products: vec![WholeCellReactionParticipantSpec {
-                species_id: subunit_pool_id,
-                stoichiometry: 1.0,
-            }],
+            reactants: turnover_reactants,
+            products: turnover_products,
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
@@ -4229,6 +4316,20 @@ mod tests {
         assert!(registry.reactions.iter().any(|reaction| {
             reaction.reaction_class == WholeCellReactionClass::LocalizedPoolTurnover
                 && reaction.patch_domain == WholeCellPatchDomain::NucleoidTrack
+        }));
+        assert!(registry.reactions.iter().any(|reaction| {
+            matches!(
+                reaction.reaction_class,
+                WholeCellReactionClass::SubunitPoolFormation
+                    | WholeCellReactionClass::ComplexNucleation
+                    | WholeCellReactionClass::ComplexElongation
+                    | WholeCellReactionClass::ComplexMaturation
+                    | WholeCellReactionClass::ComplexTurnover
+            ) && reaction.patch_domain == WholeCellPatchDomain::NucleoidTrack
+                && reaction
+                    .reactants
+                    .iter()
+                    .any(|participant| participant.species_id == "pool_nucleoid_track_atp")
         }));
     }
 
