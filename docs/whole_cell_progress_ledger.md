@@ -480,3 +480,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `chromosome-coupled expression now reads nucleoid-local ATP and nucleotide state, but more chromosome-linked reactions still need to move onto compiled local pools and away from residual global scalar support paths`
+
+### 2026-03-11 - Phase 7 / Chromosome Runtime Local Support Slice
+
+- Summary:
+  - moved chromosome initiation and fork-progression support further onto local chemistry by adding reusable `chromosome_local_energy_support()` and `chromosome_local_nucleotide_support()` helpers and blending them directly into `advance_chromosome_state()`
+  - removed the unconditional minimum 1 bp fork crawl when `replication_drive > 0`, so fork motion can now actually stall under poor local nucleoid ATP/nucleotide support instead of advancing through starvation by hardcoded fallback
+  - added a chromosome-runtime regression that redistributes ATP and nucleotides into nucleoid versus pole voxels and verifies that the nucleoid-loaded state receives stronger chromosome-local support and a stronger fork-initiation response
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_nucleoid_localization_biases_chromosome_progress --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_chromosome_state_tracks_forks_loci_and_restart --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_head_on_transcription_increases_chromosome_collision_pressure --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `chromosome runtime now responds more directly to local nucleoid chemistry, but fork and locus behavior still use coarse whole-nucleoid averages rather than per-domain compiled local pools and domain-resolved chromosome chemistry`

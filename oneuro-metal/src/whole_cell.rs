@@ -2463,11 +2463,23 @@ impl WholeCellSimulator {
         let genome_bp = state.chromosome_length_bp.max(1);
         let dt_scale = (dt / self.config.dt_ms.max(0.05)).clamp(0.5, 6.0);
         let crowding = self.organism_expression.crowding_penalty.clamp(0.65, 1.10);
+        let chromosome_local_energy_support = self.chromosome_local_energy_support();
+        let chromosome_local_nucleotide_support = self.chromosome_local_nucleotide_support();
+        let chromosome_resource_support = Self::finite_scale(
+            0.44 * chromosome_local_nucleotide_support
+                + 0.32 * chromosome_local_energy_support
+                + 0.14 * crowding
+                + 0.10 * self.organism_expression.process_scales.replication.max(0.0),
+            1.0,
+            0.45,
+            1.65,
+        );
         let initiation_support = Self::finite_scale(
             0.40 * Self::saturating_signal(self.dnaa, 64.0)
-                + 0.24 * self.organism_expression.nucleotide_support
-                + 0.18 * crowding
-                + 0.18 * Self::saturating_signal(self.complex_assembly.replisome_complexes, 16.0),
+                + 0.20 * chromosome_local_nucleotide_support
+                + 0.16 * chromosome_local_energy_support
+                + 0.12 * crowding
+                + 0.12 * Self::saturating_signal(self.complex_assembly.replisome_complexes, 16.0),
             1.0,
             0.40,
             1.60,
@@ -2507,24 +2519,30 @@ impl WholeCellSimulator {
             }
             let collision_pressure =
                 self.chromosome_collision_pressure(fork.direction, fork.position_bp, genome_bp);
-            let pause_pressure = (0.52 * collision_pressure
-                + 0.22 * (1.0 - crowding).max(0.0)
-                + 0.26 * (1.0 - self.organism_expression.nucleotide_support).max(0.0))
+            let pause_pressure = (0.46 * collision_pressure
+                + 0.18 * (1.0 - crowding).max(0.0)
+                + 0.20 * (1.0 - chromosome_local_nucleotide_support).max(0.0)
+                + 0.16 * (1.0 - chromosome_local_energy_support).max(0.0))
             .clamp(0.0, 1.5);
             let paused = pause_pressure > 0.85;
             let progress_scale = if paused {
                 0.18
             } else {
                 (1.0 - 0.70 * pause_pressure).clamp(0.12, 1.0)
-            };
+            } * chromosome_resource_support.clamp(0.35, 1.30);
             let raw_delta = (0.5
                 * replication_drive.max(0.0)
                 * self.organism_expression.process_scales.replication.max(0.1)
                 * progress_scale
                 * dt_scale)
                 .round();
+            let minimal_progress_allowed = replication_drive > 0.0
+                && !paused
+                && chromosome_resource_support > 0.58
+                && chromosome_local_nucleotide_support > 0.55
+                && chromosome_local_energy_support > 0.55;
             let delta_bp = if raw_delta <= 0.0 {
-                u32::from(replication_drive > 0.0)
+                u32::from(minimal_progress_allowed)
             } else {
                 raw_delta as u32
             };
@@ -7470,6 +7488,28 @@ impl WholeCellSimulator {
         )
     }
 
+    fn chromosome_local_energy_support(&self) -> f32 {
+        Self::finite_scale(
+            0.56 * Self::saturating_signal(self.localized_nucleoid_atp_pool_mm(), 0.90)
+                + 0.24 * self.organism_expression.energy_support
+                + 0.20 * self.chemistry_report.atp_support,
+            1.0,
+            0.50,
+            1.70,
+        )
+    }
+
+    fn chromosome_local_nucleotide_support(&self) -> f32 {
+        Self::finite_scale(
+            0.58 * Self::saturating_signal(self.localized_nucleotide_pool_mm(), 0.55)
+                + 0.24 * self.organism_expression.nucleotide_support
+                + 0.18 * self.chemistry_report.nucleotide_support,
+            1.0,
+            0.50,
+            1.70,
+        )
+    }
+
     fn localized_membrane_precursor_pool_mm(&self) -> f32 {
         0.55 * self.spatial_species_mean(
             IntracellularSpecies::MembranePrecursors,
@@ -9408,6 +9448,81 @@ mod tests {
         );
         assert!(nucleoid_unit.support_level > pole_unit.support_level);
         assert!(nucleoid_unit.effective_activity > pole_unit.effective_activity);
+    }
+
+    #[test]
+    fn test_nucleoid_localization_biases_chromosome_progress() {
+        let mut nucleoid_loaded =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let mut pole_loaded =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        for sim in [&mut nucleoid_loaded, &mut pole_loaded] {
+            sim.dnaa = 72.0;
+            sim.complex_assembly.replisome_complexes = 12.0;
+            sim.chemistry_report.atp_support = 0.20;
+            sim.chemistry_report.nucleotide_support = 0.15;
+            sim.chromosome_state.replicated_bp = 0;
+            sim.chromosome_state.forks.clear();
+            sim.chromosome_state.initiation_potential = 0.30;
+            sim.chromosome_state = sim.normalize_chromosome_state(sim.chromosome_state.clone());
+            sim.synchronize_chromosome_summary();
+        }
+
+        let nucleoid_weights = nucleoid_loaded
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::NucleoidOccupancy);
+        let pole_weights: Vec<f32> = nucleoid_weights
+            .iter()
+            .map(|weight| (1.0 - *weight).max(0.02))
+            .collect();
+        let nucleoid_atp = distribute_total_by_weights(&nucleoid_weights, 1.10);
+        let pole_atp = distribute_total_by_weights(&pole_weights, 1.10);
+        let nucleoid_nucleotides = distribute_total_by_weights(&nucleoid_weights, 0.80);
+        let pole_nucleotides = distribute_total_by_weights(&pole_weights, 0.80);
+
+        nucleoid_loaded
+            .lattice
+            .set_species(IntracellularSpecies::ATP, &nucleoid_atp)
+            .expect("nucleoid-targeted ATP");
+        pole_loaded
+            .lattice
+            .set_species(IntracellularSpecies::ATP, &pole_atp)
+            .expect("pole-targeted ATP");
+        nucleoid_loaded
+            .lattice
+            .set_species(IntracellularSpecies::Nucleotides, &nucleoid_nucleotides)
+            .expect("nucleoid-targeted nucleotides");
+        pole_loaded
+            .lattice
+            .set_species(IntracellularSpecies::Nucleotides, &pole_nucleotides)
+            .expect("pole-targeted nucleotides");
+        nucleoid_loaded.sync_from_lattice();
+        pole_loaded.sync_from_lattice();
+
+        nucleoid_loaded.refresh_organism_expression_state();
+        pole_loaded.refresh_organism_expression_state();
+        nucleoid_loaded.advance_chromosome_state(nucleoid_loaded.config.dt_ms, 3.5, 0.5);
+        pole_loaded.advance_chromosome_state(pole_loaded.config.dt_ms, 3.5, 0.5);
+
+        let nucleoid_state = nucleoid_loaded.chromosome_state();
+        let pole_state = pole_loaded.chromosome_state();
+
+        assert!(
+            nucleoid_loaded.chromosome_local_energy_support()
+                > pole_loaded.chromosome_local_energy_support()
+        );
+        assert!(
+            nucleoid_loaded.chromosome_local_nucleotide_support()
+                > pole_loaded.chromosome_local_nucleotide_support()
+        );
+        assert!(
+            nucleoid_state.initiation_potential > pole_state.initiation_potential,
+            "initiation nucleoid={} pole={}",
+            nucleoid_state.initiation_potential,
+            pole_state.initiation_potential
+        );
+        assert!(nucleoid_state.initiation_events >= pole_state.initiation_events);
+        assert!(nucleoid_state.forks.len() >= pole_state.forks.len());
     }
 
     #[test]
