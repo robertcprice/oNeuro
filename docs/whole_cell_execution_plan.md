@@ -2,416 +2,779 @@
 
 ## Purpose
 
-This is the execution-grade plan from the current `oNeuro` state to a genome-explicit, chemically explicit, multiscale microbial simulator with native local atomistic refinement.
+This is the single execution document for taking `oNeuro` from its current Rust-first whole-cell runtime to a genome-explicit, chemistry-explicit, atomistically grounded microbial simulator.
 
-This document is meant to stop the stop-and-go loop.
+This document exists to end the stop-and-go loop.
 
-- Work should proceed through these phases in order.
-- Do not stop after each substep.
+- Work should proceed through the phases and work packages below without stopping after every substep.
 - Stop only for a real blocker:
-  - missing licensed data
+  - missing licensed or legally redistributable data
   - impossible hardware assumption
   - contradictory biological target
   - architecture decision that would permanently narrow the system
 
-## Current Starting Point
+## Target End State
 
-What already exists:
-
-- Rust whole-cell runtime in [oneuro-metal/src/whole_cell.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell.rs)
-- Whole-cell program/state data model in [oneuro-metal/src/whole_cell_data.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_data.rs)
-- Whole-cell chemistry/assembly/subsystem bridge in [oneuro-metal/src/whole_cell_submodels.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_submodels.rs)
-- Local atomistic topology templates in [oneuro-metal/src/atomistic_topology.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/atomistic_topology.rs)
-- Bundled Syn3A program and organism specs in:
-  - [whole_cell_syn3a_reference.json](/Users/bobbyprice/projects/oNeuro/oneuro-metal/specs/whole_cell_syn3a_reference.json)
-  - [whole_cell_syn3a_organism.json](/Users/bobbyprice/projects/oNeuro/oneuro-metal/specs/whole_cell_syn3a_organism.json)
-- Existing strategic docs in:
-  - [whole_cell_strategy.md](/Users/bobbyprice/projects/oNeuro/docs/whole_cell_strategy.md)
-  - [whole_cell_atomic_roadmap.md](/Users/bobbyprice/projects/oNeuro/docs/whole_cell_atomic_roadmap.md)
-  - [whole_cell_mc4d_gap.md](/Users/bobbyprice/projects/oNeuro/docs/whole_cell_mc4d_gap.md)
-
-What does not exist yet:
-
-- full genome-compiled organism asset pipeline from real source annotations
-- explicit global species/reaction registry driving the full cell
-- explicit chromosome polymer mechanics at the fidelity needed for parity
-- native whole-cell multirate scheduler with explicit solver clocks
-- real atomistic subsystem extraction from live whole-cell state
-- calibration and validation stack strong enough for MC4D-level claims
-
-## Final Target
-
-The target is not “simulate every atom in the whole cell at all times.”
+The target is not a naive full-cell all-atom trajectory for an entire cell cycle.
 
 The target is:
 
 - explicit microbial genome assets as the organism source of truth
-- explicit RNAs, proteins, complexes, metabolites, ions, lipids, and membrane species as runtime state
-- explicit assembly and chromosome state
-- explicit reaction registries and solver schedules
-- local atomistic refinement for the highest-value sites and transitions
-- compiled multiscale reductions from atomistic and mesoscale truth back into the whole-cell runtime
-- restartable, reproducible, benchmarked runs that match and then exceed MC4D observables
+- explicit runtime state for transcripts, proteins, complexes, metabolites, ions, lipids, chromosome state, membrane state, and geometry
+- explicit reaction registries and assembly graphs driving the whole-cell runtime
+- explicit multirate scheduling across RDME, CME, ODE, chromosome BD, membrane mechanics, and local atomistic refinement
+- local atomistic extraction and feedback as a native source of truth for the highest-value subsystems
+- restartable, benchmarked, calibrated runs that reproduce a validated microbial cell cycle
+- MC4D parity first, then broader coverage and stronger atomistic grounding
+
+## Current Starting Position
+
+What already exists in this repo:
+
+- Rust whole-cell runtime in `oneuro-metal/src/whole_cell.rs`
+- serialized whole-cell program and asset contracts in `oneuro-metal/src/whole_cell_data.rs`
+- local chemistry, assembly-bridge, and local MD probe surfaces in `oneuro-metal/src/whole_cell_submodels.rs`
+- bundled Syn3A reference and organism specs in `oneuro-metal/specs/whole_cell_syn3a_reference.json` and `oneuro-metal/specs/whole_cell_syn3a_organism.json`
+- atomistic template support in `oneuro-metal/specs/whole_cell_atomistic_templates.json` and `oneuro-metal/src/atomistic_topology.rs`
+- Python orchestration surfaces in `src/oneuro/whole_cell`
+- prior strategy and gap docs in:
+  - `docs/whole_cell_strategy.md`
+  - `docs/whole_cell_atomic_roadmap.md`
+  - `docs/whole_cell_mc4d_gap.md`
+
+What is partially present but not complete:
+
+- compiled operon/RNA/protein/complex assets for bundled Syn3A content
+- persistent transcription-unit, transcript/protein, and assembled-complex state
+- coarse staged scheduler and restart surfaces
+- local chemistry and local atomistic refinement stubs that are not yet authoritative enough
+
+What still does not exist:
+
+- compiler-driven organism ingestion from external annotations and sequences
+- canonical species registry and canonical reaction registry for the full cell
+- explicit chromosome polymer mechanics at parity depth
+- explicit membrane composition and division mechanics at parity depth
+- event-driven multirate solver scheduler with full checkpointing
+- live atomistic extraction from runtime state with calibrated feedback loops
+- full Syn3A dataset, calibration, validation, and parity reporting stack
 
 ## Non-Negotiable Architecture Rules
 
-1. Keep the authoritative hot path in Rust.
-2. Keep the performance-critical kernels on GPU when possible.
-3. Do not move the whole-cell engine back into Python.
-4. Use Python for orchestration, experiment driving, reporting, and adapters.
-5. Keep all major biology layers serializable and restartable.
-6. Every abstraction must compile down to explicit runtime state, not just metadata.
-7. Every phase must add tests, artifacts, and benchmark outputs.
+1. Rust remains the authoritative runtime for whole-cell execution.
+2. GPU kernels stay in Metal or CUDA when they are part of the hot path.
+3. Python owns ingestion, compilation, orchestration, reporting, validation, and adapters.
+4. Every major biology layer must be explicit runtime state, not just metadata.
+5. Every major biology layer must be restartable and serializable.
+6. Every phase must add tests, artifacts, and benchmark outputs.
+7. Every abstraction must compile down to explicit species, explicit state, or explicit schedule entries.
+8. No phase is done until state, restart, and validation are all in place.
 
-## Master Execution Sequence
+## Critical Path
 
-### Phase A: Freeze The Runtime Contract
+This is the dependency chain that controls program completion:
 
-Goal:
-- lock the data contracts so later work does not thrash the architecture
+1. Freeze runtime and IR contracts.
+2. Build compiler-driven organism asset ingestion.
+3. Build explicit species and reaction registries.
+4. Drive expression, metabolism, transport, degradation, and repair from compiled registries.
+5. Make assembly explicit.
+6. Make chromosome and membrane/division explicit.
+7. Replace staged stepping with a real multirate scheduler.
+8. Make local atomistic refinement a live runtime service instead of a template-only side probe.
+9. Build calibration and validation against Syn3A data and MC4D observables.
+10. Reach parity.
+11. Expand atomistic coverage and organism generality.
 
-Build steps:
-1. Freeze units for counts, concentrations, lattice geometry, energies, forces, and clocks.
-2. Freeze canonical runtime layers:
-   - genome features
-   - transcripts
-   - proteins
-   - complexes
-   - reactions
-   - chromosomes
-   - membranes
+Everything else is either support work or parallelizable side work.
+
+## Execution Rules
+
+These rules are operational, not aspirational.
+
+- Do not ask for permission for each work package.
+- Finish a work package end to end:
+  - schema or API
+  - runtime integration
+  - tests
+  - artifact or benchmark
+- Do not leave new biology layers only on the Python side if they belong in the runtime.
+- Do not keep hand-authored heuristics once the compiled IR path exists for the same domain.
+- Do not add atomistic machinery that cannot feed calibrated information back into the whole-cell runtime.
+- Keep a running progress ledger in the repo as phases complete.
+
+## Master Phase Table
+
+| Phase | Name | Main Output | Depends On |
+|---|---|---|---|
+| 0 | Contract Freeze | stable runtime, IR, and restart schemas | current repo |
+| 1 | Organism Compiler | compiler-produced Syn3A asset package | 0 |
+| 2 | Species/Reaction IR | canonical species and reaction registries | 0, 1 |
+| 3 | Expression Runtime | explicit transcription/translation/degradation execution | 1, 2 |
+| 4 | Assembly Runtime | named complexes and assembly intermediates | 1, 2, 3 |
+| 5 | Chromosome Runtime | explicit forks, loci, polymer state, topology | 1, 2, 3, 4 |
+| 6 | Membrane/Division Runtime | explicit membrane composition, divisome, geometry | 2, 4, 5 |
+| 7 | Spatial Chemistry Runtime | authoritative intracellular spatial chemistry | 2, 3, 4, 5, 6 |
+| 8 | Atomistic Refinement Runtime | live local extraction and feedback | 2, 4, 5, 6, 7 |
+| 9 | Multirate Scheduler | event-driven solver orchestration and checkpoints | 2, 3, 4, 5, 6, 7, 8 |
+| 10 | Calibration/Validation | dataset bundle, fitting, held-out tests | 1 through 9 |
+| 11 | MC4D Parity | matched observables and restart quality | 10 |
+| 12 | Beyond Parity | broader atomistic coverage and extra organisms | 11 |
+
+## Phase 0: Freeze The Contract
+
+### Goal
+
+Stop architecture churn before deeper biology is added.
+
+### Work Packages
+
+1. Freeze authoritative units for:
+   - molecule counts
+   - concentrations
+   - lattice coordinates
+   - time
+   - energy
+   - force
    - geometry
+2. Freeze the authoritative runtime layer boundaries:
+   - organism assets
+   - species registry
+   - reaction registry
+   - expression state
+   - assembly state
+   - chromosome state
+   - membrane/division state
+   - spatial state
    - atomistic local domains
-3. Freeze canonical IR layers:
+   - observables and artifacts
+3. Freeze canonical IR boundaries:
    - genome/transcription IR
    - species/reaction IR
-   - assembly IR
+   - assembly graph IR
    - chromosome/polymer IR
-   - multirate schedule IR
-4. Freeze restart schema and provenance metadata.
-5. Add a progress ledger mapping each milestone to tests and datasets.
+   - solver schedule IR
+   - atomistic extraction IR
+4. Freeze restart and provenance schema:
+   - organism asset hash
+   - compiled IR hash
+   - calibration bundle hash
+   - random seeds
+   - backend and hardware info
+   - run manifest
+5. Split authoritative state structs from convenience summaries where that is still mixed.
+6. Add schema tests for every serialized contract.
+7. Add a progress ledger mapping each later phase to tests and artifacts.
 
-Primary files:
-- [oneuro-metal/src/whole_cell_data.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_data.rs)
-- [oneuro-metal/src/whole_cell.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell.rs)
-- [docs/whole_cell_atomic_roadmap.md](/Users/bobbyprice/projects/oNeuro/docs/whole_cell_atomic_roadmap.md)
+### Primary Code Targets
 
-Exit criteria:
-- no core state object is ambiguous
-- save/restore covers every authoritative layer
-- all later phases can add content without changing the contract
+- `oneuro-metal/src/whole_cell.rs`
+- `oneuro-metal/src/whole_cell_data.rs`
+- `src/oneuro/whole_cell/state.py`
+- `src/oneuro/whole_cell/manifest.py`
 
-### Phase B: Compile Real Organism Assets
+### Exit Criteria
 
-Goal:
-- stop hand-maintaining the organism as flat JSON blobs
+- no ambiguous unit surfaces remain
+- restart payloads cover every authoritative layer
+- later phases can add content without redefining the contract
 
-Build steps:
-6. Add parsers for `FASTA`, `GenBank`, `GFF`, operon tables, protein annotations, and essentiality tables.
-7. Build a compiler that turns those inputs into organism asset packages:
-   - genes
-   - operons
+## Phase 1: Build The Organism Compiler
+
+### Goal
+
+Replace hand-maintained bundled descriptors with compiler-produced organism assets.
+
+### Work Packages
+
+8. Add source ingestion for:
+   - FASTA
+   - GenBank
+   - GFF or GTF
+   - operon tables
+   - promoter and terminator tables
+   - protein annotation tables
+   - complex composition tables
+   - essentiality tables
+   - media and composition priors
+9. Define a normalized Python-side intermediate organism asset model.
+10. Add sequence normalization and ID canonicalization.
+11. Build feature extraction for:
+   - coding genes
+   - ncRNAs
+   - promoters
+   - terminators
+   - origins
+   - termini
+   - ribosome-binding sites
+   - motifs and structural tags
+12. Build compiler passes for:
    - transcription units
-   - RNAs
-   - proteins
+   - operons
+   - RNA products
+   - protein products
    - complexes
-   - composition priors
+   - pool priors
    - geometry priors
-8. Extend the current Syn3A package generation path to come from that compiler.
-9. Add a second organism target to keep the pipeline generic.
-10. Add validation that compiled assets round-trip and preserve identifiers and coordinates.
+13. Make the compiler emit a single organism package with strict schema versioning.
+14. Add package hashing and provenance capture.
+15. Replace bundled Syn3A specs with compiler-emitted Syn3A assets.
+16. Add a second organism target so the compiler is not Syn3A-hardcoded.
+17. Add round-trip tests between source annotations and compiled assets.
+18. Add compiler reports for:
+   - missing genes
+   - duplicated IDs
+   - unresolved products
+   - unresolved complex components
+   - feature-coordinate conflicts
+19. Add artifact generation:
+   - organism summary
+   - operon summary
+   - RNA/protein/complex inventory summary
 
-Primary files/modules:
-- [oneuro-metal/src/whole_cell_data.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_data.rs)
-- new `oneuro.whole_cell.assets` Python-side compiler surface
-- bundled specs in [oneuro-metal/specs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/specs)
+### Primary Code Targets
 
-Exit criteria:
-- Syn3A assets are compiler-produced, not manually curated blobs
-- second-organism assets compile through the same path
+- `src/oneuro/whole_cell/artifacts.py`
+- `src/oneuro/whole_cell/manifest.py`
+- new `src/oneuro/whole_cell/assets/`
+- `oneuro-metal/src/whole_cell_data.rs`
+- `oneuro-metal/specs/`
 
-### Phase C: Make Species And Reactions Explicit
+### Exit Criteria
 
-Goal:
-- replace coarse process surrogates with explicit molecular state
+- Syn3A assets are compiler-produced
+- second organism compiles through the same path
+- no bundled organism file is maintained by hand beyond source-data patches
 
-Build steps:
-11. Add a canonical species registry covering:
+## Phase 2: Build Canonical Species And Reaction IR
+
+### Goal
+
+Turn chemistry from scattered heuristics into explicit registries.
+
+### Work Packages
+
+20. Define the canonical species registry:
    - metabolites
    - ions
    - cofactors
+   - nucleotides
+   - amino acids
    - lipids
    - RNAs
    - proteins
    - complexes
    - membrane species
-12. Add a canonical reaction registry with stoichiometry and compartment scope.
-13. Compile expression, metabolism, degradation, transport, membrane synthesis, repair, and division chemistry into that registry.
-14. Add explicit molecule-count bookkeeping for every compiled species.
-15. Replace remaining hand-authored process-rate branches with compiled reaction execution where feasible.
-16. Make enzyme abundance and complex state gate reaction capacity.
+   - damaged species
+21. Define compartment and localization scopes for every species class.
+22. Define the canonical reaction registry:
+   - stoichiometry
+   - compartments
+   - catalysts
+   - modifiers
+   - reversibility
+   - rate-law family
+   - schedule affinity
+23. Build compiler passes from organism assets into expression and assembly reactions.
+24. Build compiler passes from curated metabolism and membrane chemistry into canonical reactions.
+25. Build transport and degradation reaction compilers.
+26. Build repair and stress chemistry compilers.
+27. Add canonical IDs and name mapping across all reaction inputs.
+28. Add runtime molecule-count state for all compiled species.
+29. Replace any remaining coarse pool-only logic where explicit species now exist.
+30. Add reaction validation:
+   - mass-balance checks where possible
+   - compartment legality
+   - unknown species detection
+   - catalyst existence checks
+31. Add reaction summaries and inventory reports.
 
-Primary files/modules:
-- [oneuro-metal/src/whole_cell.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell.rs)
-- [oneuro-metal/src/whole_cell_data.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_data.rs)
-- [oneuro-metal/src/whole_cell_submodels.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_submodels.rs)
+### Primary Code Targets
 
-Exit criteria:
-- every important process has explicit species and reactions behind it
-- reaction execution is driven by compiled registries, not scattered heuristics
+- `oneuro-metal/src/whole_cell_data.rs`
+- `oneuro-metal/src/whole_cell.rs`
+- `oneuro-metal/src/whole_cell_submodels.rs`
+- new species/reaction IR modules in `oneuro-metal/src`
+- new compiler modules under `src/oneuro/whole_cell`
 
-### Phase D: Make Assembly Explicit
+### Exit Criteria
 
-Goal:
-- move from aggregate capacities to named complexes and intermediates
+- major chemistry is registry-driven
+- explicit species counts exist for all compiled biology
+- reaction execution no longer depends on scattered hard-coded branches for covered domains
 
-Build steps:
-17. Extend complex state into a first-class assembly graph runtime.
-18. Add named assembly intermediates for:
+## Phase 3: Build Explicit Expression Execution
+
+### Goal
+
+Move from shallow activity scaling to explicit transcription, translation, maturation, and degradation.
+
+### Work Packages
+
+32. Add promoter-level and transcription-unit-level initiation logic.
+33. Add polymerase occupancy and elongation state.
+34. Add RNA synthesis, maturation, and degradation bookkeeping.
+35. Add ribosome occupancy and translation elongation state.
+36. Add protein synthesis, folding, maturation, targeting, and degradation bookkeeping.
+37. Add translation resource competition for amino acids, charged tRNAs, ATP, and GTP equivalents.
+38. Add transcript and protein damage channels.
+39. Add growth-rate and stress-sensitive transcription modifiers.
+40. Add collision bookkeeping between transcription and replication interfaces.
+41. Replace current coarse expression-rate scaling with explicit expression execution for compiled units.
+42. Add restart payloads for RNAP occupancy, ribosome occupancy, elongation state, and partially completed products.
+43. Add artifacts:
+   - transcript counts over time
+   - protein counts over time
+   - occupancy histograms
+   - degradation fluxes
+
+### Primary Code Targets
+
+- `oneuro-metal/src/whole_cell.rs`
+- `oneuro-metal/src/whole_cell_data.rs`
+- `oneuro-metal/src/gene_expression.rs`
+- `oneuro-metal/src/gpu/gene_expression.rs`
+- `oneuro-metal/src/metal/gene_expression.metal`
+
+### Exit Criteria
+
+- explicit transcript and protein dynamics drive expression
+- expression restart state is complete
+- expression observables can be benchmarked independently
+
+## Phase 4: Build Explicit Assembly Runtime
+
+### Goal
+
+Replace aggregate capacities with named complexes and assembly intermediates.
+
+### Work Packages
+
+44. Define an assembly graph IR for each major complex family.
+45. Add named intermediates for:
    - ribosomes
    - RNAP
    - replisomes
    - ATP synthase
    - transporters
    - membrane enzymes
-   - FtsZ/divisome
-19. Add recruitment, completion, failure, degradation, and repair paths.
-20. Tie protein inventories directly to assembly demand and sequestration.
-21. Export concrete assembly-aware capacities to higher solver layers.
+   - chaperone clients
+   - FtsZ and divisome modules
+46. Add subunit recruitment and completion logic.
+47. Add failed assembly, stalled assembly, and disassembly logic.
+48. Add damage, repair, and degradation pathways for assembled complexes.
+49. Add sequestration and competition across complexes sharing the same subunits.
+50. Couple explicit assemblies to reaction capacity.
+51. Couple explicit assemblies to membrane insertion state where applicable.
+52. Couple explicit assemblies to chromosome and division state where applicable.
+53. Remove fake unnamed capacity pools for covered systems.
+54. Add artifacts:
+   - assembly-state occupancy
+   - limiting-subunit reports
+   - failure-state counts
 
-Primary files/modules:
-- [oneuro-metal/src/whole_cell.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell.rs)
-- [oneuro-metal/src/whole_cell_submodels.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_submodels.rs)
+### Primary Code Targets
 
-Exit criteria:
-- no major subsystem depends on a fake unnamed capacity pool
+- `oneuro-metal/src/whole_cell.rs`
+- `oneuro-metal/src/whole_cell_submodels.rs`
+- new assembly modules in `oneuro-metal/src`
 
-### Phase E: Make Chromosomes Explicit
+### Exit Criteria
 
-Goal:
-- move from scalar replication state to actual chromosome mechanics
+- no major subsystem depends on anonymous aggregate capacity where an explicit assembly graph exists
 
-Build steps:
-22. Add explicit circular chromosome feature indexing over the compiled genome.
-23. Add fork state, origin state, terminus state, replication initiation, and fork progression.
-24. Add collision-aware transcription/replication bookkeeping.
-25. Add polymer-level chromosome state:
+## Phase 5: Build Explicit Chromosome Runtime
+
+### Goal
+
+Move from replication progress scalars to a live chromosome subsystem.
+
+### Work Packages
+
+55. Add explicit circular chromosome indexing over the compiled genome.
+56. Add origin, terminus, replication forks, and replication initiation state.
+57. Add fork progression, pausing, and completion bookkeeping.
+58. Add collision-aware transcription-replication bookkeeping.
+59. Add locus-level occupancy and accessibility state.
+60. Add polymer-level chromosome representation:
+   - beads
    - loci
    - domains
-   - tethering
-   - compaction
-   - segregation
-26. Add DNA topology state where it materially affects expression and replication.
-27. Add restartable chromosome observables and artifact outputs.
+   - tether points
+   - segregation tags
+61. Add compaction and segregation state.
+62. Add topology state where it materially affects behavior:
+   - supercoiling
+   - torsional stress
+   - strand separation cost
+63. Add chromosome restart payloads and artifacts.
+64. Add chromosome-specific validation:
+   - fork timing
+   - locus separation
+   - replication duration
+   - collision statistics
 
-Primary files/modules:
-- [oneuro-metal/src/whole_cell.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell.rs)
-- new chromosome/polymer module in `oneuro-metal/src`
+### Primary Code Targets
 
-Exit criteria:
-- chromosome behavior is an explicit runtime subsystem, not just a progress scalar
+- `oneuro-metal/src/whole_cell.rs`
+- new chromosome/polymer modules in `oneuro-metal/src`
+- `src/oneuro/whole_cell/runner.py`
 
-### Phase F: Make Membranes And Division Explicit
+### Exit Criteria
 
-Goal:
-- tie shape and division to actual molecular state
+- chromosome behavior is an explicit subsystem
+- replication and segregation are no longer scalar placeholders
 
-Build steps:
-28. Add explicit membrane composition and inserted-protein state.
-29. Add curvature and septum-local remodeling state.
-30. Add divisome assembly order and occupancy.
-31. Couple constriction to assembled divisome mechanics.
-32. Add geometry updates driven by membrane synthesis, osmotic load, and chromosome occlusion.
+## Phase 6: Build Explicit Membrane And Division Runtime
 
-Primary files/modules:
-- [oneuro-metal/src/whole_cell.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell.rs)
-- membrane/division submodules in `oneuro-metal/src`
+### Goal
 
-Exit criteria:
-- division and geometry no longer run as only scalar progress curves
+Tie shape and cytokinesis to actual molecular state.
 
-### Phase G: Turn Atomistic Chemistry Into A Native Truth Source
+### Work Packages
 
-Goal:
-- move from template-only local MD probes to real subsystem extraction and feedback
+65. Add explicit lipid classes and membrane species inventories.
+66. Add membrane-protein insertion state.
+67. Add curvature-related state and septum-local composition state.
+68. Add divisome assembly order and occupancy.
+69. Add constriction mechanics driven by assembled divisome state.
+70. Add membrane-growth coupling to geometry updates.
+71. Add chromosome occlusion constraints on septation.
+72. Add osmotic and volume constraints where they materially change geometry.
+73. Add membrane and division restart payloads and artifacts.
+74. Add validation on:
+   - radius and surface area trajectories
+   - constriction timing
+   - division failure modes
 
-Build steps:
-33. Extend the atomistic topology pipeline to ingest real subsystem structures and parameter sets.
-34. Add force-field ingestion and validation for bonded, electrostatic, and nonbonded terms.
-35. Build live local-domain extractors from whole-cell state around:
-   - ribosomes
-   - replisomes
-   - ATP synthase bands
-   - membrane insertion sites
-   - divisome zones
-36. Add uncertainty or rare-event triggers that invoke atomistic refinement.
-37. Feed atomistic outputs back as:
-   - rate corrections
-   - energies
-   - conformational states
-   - diffusion changes
-   - assembly/degradation propensities
-38. Build atomistic microbenchmarks against known structures and local observables.
+### Primary Code Targets
 
-Primary files/modules:
-- [oneuro-metal/src/atomistic_topology.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/atomistic_topology.rs)
-- [oneuro-metal/src/whole_cell_submodels.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell_submodels.rs)
-- MD engine code in `oneuro-metal/src/molecular_dynamics.rs`
+- `oneuro-metal/src/whole_cell.rs`
+- membrane/division modules in `oneuro-metal/src`
+- geometry-related kernels if promoted to GPU
 
-Exit criteria:
-- atomistic refinement is driven from live cell state
-- whole-cell rates and assemblies materially depend on it in selected hotspots
+### Exit Criteria
 
-### Phase H: Replace The Scheduler With A True Multirate Solver Stack
+- geometry and division are driven by explicit molecular state
 
-Goal:
-- upgrade the orchestration from staged updates to explicit multiscale clocks
+## Phase 7: Build Authoritative Spatial Chemistry
 
-Build steps:
-39. Add solver schedule IR with separate clocks for:
+### Goal
+
+Make intracellular spatial chemistry a real coupled subsystem instead of only a supporting approximation.
+
+### Work Packages
+
+75. Expand the intracellular lattice to carry authoritative species fields for the compiled chemistry subset that needs spatial treatment.
+76. Define which chemistry remains well-mixed and which is spatial.
+77. Add compartment and patch-local constraints:
+   - membrane adjacency
+   - nucleoid exclusion or occupancy
+   - septum-local zones
+   - ribosome or enzyme clusters
+78. Couple reaction execution to spatial availability where needed.
+79. Couple transport and membrane reactions to local membrane patches.
+80. Couple chromosome-local processes to chromosome spatial state.
+81. Add GPU kernels for the spatial hot path where needed.
+82. Add spatial restart payloads and artifacts:
+   - field slices
+   - local concentration traces
+   - crowding maps
+   - compartment exchange rates
+
+### Primary Code Targets
+
+- `oneuro-metal/src/gpu/whole_cell_rdme.rs`
+- `oneuro-metal/src/metal/whole_cell_rdme.metal`
+- `oneuro-metal/src/whole_cell.rs`
+- `oneuro-metal/src/whole_cell_submodels.rs`
+
+### Exit Criteria
+
+- spatial chemistry materially affects runtime outcomes for the domains assigned to spatial treatment
+
+## Phase 8: Make Atomistic Refinement Native
+
+### Goal
+
+Promote atomistic local refinement from template-only probes to live runtime support.
+
+### Work Packages
+
+83. Expand atomistic topology ingestion beyond templates:
+   - protein structures
+   - RNA segments
+   - protein-RNA complexes
+   - membrane patches
+   - metabolite and ion neighborhoods
+84. Add force-field and parameter ingestion with validation.
+85. Add local-domain builders that carve live subsystems out of runtime state.
+86. Add trigger policies:
+   - high uncertainty
+   - rare events
+   - assembly transitions
+   - transport bottlenecks
+   - division-zone instability
+87. Add atomistic simulation metadata capture:
+   - topology source
+   - parameter source
+   - local boundary conditions
+   - extracted state hash
+88. Add reducers that feed atomistic outputs back into the runtime as:
+   - effective rates
+   - energy penalties
+   - state transitions
+   - diffusion or localization corrections
+   - assembly or degradation propensities
+89. Add atomistic microbenchmarks against known structures and known local observables.
+90. Add caches and surrogate compilation so repeated neighborhoods do not rerun full atomistic refinement unnecessarily.
+
+### Primary Code Targets
+
+- `oneuro-metal/src/atomistic_topology.rs`
+- `oneuro-metal/src/molecular_dynamics.rs`
+- `oneuro-metal/src/cuda/`
+- `oneuro-metal/src/gpu/md_gpu.rs`
+- `oneuro-metal/src/whole_cell_submodels.rs`
+
+### Exit Criteria
+
+- live whole-cell state can trigger, build, run, and consume local atomistic refinement
+
+## Phase 9: Replace Staged Stepping With A True Multirate Scheduler
+
+### Goal
+
+Turn the scheduler into the real orchestration layer for the full multiscale cell.
+
+### Work Packages
+
+91. Define schedule IR with explicit clocks for:
    - RDME
    - CME
    - ODE
-   - chromosome/polymer BD
+   - chromosome BD
    - membrane mechanics
    - atomistic refinement
-40. Add event-driven scheduling for rare transitions and checkpoints.
-41. Add deterministic replay and solver-layer checkpointing.
-42. Add distributed execution hooks for larger atomistic workloads.
+92. Add event queues for:
+   - replication initiation
+   - fork completion
+   - collision events
+   - divisome transitions
+   - rare chemistry triggers
+   - atomistic trigger requests
+93. Add deterministic ordering rules and seed handling.
+94. Add partial checkpoints for every solver layer.
+95. Add replayable manifests that capture the exact compiled state and calibration context.
+96. Add long-run resume support without cross-solver drift.
+97. Add distributed execution hooks for expensive atomistic jobs while keeping Rust authoritative.
+98. Add scheduler benchmarks for:
+   - throughput
+   - checkpoint latency
+   - replay fidelity
 
-Primary files/modules:
-- [oneuro-metal/src/whole_cell.rs](/Users/bobbyprice/projects/oNeuro/oneuro-metal/src/whole_cell.rs)
+### Primary Code Targets
+
+- `oneuro-metal/src/whole_cell.rs`
 - new scheduler modules in `oneuro-metal/src`
+- `src/oneuro/whole_cell/scheduler.py`
+- `src/oneuro/whole_cell/runner.py`
 
-Exit criteria:
-- each solver layer has an explicit cadence and restart surface
+### Exit Criteria
 
-### Phase I: Build The Calibration And Validation System
+- every solver layer has its own cadence, checkpoint surface, and deterministic replay path
 
-Goal:
-- make the biology measurable and fit for regression
+## Phase 10: Build Calibration And Validation
 
-Build steps:
-43. Build the Syn3A reference dataset bundle:
+### Goal
+
+Make the simulator measurable, fit, and defensible.
+
+### Work Packages
+
+99. Build the Syn3A reference dataset bundle:
    - genome
-   - transcript measurements
-   - protein measurements
-   - metabolite concentrations
-   - growth curves
+   - transcript data
+   - protein data
+   - metabolite data
+   - growth data
    - replication timing
    - division timing
    - perturbation data
-44. Add calibration pipelines for:
+100. Build dataset versioning, hashing, and provenance.
+101. Add per-module calibration pipelines for:
    - expression
    - metabolism
    - assembly
-   - chromosome behavior
+   - chromosome dynamics
    - membrane/division
-   - atomistic local refinement
-45. Add held-out validation and sensitivity analysis.
-46. Add per-module residual reports and uncertainty bands.
-47. Add regression suites against overlapping MC4D observables.
+   - local atomistic reducers
+102. Add held-out validation sets for every calibration target.
+103. Add sensitivity and ablation analysis.
+104. Add per-module residual reports and uncertainty bands.
+105. Add regression suites against overlapping MC4D observables.
+106. Add calibration artifacts and dashboards to the repo reporting flow.
 
-Primary files/modules:
-- new `oneuro.whole_cell.validation`
-- experiment/reporting paths under `results/` and `docs/`
+### Primary Code Targets
 
-Exit criteria:
-- every major module has a benchmark, fit target, and held-out validation surface
+- new `src/oneuro/whole_cell/validation/`
+- `src/oneuro/whole_cell/artifacts.py`
+- `src/oneuro/whole_cell/runner.py`
+- `docs/benchmarks/`
+- `results/`
 
-### Phase J: Reach MC4D Parity
+### Exit Criteria
 
-Goal:
-- match the published baseline on robustness and observables
+- every major subsystem has a benchmark, a fit target, and a held-out validation report
 
-Build steps:
-48. Reproduce the published Syn3A observables that matter:
+## Phase 11: Reach MC4D Parity
+
+### Goal
+
+Match the published Syn3A baseline on observable behavior and run quality.
+
+### Work Packages
+
+107. Reproduce key observables:
    - cell-cycle timing
-   - expression distributions
-   - metabolic support
+   - transcript distributions
+   - protein distributions
+   - metabolite support
+   - replication timing
    - chromosome behavior
    - division progression
-49. Match restartability, artifact completeness, and reproducibility.
-50. Match solver coverage at the observable level.
-51. Remove remaining heuristics that are not grounded in lower-scale or data-driven logic.
+108. Match restartability and artifact completeness.
+109. Match or exceed reproducibility and provenance quality.
+110. Match solver coverage at the observable level.
+111. Remove remaining heuristics that do not have explicit or fitted grounding.
+112. Publish parity reports in-repo.
 
-Exit criteria:
-- parity reports show overlap with MC4D on the key targets
+### Exit Criteria
 
-### Phase K: Surpass MC4D
+- parity reports show overlap with the MC4D baseline on the chosen observable set
 
-Goal:
-- use the native Rust/GPU stack plus atomistic coupling to go beyond the published reference
+## Phase 12: Go Beyond Parity
 
-Build steps:
-52. Expand explicit operon/polycistronic mechanics and named assembly intermediates.
-53. Improve membrane, transport, and division biophysics.
-54. Add genotype-to-phenotype perturbation workflows.
-55. Add cross-organism generalization.
-56. Add high-throughput design loops for genome edits, media changes, and drugs.
-57. Add adaptive promotion/demotion between coarse and atomistic regions during live runs.
-58. Add learned physical surrogates compiled from repeated atomistic neighborhoods.
+### Goal
 
-Exit criteria:
-- the same stack supports more organisms, more explicit assemblies, and better local physical grounding than the MC4D baseline
+Use the native runtime to do things the reference stack does not do as well.
 
-## Immediate Build Order From Today
+### Work Packages
 
-This is the exact order to execute from the current repository state:
+113. Expand explicit assembly intermediates where the reference remains coarse.
+114. Deepen membrane and transport biophysics.
+115. Deepen division-zone mechanics and failure-state handling.
+116. Add genotype-to-phenotype perturbation workflows.
+117. Add media-perturbation and drug-perturbation workflows.
+118. Compile at least two additional organisms through the same compiler path.
+119. Expand atomistic coverage to a larger fraction of the proteome and membrane machinery.
+120. Add adaptive promotion and demotion between coarse and atomistic treatment during live runs.
+121. Add learned physical surrogates compiled from repeated atomistic neighborhoods.
 
-1. Freeze the whole-cell runtime contract and serialization contract.
-2. Build compiler-driven organism asset ingestion for Syn3A.
-3. Replace bundled hand-maintained Syn3A descriptors with compiled assets.
-4. Add explicit species and reaction registries.
-5. Convert the current coarse process logic to compiled explicit reaction execution where possible.
-6. Upgrade complex state into full named assembly graphs and intermediates.
-7. Add explicit chromosome/fork/polymer state.
-8. Add explicit membrane composition and divisome mechanics.
-9. Replace the staged scheduler with explicit multirate orchestration.
-10. Upgrade atomistic topology/parameter ingestion from templates to real subsystem extraction.
-11. Build live atomistic refinement triggers and feedback into the whole-cell runtime.
-12. Build the Syn3A calibration/validation bundle and regression suites.
-13. Reproduce MC4D-equivalent observables.
-14. Generalize to a second microbial organism.
-15. Expand atomistic coverage and adaptive partitioning.
+### Exit Criteria
 
-## Rust/Metal vs Python Responsibilities
+- the same stack supports multiple organisms and broader atomistic grounding than the MC4D baseline
 
-Rust/Metal owns:
+## Workstream Mapping
 
-- authoritative runtime state
-- reaction execution
-- assembly state
-- chromosome state
-- membrane/division state
-- multirate scheduler
-- local atomistic extraction and feedback
-- GPU kernels and restart state
+These workstreams can run in parallel once their dependencies are met.
 
-Python owns:
+### Workstream A: Contracts And Schemas
 
-- data ingestion and compilation tooling
-- experiment orchestration
-- reporting and artifact management
-- external solver adapters where still needed
-- calibration pipelines
-- benchmark and regression harnesses
+- Phase 0
+- restart payloads
+- provenance
+- artifact manifests
 
-## Validation Gates
+### Workstream B: Organism Compiler
 
-Each phase is not complete until all three are true:
+- Phase 1
+- source ingestion
+- normalization
+- package emission
+
+### Workstream C: Runtime Chemistry
+
+- Phase 2
+- Phase 3
+- Phase 4
+
+### Workstream D: Physical Cell State
+
+- Phase 5
+- Phase 6
+- Phase 7
+
+### Workstream E: Atomistic Integration
+
+- Phase 8
+- Phase 9
+
+### Workstream F: Calibration And Parity
+
+- Phase 10
+- Phase 11
+- Phase 12
+
+## Exact Immediate Build Order From Today
+
+This is the concrete near-term order to execute from the current repo state.
+
+1. Freeze the whole-cell runtime contract.
+2. Freeze the restart and provenance contract.
+3. Add the progress ledger.
+4. Build Python-side organism ingestion modules.
+5. Compile Syn3A assets from source data instead of hand-maintained bundled descriptors.
+6. Compile a second organism through the same pipeline.
+7. Introduce the canonical species registry.
+8. Introduce the canonical reaction registry.
+9. Migrate compiled expression reactions onto the registry.
+10. Migrate transport and degradation reactions onto the registry.
+11. Migrate membrane and repair chemistry onto the registry.
+12. Promote transcript and protein execution to explicit elongation and degradation state.
+13. Promote complex state to named assembly graphs and intermediates.
+14. Add chromosome fork and locus state.
+15. Add chromosome polymer state.
+16. Add membrane composition and divisome state.
+17. Promote spatial chemistry to authoritative status for the chosen species subset.
+18. Add live atomistic domain extraction from runtime state.
+19. Add atomistic feedback reducers that update the runtime.
+20. Replace staged stepping with a true multirate scheduler.
+21. Build the Syn3A reference dataset bundle.
+22. Build calibration and held-out validation.
+23. Run parity reports.
+24. Generalize to more organisms and deeper atomistic coverage.
+
+## Phase Completion Gate
+
+No phase is complete until all of these are true:
 
 1. state is explicit
 2. restart/save/restore covers it
-3. there is at least one test plus one benchmark or artifact proving it works
+3. one test proves the contract
+4. one benchmark or artifact proves it runs
+5. one validation report proves it is not just internally consistent
+
+## Progress Ledger Format
+
+Every completed work package should add a short ledger entry with:
+
+- date
+- phase and work package number
+- files changed
+- tests run
+- artifacts produced
+- remaining dependency blockers
 
 ## Program Exit Criteria
 
-This plan is complete only when:
+This program is complete only when all of the following are true:
 
-- the organism is compiled from explicit microbial genome assets
-- whole-cell state contains explicit named molecules and complexes
-- chromosome and membrane/division mechanics are explicit subsystems
-- key high-value subsystems are grounded by native atomistic refinement
-- the runtime can reproduce and checkpoint a validated microbial cell cycle
-- the system matches or exceeds MC4D on robustness and observable fidelity
+- organism state is compiled from explicit microbial genome assets
+- runtime state contains explicit named molecules, RNAs, proteins, complexes, chromosome state, and membrane/division state
+- chemistry is driven by compiled species and reaction registries
+- the scheduler is multirate, checkpointable, and replayable
+- atomistic refinement is a live calibrated truth source for selected subsystems
+- a validated microbial cell cycle can be reproduced and restarted
+- parity with the published Syn3A reference has been demonstrated
+- the same stack can then extend beyond that reference to additional organisms and broader atomistic coverage
