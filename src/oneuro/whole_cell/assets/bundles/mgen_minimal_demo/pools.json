@@ -1,7 +1,7 @@
 [
-  { "species": "ATP", "concentration_mm": 1.1, "count": 6400.0 },
-  { "species": "amino_acids", "concentration_mm": 0.85, "count": 5200.0 },
-  { "species": "nucleotides", "concentration_mm": 0.72, "count": 4100.0 },
-  { "species": "membrane_precursors", "concentration_mm": 0.31, "count": 1600.0 },
-  { "species": "oxygen", "concentration_mm": 0.78, "count": 1900.0 }
+  { "species": "ATP", "bulk_field": "a_t_p", "concentration_mm": 1.1, "count": 6400.0 },
+  { "species": "amino_acids", "bulk_field": "amino_acids", "concentration_mm": 0.85, "count": 5200.0 },
+  { "species": "nucleotides", "bulk_field": "nucleotides", "concentration_mm": 0.72, "count": 4100.0 },
+  { "species": "membrane_precursors", "bulk_field": "membrane_precursors", "concentration_mm": 0.31, "count": 1600.0 },
+  { "species": "oxygen", "bulk_field": "oxygen", "concentration_mm": 0.78, "count": 1900.0 }
 ]

@@ -18,6 +18,7 @@ def test_available_bundles_include_syn3a_and_demo_bundle():
 def test_compile_syn3a_bundle_matches_current_runtime_shape():
     bundle = compile_named_bundle("jcvi_syn3a")
     summary = bundle.summary()
+    bulk_fields = {pool.get("bulk_field") for pool in bundle.organism_spec["pools"]}
 
     assert bundle.organism == "JCVI-syn3A"
     assert summary["gene_count"] >= 10
@@ -29,6 +30,7 @@ def test_compile_syn3a_bundle_matches_current_runtime_shape():
     assert len(bundle.genome_asset_package["chromosome_domains"]) == len(
         bundle.organism_spec["chromosome_domains"]
     )
+    assert {"a_t_p", "amino_acids", "nucleotides", "membrane_precursors"} <= bulk_fields
     assert "organism_spec_json" in bundle.source_hashes
 
 
@@ -36,6 +38,7 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     bundle = compile_named_bundle("mgen_minimal_demo")
     summary = bundle.summary()
     written = write_compiled_bundle(bundle, tmp_path)
+    bulk_fields = {pool.get("bulk_field") for pool in bundle.organism_spec["pools"]}
 
     assert bundle.organism == "Mgen-minimal-demo"
     assert bundle.organism_spec["chromosome_length_bp"] > 1000
@@ -45,6 +48,7 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     assert summary["protein_count"] == 4
     assert summary["complex_count"] >= 3
     assert len(bundle.organism_spec["chromosome_domains"]) >= 4
+    assert {"a_t_p", "amino_acids", "nucleotides", "membrane_precursors"} <= bulk_fields
     assert "genome_fasta" in bundle.source_hashes
     assert "gene_features_gff" in bundle.source_hashes
     assert Path(written["organism_spec"]).exists()
@@ -78,5 +82,6 @@ def test_rust_bundle_manifest_ingestion_if_available():
     assert "\"complex_repair\"" in compiled_registry
     assert "\"chromosome_domains\"" in compiled_spec
     assert "\"chromosome_domain\"" in compiled_registry
+    assert "\"bulk_field\"" in compiled_spec
     assert summary is not None
     assert summary["organism"] == "Mgen-minimal-demo"

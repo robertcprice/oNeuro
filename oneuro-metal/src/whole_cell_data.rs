@@ -188,6 +188,8 @@ pub struct WholeCellCompositionPrior {
 pub struct WholeCellMoleculePoolSpec {
     pub species: String,
     #[serde(default)]
+    pub bulk_field: Option<WholeCellBulkField>,
+    #[serde(default)]
     pub concentration_mm: f32,
     #[serde(default)]
     pub count: f32,
@@ -2051,6 +2053,11 @@ fn infer_pool_bulk_field(species_name: &str) -> Option<WholeCellBulkField> {
     }
 }
 
+fn pool_bulk_field(pool: &WholeCellMoleculePoolSpec) -> Option<WholeCellBulkField> {
+    pool.bulk_field
+        .or_else(|| infer_pool_bulk_field(&pool.species))
+}
+
 fn transport_asset_class_for_bulk_field(field: WholeCellBulkField) -> WholeCellAssetClass {
     match field {
         WholeCellBulkField::ATP
@@ -2434,14 +2441,14 @@ fn registry_patch_domain(
     }
 }
 
-fn find_pool_species_id_by_hint(
+fn find_pool_species_id_by_field(
     package: &WholeCellGenomeAssetPackage,
-    hint: &str,
+    field: WholeCellBulkField,
 ) -> Option<String> {
     package
         .pools
         .iter()
-        .find(|pool| pool.species.to_ascii_lowercase().contains(hint))
+        .find(|pool| pool_bulk_field(pool) == Some(field))
         .map(|pool| pool_species_id(&pool.species))
 }
 
@@ -2804,17 +2811,16 @@ pub fn compile_genome_process_registry(
         ),
         LocalizedPoolRequest,
     > = HashMap::new();
-    let atp_pool = find_pool_species_id_by_hint(package, "atp");
-    let adp_pool = find_pool_species_id_by_hint(package, "adp");
-    let nucleotide_pool = find_pool_species_id_by_hint(package, "nucleotide");
-    let amino_pool = find_pool_species_id_by_hint(package, "amino");
+    let atp_pool = find_pool_species_id_by_field(package, WholeCellBulkField::ATP);
+    let adp_pool = find_pool_species_id_by_field(package, WholeCellBulkField::ADP);
+    let nucleotide_pool = find_pool_species_id_by_field(package, WholeCellBulkField::Nucleotides);
+    let amino_pool = find_pool_species_id_by_field(package, WholeCellBulkField::AminoAcids);
     let global_pools_by_field: HashMap<WholeCellBulkField, (String, &WholeCellMoleculePoolSpec)> =
         package
             .pools
             .iter()
             .filter_map(|pool| {
-                infer_pool_bulk_field(&pool.species)
-                    .map(|field| (field, (pool_species_id(&pool.species), pool)))
+                pool_bulk_field(pool).map(|field| (field, (pool_species_id(&pool.species), pool)))
             })
             .collect();
     let mut localized_pool_participant =
@@ -2851,7 +2857,7 @@ pub fn compile_genome_process_registry(
 
     for pool in &package.pools {
         let species_name = pool.species.clone();
-        let bulk_field = infer_pool_bulk_field(&species_name);
+        let bulk_field = pool_bulk_field(pool);
         let asset_class = if species_name.to_ascii_lowercase().contains("membrane")
             || species_name.to_ascii_lowercase().contains("lipid")
         {
@@ -3031,7 +3037,7 @@ pub fn compile_genome_process_registry(
 
     for pool in &package.pools {
         let pool_id = pool_species_id(&pool.species);
-        let Some(field) = infer_pool_bulk_field(&pool.species) else {
+        let Some(field) = pool_bulk_field(pool) else {
             continue;
         };
         if !bulk_field_supports_transport(field) {
@@ -4898,6 +4904,7 @@ mod tests {
         let mut package = bundled_syn3a_genome_asset_package().expect("bundled asset package");
         package.pools.push(WholeCellMoleculePoolSpec {
             species: "adp".to_string(),
+            bulk_field: Some(WholeCellBulkField::ADP),
             concentration_mm: 0.35,
             count: 3200.0,
         });

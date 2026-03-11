@@ -625,3 +625,26 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `localized support-pool turnover is now generic, but the bundled organism datasets still under-specify several counterpools and reversible metabolite states, so richer compiled chemistry inputs are still needed before chromosome-local support chemistry can fully replace the remaining global fallback pools`
+
+### 2026-03-11 - Phase 7 / Explicit Pool Metadata Slice
+
+- Summary:
+  - added explicit `bulk_field` metadata to shipped molecule-pool specs and taught the native compiler/runtime to prefer declared pool identity over name-based substring inference, while keeping the old inference path as a compatibility fallback for older bundles
+  - replaced the core pool lookups in the native registry compiler with field-based resolution so ATP, amino-acid, nucleotide, membrane-precursor, oxygen, and future ADP pools can be bound from explicit chemistry metadata instead of string hints
+  - updated shipped Syn3A and demo bundle pool JSON plus Python bundle tests so explicit pool identity is part of the checked asset contract rather than an internal assumption
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/specs/whole_cell_syn3a_organism.json`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/pools.json`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `python3 -m py_compile tests/test_whole_cell_assets.py`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `pool identity is now explicit, but the bundle chemistry still lacks many declared counterpools, redox pairs, and reversible-state relationships, so several metabolite classes still depend on partial rather than fully enumerated chemical state datasets`
