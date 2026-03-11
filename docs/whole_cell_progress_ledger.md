@@ -396,3 +396,26 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `localized support pools now exist for ATP, amino acids, and nucleotides, but membrane patch chemistry still has a dedicated path and broader chromosome-local execution still needs more reactions to consume compiled local pools instead of global fallbacks`
+
+### 2026-03-11 - Phase 7 / Unified Membrane Localized Pool Slice
+
+- Summary:
+  - removed the dedicated compiler-only membrane precursor transfer block and moved membrane precursor localization onto the same compiled localized-pool species and reaction machinery already used for ATP, amino acids, and nucleotides
+  - added generic membrane-local request accumulation from compiled species and reactions, so membrane-band and septum-local precursor pools now emerge from compiled locality and membrane association instead of a bespoke patch-only code path
+  - updated the native regression coverage so membrane precursor transfer is now tested through the generic localized-pool runtime path rather than the old membrane-only reaction class
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q bundled_syn3a_process_registry_compiles_from_assets --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_localized_pool_transfer_moves_membrane_precursors_into_band_zone --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q gpu::whole_cell_rdme --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `membrane precursor localization now uses the generic localized-pool path, but membrane-only runtime hints/classes still exist for backward compatibility and broader chromosome-local execution still needs more compiled reactions to consume local pools instead of global fallbacks`

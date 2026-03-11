@@ -9532,7 +9532,7 @@ mod tests {
     }
 
     #[test]
-    fn test_membrane_patch_transfer_moves_precursors_into_band_zone() {
+    fn test_localized_pool_transfer_moves_membrane_precursors_into_band_zone() {
         let mut sim = WholeCellSimulator::new(WholeCellConfig {
             use_gpu: false,
             ..WholeCellConfig::default()
@@ -9579,9 +9579,9 @@ mod tests {
             },
         ];
         sim.organism_reactions = vec![WholeCellReactionRuntimeState {
-            id: "pool_membrane_band_membrane_precursors_patch_transfer".to_string(),
-            name: "membrane band precursors patch transfer".to_string(),
-            reaction_class: WholeCellReactionClass::MembranePatchTransfer,
+            id: "pool_membrane_band_membrane_precursors_localized_transfer".to_string(),
+            name: "membrane band precursors localized transfer".to_string(),
+            reaction_class: WholeCellReactionClass::LocalizedPoolTransfer,
             asset_class: WholeCellAssetClass::Membrane,
             nominal_rate: 9.0,
             catalyst: None,
