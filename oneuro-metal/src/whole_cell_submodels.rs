@@ -3610,6 +3610,7 @@ fn representative_calibration_snapshot() -> WholeCellSnapshot {
         local_chemistry_sites: Vec::new(),
         local_md_probe: None,
         subsystem_states: Vec::new(),
+        scheduler_state: crate::whole_cell_data::WholeCellSchedulerState::default(),
     }
 }
 

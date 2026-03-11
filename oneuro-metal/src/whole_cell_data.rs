@@ -1034,6 +1034,52 @@ pub struct WholeCellGeneProductAnnotation {
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WholeCellSolverStage {
+    AtomisticRefinement,
+    Rdme,
+    Cme,
+    Ode,
+    ChromosomeBd,
+    Geometry,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellStageClockState {
+    pub stage: WholeCellSolverStage,
+    #[serde(default = "default_stage_interval_steps")]
+    pub base_interval_steps: u64,
+    #[serde(default = "default_stage_interval_steps")]
+    pub dynamic_interval_steps: u64,
+    #[serde(default)]
+    pub next_due_step: u64,
+    #[serde(default)]
+    pub run_count: u64,
+    #[serde(default)]
+    pub last_run_step: Option<u64>,
+    #[serde(default)]
+    pub last_run_time_ms: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellSchedulerState {
+    #[serde(default)]
+    pub stage_clocks: Vec<WholeCellStageClockState>,
+}
+
+impl Default for WholeCellSchedulerState {
+    fn default() -> Self {
+        Self {
+            stage_clocks: Vec::new(),
+        }
+    }
+}
+
+fn default_stage_interval_steps() -> u64 {
+    1
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellSavedCoreState {
     pub time_ms: f32,
@@ -1089,6 +1135,8 @@ pub struct WholeCellSavedState {
     pub complex_assembly: WholeCellComplexAssemblyState,
     #[serde(default)]
     pub named_complexes: Vec<WholeCellNamedComplexState>,
+    #[serde(default)]
+    pub scheduler_state: WholeCellSchedulerState,
     pub config: WholeCellConfig,
     pub core: WholeCellSavedCoreState,
     pub lattice: WholeCellLatticeState,
@@ -2958,6 +3006,7 @@ mod tests {
             organism_reactions: Vec::new(),
             complex_assembly: WholeCellComplexAssemblyState::default(),
             named_complexes: Vec::new(),
+            scheduler_state: WholeCellSchedulerState::default(),
             config: spec.config.clone(),
             core: WholeCellSavedCoreState {
                 time_ms: 0.0,

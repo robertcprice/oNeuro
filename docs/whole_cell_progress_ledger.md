@@ -156,3 +156,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the registry now reaches metabolism, expression, degradation, stress, and repair; the next execution slice is moving scheduler cadence from fixed staged intervals to registry-aware multirate orchestration`
+
+### 2026-03-11 - Phase 3 / Registry-Aware Multirate Scheduler Slice
+
+- Summary:
+  - replaced fixed `% interval` stage dispatch in the native whole-cell runtime with explicit per-stage scheduler clocks for atomistic refinement, RDME, CME, ODE, chromosome BD, and geometry
+  - persisted scheduler state through snapshots and saved-state JSON, normalized clock restoration across restart boundaries, and removed the CME double-count path so accumulated stage `dt` now flows through the runtime once
+  - added restart and stress-driven cadence tests that verify the new scheduler can preserve clock state and re-fire CME or ODE earlier than the static config interval under load
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `oneuro-metal/src/whole_cell_submodels.rs`
+- Tests run:
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase3-scheduler.4uKnA5 && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase3-scheduler.4uKnA5 && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `the scheduler is now explicit and restartable, but local chemistry probes still use simple interval checks inside the atomistic stage and the next execution slice is deeper registry-driven solver ownership plus finer multiscale coupling`

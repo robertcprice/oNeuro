@@ -30,6 +30,7 @@ use crate::whole_cell_data::{
     WholeCellOrganismProfile, WholeCellOrganismSpec, WholeCellOrganismSummary,
     WholeCellProcessWeights, WholeCellProgramSpec, WholeCellProvenance, WholeCellReactionClass,
     WholeCellReactionRuntimeState, WholeCellSavedCoreState, WholeCellSavedState,
+    WholeCellSchedulerState, WholeCellSolverStage, WholeCellStageClockState,
     WholeCellSpeciesClass, WholeCellSpeciesRuntimeState, WholeCellTranscriptionUnitState,
 };
 use crate::whole_cell_submodels::{
@@ -159,6 +160,7 @@ pub struct WholeCellSnapshot {
     pub local_chemistry_sites: Vec<LocalChemistrySiteReport>,
     pub local_md_probe: Option<LocalMDProbeReport>,
     pub subsystem_states: Vec<WholeCellSubsystemState>,
+    pub scheduler_state: WholeCellSchedulerState,
 }
 
 type WholeCellAssemblyInventory = WholeCellComplexAssemblyState;
@@ -1327,11 +1329,21 @@ pub struct WholeCellSimulator {
     last_md_probe: Option<LocalMDProbeReport>,
     scheduled_subsystem_probes: Vec<ScheduledSubsystemProbe>,
     subsystem_states: Vec<WholeCellSubsystemState>,
+    scheduler_state: WholeCellSchedulerState,
     md_translation_scale: f32,
     md_membrane_scale: f32,
 }
 
 impl WholeCellSimulator {
+    const SOLVER_STAGE_ORDER: [WholeCellSolverStage; 6] = [
+        WholeCellSolverStage::AtomisticRefinement,
+        WholeCellSolverStage::Rdme,
+        WholeCellSolverStage::Cme,
+        WholeCellSolverStage::Ode,
+        WholeCellSolverStage::ChromosomeBd,
+        WholeCellSolverStage::Geometry,
+    ];
+
     fn finite_scale(value: f32, fallback: f32, min_value: f32, max_value: f32) -> f32 {
         if value.is_finite() {
             value.clamp(min_value, max_value)
@@ -1345,6 +1357,230 @@ impl WholeCellSimulator {
             1.0
         } else {
             (0.82 + 0.28 * (signal / mean_signal)).clamp(0.68, 1.45)
+        }
+    }
+
+    fn scaled_interval(base: u64, drive: f32, max_multiplier: u64) -> u64 {
+        let base = base.max(1);
+        let base_f = base as f32;
+        let interval = if drive >= 1.0 {
+            base_f / drive.max(1.0)
+        } else {
+            base_f * (1.0 + 0.80 * (1.0 - drive.max(0.0)))
+        };
+        interval
+            .round()
+            .clamp(1.0, (base * max_multiplier.max(1)) as f32) as u64
+    }
+
+    fn build_scheduler_state(config: &WholeCellConfig) -> WholeCellSchedulerState {
+        WholeCellSchedulerState {
+            stage_clocks: Self::SOLVER_STAGE_ORDER
+                .iter()
+                .copied()
+                .map(|stage| WholeCellStageClockState {
+                    stage,
+                    base_interval_steps: Self::base_stage_interval_from_config(config, stage),
+                    dynamic_interval_steps: Self::base_stage_interval_from_config(config, stage),
+                    next_due_step: 0,
+                    run_count: 0,
+                    last_run_step: None,
+                    last_run_time_ms: 0.0,
+                })
+                .collect(),
+        }
+    }
+
+    fn normalized_scheduler_state(
+        config: &WholeCellConfig,
+        saved: WholeCellSchedulerState,
+    ) -> WholeCellSchedulerState {
+        let mut scheduler_state = Self::build_scheduler_state(config);
+        for saved_clock in saved.stage_clocks {
+            if let Some(clock) = scheduler_state
+                .stage_clocks
+                .iter_mut()
+                .find(|clock| clock.stage == saved_clock.stage)
+            {
+                clock.base_interval_steps =
+                    Self::base_stage_interval_from_config(config, saved_clock.stage).max(1);
+                clock.dynamic_interval_steps = saved_clock.dynamic_interval_steps.max(1);
+                clock.next_due_step = saved_clock.next_due_step;
+                clock.run_count = saved_clock.run_count;
+                clock.last_run_step = saved_clock.last_run_step;
+                clock.last_run_time_ms = saved_clock.last_run_time_ms.max(0.0);
+            }
+        }
+        scheduler_state
+    }
+
+    fn base_stage_interval_from_config(
+        config: &WholeCellConfig,
+        stage: WholeCellSolverStage,
+    ) -> u64 {
+        match stage {
+            WholeCellSolverStage::AtomisticRefinement => 1,
+            WholeCellSolverStage::Rdme => 1,
+            WholeCellSolverStage::Cme => config.cme_interval.max(1),
+            WholeCellSolverStage::Ode => config.ode_interval.max(1),
+            WholeCellSolverStage::ChromosomeBd => config.bd_interval.max(1),
+            WholeCellSolverStage::Geometry => config.geometry_interval.max(1),
+        }
+    }
+
+    fn scheduler_clock(&self, stage: WholeCellSolverStage) -> Option<&WholeCellStageClockState> {
+        self.scheduler_state
+            .stage_clocks
+            .iter()
+            .find(|clock| clock.stage == stage)
+    }
+
+    fn scheduler_clock_mut(
+        &mut self,
+        stage: WholeCellSolverStage,
+    ) -> Option<&mut WholeCellStageClockState> {
+        self.scheduler_state
+            .stage_clocks
+            .iter_mut()
+            .find(|clock| clock.stage == stage)
+    }
+
+    fn average_unit_stress_penalty(&self) -> f32 {
+        if self.organism_expression.transcription_units.is_empty() {
+            1.0
+        } else {
+            self.organism_expression
+                .transcription_units
+                .iter()
+                .map(|unit| unit.stress_penalty.max(0.0))
+                .sum::<f32>()
+                / self.organism_expression.transcription_units.len() as f32
+        }
+    }
+
+    fn adaptive_interval_for_stage(&self, stage: WholeCellSolverStage) -> u64 {
+        let base = Self::base_stage_interval_from_config(&self.config, stage);
+        let expression = &self.organism_expression;
+        let stress = (self.average_unit_stress_penalty() - 1.0).max(0.0);
+        let load = (self.effective_metabolic_load() - 1.0).max(0.0);
+        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        match stage {
+            WholeCellSolverStage::AtomisticRefinement => {
+                if self.chemistry_bridge.is_none() {
+                    base
+                } else {
+                    let probe_floor = self
+                        .scheduled_subsystem_probes
+                        .iter()
+                        .map(|probe| probe.interval_steps.max(1))
+                        .min()
+                        .unwrap_or(base.max(1));
+                    let drive = (0.85
+                        + 0.45 * load
+                        + 0.25 * stress
+                        + 0.18 * self.division_progress
+                        + 0.12 * (1.0 - self.chemistry_report.crowding_penalty).max(0.0))
+                        .clamp(0.6, 2.6);
+                    Self::scaled_interval(base.max(1), drive, 3).min(probe_floor)
+                }
+            }
+            WholeCellSolverStage::Rdme => 1,
+            WholeCellSolverStage::Cme => {
+                let drive = (0.70
+                    + 0.28 * expression.global_activity
+                    + 0.22 * expression.process_scales.transcription
+                    + 0.18 * expression.translation_support
+                    + 0.18 * stress)
+                    .clamp(0.45, 2.8);
+                Self::scaled_interval(base, drive, 3)
+            }
+            WholeCellSolverStage::Ode => {
+                let energy_stress =
+                    ((self.adp_mm + 0.25) / (self.atp_mm + 0.25)).clamp(0.35, 3.0) - 0.35;
+                let drive = (0.82
+                    + 0.34 * energy_stress.max(0.0)
+                    + 0.28 * load
+                    + 0.16 * (1.0 - expression.energy_support).max(0.0))
+                    .clamp(0.55, 3.0);
+                Self::scaled_interval(base, drive, 3)
+            }
+            WholeCellSolverStage::ChromosomeBd => {
+                let drive = (0.58
+                    + 0.62 * replicated_fraction
+                    + 0.24 * expression.process_scales.replication
+                    + 0.18 * self.complex_assembly.replisome_complexes.sqrt() / 6.0)
+                    .clamp(0.40, 2.8);
+                Self::scaled_interval(base, drive, 4)
+            }
+            WholeCellSolverStage::Geometry => {
+                let drive = (0.54
+                    + 0.52 * self.division_progress
+                    + 0.22 * expression.process_scales.membrane
+                    + 0.18 * expression.process_scales.constriction
+                    + 0.12 * self.complex_assembly.ftsz_polymer.sqrt() / 8.0)
+                    .clamp(0.35, 2.6);
+                Self::scaled_interval(base, drive, 4)
+            }
+        }
+    }
+
+    fn refresh_multirate_scheduler(&mut self) {
+        let updates = Self::SOLVER_STAGE_ORDER
+            .iter()
+            .copied()
+            .map(|stage| {
+                (
+                    stage,
+                    Self::base_stage_interval_from_config(&self.config, stage),
+                    self.adaptive_interval_for_stage(stage),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (stage, base_interval, dynamic_interval) in updates {
+            if let Some(clock) = self.scheduler_clock_mut(stage) {
+                clock.base_interval_steps = base_interval.max(1);
+                clock.dynamic_interval_steps = dynamic_interval.max(1);
+            }
+        }
+    }
+
+    fn stage_due(&self, stage: WholeCellSolverStage) -> bool {
+        if stage == WholeCellSolverStage::AtomisticRefinement && self.chemistry_bridge.is_none() {
+            return false;
+        }
+        self.scheduler_clock(stage)
+            .map(|clock| self.step_count >= clock.next_due_step)
+            .unwrap_or(false)
+    }
+
+    fn stage_dt_ms(&self, stage: WholeCellSolverStage, base_dt: f32) -> f32 {
+        if let Some(clock) = self.scheduler_clock(stage) {
+            let steps = if let Some(last_run_step) = clock.last_run_step {
+                self.step_count
+                    .saturating_sub(last_run_step)
+                    .max(clock.dynamic_interval_steps.max(1))
+            } else {
+                clock.dynamic_interval_steps.max(1)
+            };
+            base_dt * steps.max(1) as f32
+        } else {
+            base_dt
+        }
+    }
+
+    fn record_stage_run(&mut self, stage: WholeCellSolverStage, dt_ms: f32) {
+        let next_interval = self.adaptive_interval_for_stage(stage).max(1);
+        let step_count = self.step_count;
+        let time_ms = self.time_ms;
+        if let Some(clock) = self.scheduler_clock_mut(stage) {
+            clock.dynamic_interval_steps = next_interval;
+            clock.run_count += 1;
+            clock.last_run_step = Some(step_count);
+            clock.last_run_time_ms = time_ms;
+            clock.next_due_step = step_count.saturating_add(next_interval);
+        }
+        if dt_ms.is_finite() && dt_ms > 0.0 {
+            let _ = dt_ms;
         }
     }
 
@@ -4404,6 +4640,7 @@ impl WholeCellSimulator {
     }
 
     fn restore_saved_state(&mut self, saved: WholeCellSavedState) -> Result<(), String> {
+        let saved_scheduler_state = saved.scheduler_state.clone();
         self.program_name = saved.program_name.clone();
         self.contract = saved.contract.clone();
         self.provenance = saved.provenance.clone();
@@ -4529,12 +4766,17 @@ impl WholeCellSimulator {
         };
         self.md_translation_scale = Self::finite_scale(saved.md_translation_scale, 1.0, 0.70, 1.45);
         self.md_membrane_scale = Self::finite_scale(saved.md_membrane_scale, 1.0, 0.70, 1.45);
+        self.scheduler_state = Self::normalized_scheduler_state(&self.config, saved_scheduler_state);
+        if self.scheduler_state.stage_clocks.iter().all(|clock| clock.run_count == 0) {
+            self.refresh_multirate_scheduler();
+        }
         self.initialize_surrogate_pool_diagnostics();
         Ok(())
     }
 
     /// Create a simulator with JCVI-syn3A-like defaults.
     pub fn new(config: WholeCellConfig) -> Self {
+        let scheduler_state = Self::build_scheduler_state(&config);
         let backend = if config.use_gpu && gpu::has_gpu() {
             WholeCellBackend::Metal
         } else {
@@ -4628,6 +4870,7 @@ impl WholeCellSimulator {
                 .copied()
                 .map(WholeCellSubsystemState::new)
                 .collect(),
+            scheduler_state,
             md_translation_scale: 1.0,
             md_membrane_scale: 1.0,
         };
@@ -4635,6 +4878,7 @@ impl WholeCellSimulator {
         simulator.refresh_organism_expression_state();
         simulator.initialize_complex_assembly_state();
         simulator.initialize_runtime_process_state();
+        simulator.refresh_multirate_scheduler();
         simulator.initialize_surrogate_pool_diagnostics();
         simulator
     }
@@ -4717,6 +4961,7 @@ impl WholeCellSimulator {
         simulator.refresh_organism_expression_state();
         simulator.initialize_complex_assembly_state();
         simulator.initialize_runtime_process_state();
+        simulator.refresh_multirate_scheduler();
         simulator.initialize_surrogate_pool_diagnostics();
         simulator
     }
@@ -4778,6 +5023,7 @@ impl WholeCellSimulator {
             organism_reactions: self.organism_reactions.clone(),
             complex_assembly: self.complex_assembly,
             named_complexes: self.named_complexes.clone(),
+            scheduler_state: self.scheduler_state.clone(),
             config: self.config.clone(),
             core: WholeCellSavedCoreState {
                 time_ms: self.time_ms,
@@ -4842,24 +5088,48 @@ impl WholeCellSimulator {
 
     /// Step the simulator by one configured time quantum.
     pub fn step(&mut self) {
-        let dt = self.config.dt_ms;
-        self.update_local_chemistry(dt);
+        let base_dt = self.config.dt_ms;
         self.refresh_organism_expression_state();
-        self.update_complex_assembly_state(dt);
-        self.rdme_stage(dt);
-        if self.step_count % self.config.cme_interval == 0 {
-            self.cme_stage(dt);
+        self.refresh_multirate_scheduler();
+        self.update_complex_assembly_state(base_dt);
+
+        if self.stage_due(WholeCellSolverStage::AtomisticRefinement) {
+            let stage_dt = self.stage_dt_ms(WholeCellSolverStage::AtomisticRefinement, base_dt);
+            self.update_local_chemistry(stage_dt);
+            self.record_stage_run(WholeCellSolverStage::AtomisticRefinement, stage_dt);
         }
-        if self.step_count % self.config.ode_interval == 0 {
-            self.ode_stage(dt);
+
+        if self.stage_due(WholeCellSolverStage::Rdme) {
+            let stage_dt = self.stage_dt_ms(WholeCellSolverStage::Rdme, base_dt);
+            self.rdme_stage(stage_dt);
+            self.record_stage_run(WholeCellSolverStage::Rdme, stage_dt);
         }
-        if self.step_count % self.config.bd_interval == 0 {
-            self.bd_stage(dt);
+
+        if self.stage_due(WholeCellSolverStage::Cme) {
+            let stage_dt = self.stage_dt_ms(WholeCellSolverStage::Cme, base_dt);
+            self.cme_stage(stage_dt);
+            self.record_stage_run(WholeCellSolverStage::Cme, stage_dt);
         }
-        if self.step_count % self.config.geometry_interval == 0 {
-            self.geometry_stage(dt);
+
+        if self.stage_due(WholeCellSolverStage::Ode) {
+            let stage_dt = self.stage_dt_ms(WholeCellSolverStage::Ode, base_dt);
+            self.ode_stage(stage_dt);
+            self.record_stage_run(WholeCellSolverStage::Ode, stage_dt);
         }
-        self.time_ms += dt;
+
+        if self.stage_due(WholeCellSolverStage::ChromosomeBd) {
+            let stage_dt = self.stage_dt_ms(WholeCellSolverStage::ChromosomeBd, base_dt);
+            self.bd_stage(stage_dt);
+            self.record_stage_run(WholeCellSolverStage::ChromosomeBd, stage_dt);
+        }
+
+        if self.stage_due(WholeCellSolverStage::Geometry) {
+            let stage_dt = self.stage_dt_ms(WholeCellSolverStage::Geometry, base_dt);
+            self.geometry_stage(stage_dt);
+            self.record_stage_run(WholeCellSolverStage::Geometry, stage_dt);
+        }
+
+        self.time_ms += base_dt;
         self.step_count += 1;
     }
 
@@ -5128,6 +5398,7 @@ impl WholeCellSimulator {
             local_chemistry_sites: self.local_chemistry_sites(),
             local_md_probe: self.last_md_probe,
             subsystem_states: self.subsystem_states(),
+            scheduler_state: self.scheduler_state.clone(),
         }
     }
 
@@ -5393,13 +5664,13 @@ impl WholeCellSimulator {
         );
         self.sync_from_lattice();
         self.update_organism_inventory_dynamics(
-            dt * self.config.cme_interval.max(1) as f32,
+            dt,
             transcription_flux,
             translation_flux,
         );
-        self.update_complex_assembly_state(dt * self.config.cme_interval.max(1) as f32);
+        self.update_complex_assembly_state(dt);
         self.update_runtime_process_reactions(
-            dt * self.config.cme_interval.max(1) as f32,
+            dt,
             transcription_flux,
             translation_flux,
         );
@@ -6439,6 +6710,93 @@ mod tests {
             (restored_complex.ribosome_complexes - original_complex.ribosome_complexes).abs()
                 < 1.0e-6
         );
+    }
+
+    #[test]
+    fn test_saved_state_round_trip_preserves_scheduler_state() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        sim.enable_default_syn3a_subsystems();
+        sim.run(10);
+
+        let original = sim.snapshot();
+        let saved = sim.save_state_json().expect("serialize saved state");
+        let restored =
+            WholeCellSimulator::from_saved_state_json(&saved).expect("restore saved state");
+        let reloaded = restored.snapshot();
+
+        assert_eq!(reloaded.scheduler_state, original.scheduler_state);
+        assert!(
+            reloaded
+                .scheduler_state
+                .stage_clocks
+                .iter()
+                .any(|clock| clock.run_count > 0)
+        );
+        assert!(
+            reloaded
+                .scheduler_state
+                .stage_clocks
+                .iter()
+                .find(|clock| clock.stage == WholeCellSolverStage::AtomisticRefinement)
+                .expect("atomistic clock")
+                .run_count
+                > 0
+        );
+    }
+
+    #[test]
+    fn test_multirate_scheduler_allows_stress_driven_early_cme_reexecution() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        sim.config.cme_interval = 8;
+        sim.config.ode_interval = 8;
+        sim.atp_mm = 0.08;
+        sim.adp_mm = 2.10;
+        sim.glucose_mm = 0.12;
+        sim.oxygen_mm = 0.14;
+        sim.metabolic_load = 2.8;
+        sim.chemistry_report.translation_support = 0.58;
+        sim.chemistry_report.nucleotide_support = 0.60;
+        sim.chemistry_report.crowding_penalty = 0.74;
+        sim.refresh_organism_expression_state();
+        sim.refresh_multirate_scheduler();
+
+        let cme_clock = sim
+            .scheduler_clock(WholeCellSolverStage::Cme)
+            .expect("CME clock")
+            .clone();
+        let ode_clock = sim
+            .scheduler_clock(WholeCellSolverStage::Ode)
+            .expect("ODE clock")
+            .clone();
+        assert!(cme_clock.dynamic_interval_steps < sim.config.cme_interval);
+        assert!(ode_clock.dynamic_interval_steps < sim.config.ode_interval);
+
+        sim.step();
+        let initial_cme_runs = sim
+            .scheduler_clock(WholeCellSolverStage::Cme)
+            .expect("CME clock after first step")
+            .run_count;
+        let initial_ode_runs = sim
+            .scheduler_clock(WholeCellSolverStage::Ode)
+            .expect("ODE clock after first step")
+            .run_count;
+        assert_eq!(initial_cme_runs, 1);
+        assert_eq!(initial_ode_runs, 1);
+
+        let followup_steps = cme_clock.dynamic_interval_steps.max(ode_clock.dynamic_interval_steps);
+        sim.run(followup_steps);
+
+        let cme_after = sim
+            .scheduler_clock(WholeCellSolverStage::Cme)
+            .expect("CME clock after followup");
+        let ode_after = sim
+            .scheduler_clock(WholeCellSolverStage::Ode)
+            .expect("ODE clock after followup");
+        assert!(cme_after.run_count >= 2);
+        assert!(ode_after.run_count >= 2);
+        assert!(sim.step_count < sim.config.cme_interval + 2);
     }
 
     #[test]
