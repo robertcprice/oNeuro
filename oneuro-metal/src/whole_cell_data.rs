@@ -333,6 +333,16 @@ pub struct WholeCellOperonSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellOperonSemanticSpec {
+    pub name: String,
+    pub asset_class: WholeCellAssetClass,
+    #[serde(default = "default_assembly_family")]
+    pub complex_family: WholeCellAssemblyFamily,
+    #[serde(default)]
+    pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellRnaProductSpec {
     pub id: String,
     pub gene: String,
@@ -418,6 +428,8 @@ pub struct WholeCellGenomeAssetPackage {
     pub chromosome_domains: Vec<WholeCellChromosomeDomainSpec>,
     #[serde(default)]
     pub operons: Vec<WholeCellOperonSpec>,
+    #[serde(default)]
+    pub operon_semantics: Vec<WholeCellOperonSemanticSpec>,
     #[serde(default)]
     pub rnas: Vec<WholeCellRnaProductSpec>,
     #[serde(default)]
@@ -2167,6 +2179,24 @@ fn with_normalized_asset_pool_metadata(
     package
 }
 
+fn compile_operon_semantic_specs(
+    operons: &[WholeCellOperonSpec],
+) -> Vec<WholeCellOperonSemanticSpec> {
+    let mut semantics: Vec<WholeCellOperonSemanticSpec> = operons
+        .iter()
+        .filter_map(|operon| {
+            Some(WholeCellOperonSemanticSpec {
+                name: operon.name.clone(),
+                asset_class: operon.asset_class?,
+                complex_family: operon.complex_family?,
+                subsystem_targets: operon.subsystem_targets.clone(),
+            })
+        })
+        .collect();
+    semantics.sort_by(|left, right| left.name.cmp(&right.name));
+    semantics
+}
+
 fn normalize_asset_package_semantic_metadata(package: &mut WholeCellGenomeAssetPackage) {
     let mut operon_targets = HashMap::<String, Vec<Syn3ASubsystemPreset>>::new();
     for protein in &package.proteins {
@@ -2197,6 +2227,77 @@ fn normalize_asset_package_semantic_metadata(package: &mut WholeCellGenomeAssetP
         }
     }
 
+    let mut operon_semantics_by_name: HashMap<String, WholeCellOperonSemanticSpec> = package
+        .operon_semantics
+        .iter()
+        .cloned()
+        .map(|semantic| (semantic.name.clone(), semantic))
+        .collect();
+    for operon in &package.operons {
+        let Some(asset_class) = operon.asset_class else {
+            continue;
+        };
+        let Some(complex_family) = operon.complex_family else {
+            continue;
+        };
+        let semantic = operon_semantics_by_name
+            .entry(operon.name.clone())
+            .or_insert_with(|| WholeCellOperonSemanticSpec {
+                name: operon.name.clone(),
+                asset_class,
+                complex_family,
+                subsystem_targets: Vec::new(),
+            });
+        if matches!(semantic.asset_class, WholeCellAssetClass::Generic) {
+            semantic.asset_class = asset_class;
+        }
+        if matches!(semantic.complex_family, WholeCellAssemblyFamily::Generic) {
+            semantic.complex_family = complex_family;
+        }
+        push_unique_subsystem_targets(&mut semantic.subsystem_targets, &operon.subsystem_targets);
+    }
+    let mut operon_semantics = operon_semantics_by_name
+        .into_values()
+        .collect::<Vec<WholeCellOperonSemanticSpec>>();
+    operon_semantics.sort_by(|left, right| left.name.cmp(&right.name));
+    package.operon_semantics = operon_semantics;
+
+    let operon_semantic_map: HashMap<
+        String,
+        (
+            Vec<Syn3ASubsystemPreset>,
+            WholeCellAssetClass,
+            WholeCellAssemblyFamily,
+        ),
+    > = package
+        .operon_semantics
+        .iter()
+        .map(|semantic| {
+            (
+                semantic.name.clone(),
+                (
+                    semantic.subsystem_targets.clone(),
+                    semantic.asset_class,
+                    semantic.complex_family,
+                ),
+            )
+        })
+        .collect();
+
+    for operon in &mut package.operons {
+        if let Some((subsystem_targets, asset_class, family)) =
+            operon_semantic_map.get(&operon.name)
+        {
+            if operon.subsystem_targets.is_empty() {
+                operon.subsystem_targets = subsystem_targets.clone();
+            } else {
+                push_unique_subsystem_targets(&mut operon.subsystem_targets, subsystem_targets);
+            }
+            operon.asset_class = Some(*asset_class);
+            operon.complex_family = Some(*family);
+        }
+    }
+
     let operon_semantics: HashMap<
         String,
         (
@@ -2205,17 +2306,17 @@ fn normalize_asset_package_semantic_metadata(package: &mut WholeCellGenomeAssetP
             WholeCellAssemblyFamily,
         ),
     > = package
-        .operons
+        .operon_semantics
         .iter()
-        .filter_map(|operon| {
-            Some((
-                operon.name.clone(),
+        .map(|semantic| {
+            (
+                semantic.name.clone(),
                 (
-                    operon.subsystem_targets.clone(),
-                    operon.asset_class?,
-                    operon.complex_family?,
+                    semantic.subsystem_targets.clone(),
+                    semantic.asset_class,
+                    semantic.complex_family,
                 ),
-            ))
+            )
         })
         .collect();
 
@@ -3101,6 +3202,7 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
         origin_bp: spec.origin_bp.min(spec.chromosome_length_bp.max(1)),
         terminus_bp: spec.terminus_bp.min(spec.chromosome_length_bp.max(1)),
         chromosome_domains: spec.chromosome_domains.clone(),
+        operon_semantics: compile_operon_semantic_specs(&operons),
         operons,
         rnas,
         proteins,
@@ -4960,6 +5062,7 @@ mod tests {
             assets.chromosome_domains.len(),
             organism.chromosome_domains.len()
         );
+        assert_eq!(assets.operon_semantics.len(), assets.operons.len());
         assert_eq!(assets.rnas.len(), organism.genes.len());
         assert_eq!(assets.proteins.len(), organism.genes.len());
         assert!(assets.complexes.len() >= 4);
@@ -5544,20 +5647,44 @@ mod tests {
     #[test]
     fn parse_genome_asset_package_json_backfills_legacy_operon_semantics() {
         let mut package = bundled_syn3a_genome_asset_package().expect("bundled asset package");
+        let opaque_operon = "opaque_operon_alpha";
+        let semantic = package
+            .operon_semantics
+            .iter_mut()
+            .find(|semantic| semantic.name == "division_ring_operon")
+            .expect("division operon semantic");
+        let expected_asset_class = semantic.asset_class;
+        let expected_complex_family = semantic.complex_family;
+        let expected_targets = semantic.subsystem_targets.clone();
+        semantic.name = opaque_operon.to_string();
+
         let operon = package
             .operons
             .iter_mut()
             .find(|operon| operon.name == "division_ring_operon")
             .expect("division operon");
+        operon.name = opaque_operon.to_string();
         operon.subsystem_targets.clear();
         operon.asset_class = None;
         operon.complex_family = None;
+
+        for protein in package
+            .proteins
+            .iter_mut()
+            .filter(|protein| protein.operon == "division_ring_operon")
+        {
+            protein.operon = opaque_operon.to_string();
+            protein.subsystem_targets.clear();
+        }
 
         let complex = package
             .complexes
             .iter_mut()
             .find(|complex| complex.operon == "division_ring_operon")
             .expect("division complex");
+        let expected_membrane_inserted = complex.membrane_inserted;
+        let expected_division_coupled = complex.division_coupled;
+        complex.operon = opaque_operon.to_string();
         complex.subsystem_targets.clear();
         complex.asset_class = WholeCellAssetClass::Generic;
         complex.family = WholeCellAssemblyFamily::Generic;
@@ -5569,35 +5696,32 @@ mod tests {
         let reparsed_operon = reparsed
             .operons
             .iter()
-            .find(|operon| operon.name == "division_ring_operon")
+            .find(|operon| operon.name == opaque_operon)
             .expect("reparsed operon");
         let reparsed_complex = reparsed
             .complexes
             .iter()
-            .find(|complex| complex.operon == "division_ring_operon")
+            .find(|complex| complex.operon == opaque_operon)
             .expect("reparsed complex");
 
-        assert_eq!(
-            reparsed_operon.asset_class,
-            Some(WholeCellAssetClass::Constriction)
-        );
+        assert_eq!(reparsed_operon.asset_class, Some(expected_asset_class));
         assert_eq!(
             reparsed_operon.complex_family,
-            Some(WholeCellAssemblyFamily::Divisome)
+            Some(expected_complex_family)
         );
-        assert!(reparsed_operon
-            .subsystem_targets
-            .contains(&Syn3ASubsystemPreset::FtsZSeptumRing));
+        for target in &expected_targets {
+            assert!(reparsed_operon.subsystem_targets.contains(target));
+        }
+        assert_eq!(reparsed_complex.asset_class, expected_asset_class);
+        assert_eq!(reparsed_complex.family, expected_complex_family);
+        for target in &expected_targets {
+            assert!(reparsed_complex.subsystem_targets.contains(target));
+        }
+        assert_eq!(reparsed_complex.division_coupled, expected_division_coupled);
         assert_eq!(
-            reparsed_complex.asset_class,
-            WholeCellAssetClass::Constriction
+            reparsed_complex.membrane_inserted,
+            expected_membrane_inserted
         );
-        assert_eq!(reparsed_complex.family, WholeCellAssemblyFamily::Divisome);
-        assert!(reparsed_complex
-            .subsystem_targets
-            .contains(&Syn3ASubsystemPreset::FtsZSeptumRing));
-        assert!(reparsed_complex.division_coupled);
-        assert!(reparsed_complex.membrane_inserted);
     }
 
     #[test]
