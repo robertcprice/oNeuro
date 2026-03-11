@@ -25,6 +25,10 @@ def test_compile_syn3a_bundle_matches_current_runtime_shape():
     assert summary["operon_count"] >= summary["transcription_unit_count"]
     assert summary["protein_count"] == summary["gene_count"]
     assert summary["targeted_complex_count"] >= 4
+    assert len(bundle.organism_spec["chromosome_domains"]) >= 4
+    assert len(bundle.genome_asset_package["chromosome_domains"]) == len(
+        bundle.organism_spec["chromosome_domains"]
+    )
     assert "organism_spec_json" in bundle.source_hashes
 
 
@@ -40,6 +44,7 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     assert summary["polycistronic_operon_count"] == 1
     assert summary["protein_count"] == 4
     assert summary["complex_count"] >= 3
+    assert len(bundle.organism_spec["chromosome_domains"]) >= 4
     assert "genome_fasta" in bundle.source_hashes
     assert "gene_features_gff" in bundle.source_hashes
     assert Path(written["organism_spec"]).exists()
@@ -71,5 +76,7 @@ def test_rust_bundle_manifest_ingestion_if_available():
     assert "\"protein_degradation\"" in compiled_registry
     assert "\"stress_response\"" in compiled_registry
     assert "\"complex_repair\"" in compiled_registry
+    assert "\"chromosome_domains\"" in compiled_spec
+    assert "\"chromosome_domain\"" in compiled_registry
     assert summary is not None
     assert summary["organism"] == "Mgen-minimal-demo"

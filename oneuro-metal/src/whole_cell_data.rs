@@ -234,11 +234,34 @@ pub struct WholeCellOrganismSpec {
     pub geometry: WholeCellGeometryPrior,
     pub composition: WholeCellCompositionPrior,
     #[serde(default)]
+    pub chromosome_domains: Vec<WholeCellChromosomeDomainSpec>,
+    #[serde(default)]
     pub pools: Vec<WholeCellMoleculePoolSpec>,
     #[serde(default)]
     pub genes: Vec<WholeCellGenomeFeature>,
     #[serde(default)]
     pub transcription_units: Vec<WholeCellTranscriptionUnitSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellChromosomeDomainSpec {
+    pub id: String,
+    pub start_bp: u32,
+    pub end_bp: u32,
+    #[serde(default)]
+    pub axial_center_fraction: f32,
+    #[serde(default = "default_chromosome_domain_spread_fraction")]
+    pub axial_spread_fraction: f32,
+    #[serde(default)]
+    pub genes: Vec<String>,
+    #[serde(default)]
+    pub transcription_units: Vec<String>,
+    #[serde(default)]
+    pub operons: Vec<String>,
+}
+
+fn default_chromosome_domain_spread_fraction() -> f32 {
+    0.16
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -363,6 +386,8 @@ pub struct WholeCellGenomeAssetPackage {
     pub origin_bp: u32,
     pub terminus_bp: u32,
     #[serde(default)]
+    pub chromosome_domains: Vec<WholeCellChromosomeDomainSpec>,
+    #[serde(default)]
     pub operons: Vec<WholeCellOperonSpec>,
     #[serde(default)]
     pub rnas: Vec<WholeCellRnaProductSpec>,
@@ -448,6 +473,8 @@ pub struct WholeCellSpeciesSpec {
     pub spatial_scope: WholeCellSpatialScope,
     #[serde(default)]
     pub patch_domain: WholeCellPatchDomain,
+    #[serde(default)]
+    pub chromosome_domain: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -477,11 +504,15 @@ pub struct WholeCellReactionSpec {
     pub spatial_scope: WholeCellSpatialScope,
     #[serde(default)]
     pub patch_domain: WholeCellPatchDomain,
+    #[serde(default)]
+    pub chromosome_domain: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellGenomeProcessRegistry {
     pub organism: String,
+    #[serde(default)]
+    pub chromosome_domains: Vec<WholeCellChromosomeDomainSpec>,
     #[serde(default)]
     pub species: Vec<WholeCellSpeciesSpec>,
     #[serde(default)]
@@ -508,6 +539,8 @@ pub struct WholeCellSpeciesRuntimeState {
     pub spatial_scope: WholeCellSpatialScope,
     #[serde(default)]
     pub patch_domain: WholeCellPatchDomain,
+    #[serde(default)]
+    pub chromosome_domain: Option<String>,
     pub count: f32,
     #[serde(default)]
     pub anchor_count: f32,
@@ -538,6 +571,8 @@ pub struct WholeCellReactionRuntimeState {
     pub spatial_scope: WholeCellSpatialScope,
     #[serde(default)]
     pub patch_domain: WholeCellPatchDomain,
+    #[serde(default)]
+    pub chromosome_domain: Option<String>,
     #[serde(default)]
     pub current_flux: f32,
     #[serde(default)]
@@ -710,6 +745,7 @@ pub fn initialize_runtime_species_state(
             subsystem_targets: species.subsystem_targets.clone(),
             spatial_scope: species.spatial_scope,
             patch_domain: species.patch_domain,
+            chromosome_domain: species.chromosome_domain.clone(),
             count: species.basal_abundance.max(0.0),
             anchor_count: species.basal_abundance.max(0.0),
             synthesis_rate: 0.0,
@@ -737,6 +773,7 @@ pub fn initialize_runtime_reaction_state(
             subsystem_targets: reaction.subsystem_targets.clone(),
             spatial_scope: reaction.spatial_scope,
             patch_domain: reaction.patch_domain,
+            chromosome_domain: reaction.chromosome_domain.clone(),
             current_flux: 0.0,
             cumulative_extent: 0.0,
             reactant_satisfaction: 1.0,
@@ -755,6 +792,7 @@ pub fn parse_genome_process_registry_json(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WholeCellGenomeAssetSummary {
     pub organism: String,
+    pub chromosome_domain_count: usize,
     pub operon_count: usize,
     pub polycistronic_operon_count: usize,
     pub rna_count: usize,
@@ -767,6 +805,7 @@ impl From<&WholeCellGenomeAssetPackage> for WholeCellGenomeAssetSummary {
     fn from(package: &WholeCellGenomeAssetPackage) -> Self {
         Self {
             organism: package.organism.clone(),
+            chromosome_domain_count: package.chromosome_domains.len(),
             operon_count: package.operons.len(),
             polycistronic_operon_count: package
                 .operons
@@ -789,6 +828,7 @@ impl From<&WholeCellGenomeAssetPackage> for WholeCellGenomeAssetSummary {
 pub struct WholeCellOrganismSummary {
     pub organism: String,
     pub chromosome_length_bp: u32,
+    pub chromosome_domain_count: usize,
     pub gene_count: usize,
     pub transcription_unit_count: usize,
     pub pool_count: usize,
@@ -799,6 +839,7 @@ impl From<&WholeCellOrganismSpec> for WholeCellOrganismSummary {
         Self {
             organism: spec.organism.clone(),
             chromosome_length_bp: spec.chromosome_length_bp,
+            chromosome_domain_count: spec.chromosome_domains.len(),
             gene_count: spec.genes.len(),
             transcription_unit_count: spec.transcription_units.len(),
             pool_count: spec.pools.len(),
@@ -810,6 +851,7 @@ impl From<&WholeCellOrganismSpec> for WholeCellOrganismSummary {
 pub struct WholeCellOrganismProfile {
     pub organism: String,
     pub chromosome_length_bp: u32,
+    pub chromosome_domain_count: usize,
     pub gene_count: usize,
     pub transcription_unit_count: usize,
     pub pool_count: usize,
@@ -830,6 +872,7 @@ impl Default for WholeCellOrganismProfile {
         Self {
             organism: "generic".to_string(),
             chromosome_length_bp: 1,
+            chromosome_domain_count: 0,
             gene_count: 0,
             transcription_unit_count: 0,
             pool_count: 0,
@@ -1322,6 +1365,8 @@ pub struct WholeCellOrganismBundleManifest {
     #[serde(default)]
     pub transcription_units_json: Option<String>,
     #[serde(default)]
+    pub chromosome_domains_json: Option<String>,
+    #[serde(default)]
     pub pools_json: Option<String>,
 }
 
@@ -1805,6 +1850,7 @@ pub fn derive_organism_profile(spec: &WholeCellOrganismSpec) -> WholeCellOrganis
     WholeCellOrganismProfile {
         organism: spec.organism.clone(),
         chromosome_length_bp,
+        chromosome_domain_count: spec.chromosome_domains.len(),
         gene_count,
         transcription_unit_count,
         pool_count,
@@ -1827,6 +1873,53 @@ fn gene_length_bp(feature: &WholeCellGenomeFeature) -> u32 {
     } else {
         0
     }
+}
+
+fn gene_midpoint_bp(feature: &WholeCellGenomeFeature) -> u32 {
+    ((feature.start_bp as u64 + feature.end_bp as u64) / 2) as u32
+}
+
+fn midpoint_bp(start_bp: u32, end_bp: u32) -> u32 {
+    ((start_bp as u64 + end_bp as u64) / 2) as u32
+}
+
+fn normalized_chromosome_interval(start_bp: u32, end_bp: u32, genome_bp: u32) -> (u32, u32) {
+    let genome_bp = genome_bp.max(1);
+    let start_bp = start_bp.min(genome_bp.saturating_sub(1));
+    let end_bp = end_bp.min(genome_bp.saturating_sub(1));
+    if start_bp <= end_bp {
+        (start_bp, end_bp)
+    } else {
+        (end_bp, start_bp)
+    }
+}
+
+fn interval_contains_bp(start_bp: u32, end_bp: u32, position_bp: u32) -> bool {
+    let (start_bp, end_bp) = if start_bp <= end_bp {
+        (start_bp, end_bp)
+    } else {
+        (end_bp, start_bp)
+    };
+    position_bp >= start_bp && position_bp <= end_bp
+}
+
+fn chromosome_domain_id_for_position(
+    domains: &[WholeCellChromosomeDomainSpec],
+    position_bp: u32,
+) -> Option<String> {
+    domains
+        .iter()
+        .find(|domain| interval_contains_bp(domain.start_bp, domain.end_bp, position_bp))
+        .map(|domain| domain.id.clone())
+        .or_else(|| {
+            domains
+                .iter()
+                .min_by_key(|domain| {
+                    let center_bp = midpoint_bp(domain.start_bp, domain.end_bp);
+                    center_bp.abs_diff(position_bp)
+                })
+                .map(|domain| domain.id.clone())
+        })
 }
 
 fn inferred_asset_class(
@@ -2043,9 +2136,7 @@ fn localized_pool_transfer_rate(field: WholeCellBulkField) -> f32 {
         WholeCellBulkField::AminoAcids => 0.072,
         WholeCellBulkField::Nucleotides => 0.066,
         WholeCellBulkField::MembranePrecursors => 0.058,
-        WholeCellBulkField::ADP
-        | WholeCellBulkField::Glucose
-        | WholeCellBulkField::Oxygen => 0.0,
+        WholeCellBulkField::ADP | WholeCellBulkField::Glucose | WholeCellBulkField::Oxygen => 0.0,
     }
 }
 
@@ -2055,9 +2146,7 @@ fn localized_pool_turnover_rate(field: WholeCellBulkField) -> f32 {
         WholeCellBulkField::AminoAcids => 0.025,
         WholeCellBulkField::Nucleotides => 0.022,
         WholeCellBulkField::MembranePrecursors => 0.020,
-        WholeCellBulkField::ADP
-        | WholeCellBulkField::Glucose
-        | WholeCellBulkField::Oxygen => 0.0,
+        WholeCellBulkField::ADP | WholeCellBulkField::Glucose | WholeCellBulkField::Oxygen => 0.0,
     }
 }
 
@@ -2067,9 +2156,7 @@ fn localized_pool_basal_scale(field: WholeCellBulkField) -> f32 {
         WholeCellBulkField::AminoAcids => 0.09,
         WholeCellBulkField::Nucleotides => 0.08,
         WholeCellBulkField::MembranePrecursors => 0.07,
-        WholeCellBulkField::ADP
-        | WholeCellBulkField::Glucose
-        | WholeCellBulkField::Oxygen => 0.0,
+        WholeCellBulkField::ADP | WholeCellBulkField::Glucose | WholeCellBulkField::Oxygen => 0.0,
     }
 }
 
@@ -2177,7 +2264,11 @@ struct LocalizedPoolRequest {
 
 fn register_localized_pool_request(
     requests: &mut HashMap<
-        (WholeCellBulkField, WholeCellSpatialScope, WholeCellPatchDomain),
+        (
+            WholeCellBulkField,
+            WholeCellSpatialScope,
+            WholeCellPatchDomain,
+        ),
         LocalizedPoolRequest,
     >,
     field: WholeCellBulkField,
@@ -2312,6 +2403,160 @@ fn operon_bounds(spec: &WholeCellOrganismSpec, genes: &[String]) -> (u32, u32) {
     }
 }
 
+fn transcription_unit_midpoint_bp(
+    spec: &WholeCellOrganismSpec,
+    unit: &WholeCellTranscriptionUnitSpec,
+) -> u32 {
+    let (start_bp, end_bp) = operon_bounds(spec, &unit.genes);
+    if start_bp == 0 && end_bp == 0 {
+        0
+    } else {
+        midpoint_bp(start_bp, end_bp)
+    }
+}
+
+fn compile_chromosome_domains(
+    spec: &WholeCellOrganismSpec,
+    operons: &[WholeCellOperonSpec],
+) -> Vec<WholeCellChromosomeDomainSpec> {
+    const DEFAULT_DOMAIN_COUNT: usize = 4;
+
+    let genome_bp = spec.chromosome_length_bp.max(1);
+    let mut domains = if spec.chromosome_domains.is_empty() {
+        let domain_count = DEFAULT_DOMAIN_COUNT.max(1);
+        (0..domain_count)
+            .map(|index| {
+                let start_bp = ((index as u64 * genome_bp as u64) / domain_count as u64) as u32;
+                let mut end_bp =
+                    (((index as u64 + 1) * genome_bp as u64) / domain_count as u64) as u32;
+                end_bp = end_bp.saturating_sub(1);
+                let (start_bp, end_bp) =
+                    normalized_chromosome_interval(start_bp, end_bp.max(start_bp), genome_bp);
+                let center_fraction = ((midpoint_bp(start_bp, end_bp) as f32 + 0.5)
+                    / genome_bp as f32)
+                    .clamp(0.02, 0.98);
+                let spread_fraction =
+                    (((end_bp.saturating_sub(start_bp) + 1) as f32 / genome_bp as f32) * 0.75)
+                        .clamp(0.08, 0.24);
+                WholeCellChromosomeDomainSpec {
+                    id: format!("chromosome_domain_{}", index),
+                    start_bp,
+                    end_bp,
+                    axial_center_fraction: center_fraction,
+                    axial_spread_fraction: spread_fraction,
+                    genes: Vec::new(),
+                    transcription_units: Vec::new(),
+                    operons: Vec::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+    } else {
+        spec.chromosome_domains
+            .iter()
+            .enumerate()
+            .map(|(index, domain)| {
+                let (start_bp, end_bp) =
+                    normalized_chromosome_interval(domain.start_bp, domain.end_bp, genome_bp);
+                let center_fraction = if domain.axial_center_fraction > 0.0 {
+                    domain.axial_center_fraction.clamp(0.02, 0.98)
+                } else {
+                    ((midpoint_bp(start_bp, end_bp) as f32 + 0.5) / genome_bp as f32)
+                        .clamp(0.02, 0.98)
+                };
+                WholeCellChromosomeDomainSpec {
+                    id: if domain.id.trim().is_empty() {
+                        format!("chromosome_domain_{}", index)
+                    } else {
+                        domain.id.clone()
+                    },
+                    start_bp,
+                    end_bp,
+                    axial_center_fraction: center_fraction,
+                    axial_spread_fraction: domain.axial_spread_fraction.clamp(0.05, 0.28),
+                    genes: domain.genes.clone(),
+                    transcription_units: domain.transcription_units.clone(),
+                    operons: domain.operons.clone(),
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    domains.sort_by_key(|domain| (domain.start_bp, domain.end_bp, domain.id.clone()));
+
+    for domain in &mut domains {
+        for gene in &spec.genes {
+            let gene_midpoint = gene_midpoint_bp(gene);
+            if interval_contains_bp(domain.start_bp, domain.end_bp, gene_midpoint)
+                && !domain.genes.contains(&gene.gene)
+            {
+                domain.genes.push(gene.gene.clone());
+            }
+        }
+        for unit in &spec.transcription_units {
+            let midpoint = transcription_unit_midpoint_bp(spec, unit);
+            if interval_contains_bp(domain.start_bp, domain.end_bp, midpoint)
+                && !domain.transcription_units.contains(&unit.name)
+            {
+                domain.transcription_units.push(unit.name.clone());
+            }
+        }
+        for operon in operons {
+            let midpoint = midpoint_bp(operon.promoter_bp, operon.terminator_bp);
+            if interval_contains_bp(domain.start_bp, domain.end_bp, midpoint)
+                && !domain.operons.contains(&operon.name)
+            {
+                domain.operons.push(operon.name.clone());
+            }
+        }
+        domain.genes.sort();
+        domain.genes.dedup();
+        domain.transcription_units.sort();
+        domain.transcription_units.dedup();
+        domain.operons.sort();
+        domain.operons.dedup();
+    }
+
+    domains
+}
+
+fn with_compiled_chromosome_domains(mut spec: WholeCellOrganismSpec) -> WholeCellOrganismSpec {
+    let mut operons = Vec::new();
+    for transcription_unit in &spec.transcription_units {
+        let (promoter_bp, terminator_bp) = operon_bounds(&spec, &transcription_unit.genes);
+        operons.push(WholeCellOperonSpec {
+            name: transcription_unit.name.clone(),
+            genes: transcription_unit.genes.clone(),
+            promoter_bp,
+            terminator_bp,
+            basal_activity: transcription_unit.basal_activity.max(0.0),
+            polycistronic: transcription_unit.genes.len() > 1,
+            process_weights: transcription_unit.process_weights.clamped(),
+        });
+    }
+    for gene in &spec.genes {
+        if operons.iter().any(|operon| operon.name == gene.gene) {
+            continue;
+        }
+        if spec
+            .transcription_units
+            .iter()
+            .any(|unit| unit.genes.contains(&gene.gene))
+        {
+            continue;
+        }
+        operons.push(WholeCellOperonSpec {
+            name: gene.gene.clone(),
+            genes: vec![gene.gene.clone()],
+            promoter_bp: gene.start_bp.min(gene.end_bp),
+            terminator_bp: gene.start_bp.max(gene.end_bp),
+            basal_activity: gene.basal_expression.max(0.0),
+            polycistronic: false,
+            process_weights: gene.process_weights.clamped(),
+        });
+    }
+    spec.chromosome_domains = compile_chromosome_domains(&spec, &operons);
+    spec
+}
+
 fn push_unique_subsystem_targets(
     targets: &mut Vec<Syn3ASubsystemPreset>,
     candidates: &[Syn3ASubsystemPreset],
@@ -2324,11 +2569,12 @@ fn push_unique_subsystem_targets(
 }
 
 pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGenomeAssetPackage {
+    let spec = with_compiled_chromosome_domains(spec.clone());
     let mut gene_to_operon = HashMap::<String, String>::new();
     let mut operons = Vec::new();
 
     for transcription_unit in &spec.transcription_units {
-        let (promoter_bp, terminator_bp) = operon_bounds(spec, &transcription_unit.genes);
+        let (promoter_bp, terminator_bp) = operon_bounds(&spec, &transcription_unit.genes);
         for gene_name in &transcription_unit.genes {
             gene_to_operon.insert(gene_name.clone(), transcription_unit.name.clone());
         }
@@ -2446,6 +2692,7 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
         chromosome_length_bp: spec.chromosome_length_bp.max(1),
         origin_bp: spec.origin_bp.min(spec.chromosome_length_bp.max(1)),
         terminus_bp: spec.terminus_bp.min(spec.chromosome_length_bp.max(1)),
+        chromosome_domains: spec.chromosome_domains.clone(),
         operons,
         rnas,
         proteins,
@@ -2459,25 +2706,49 @@ pub fn compile_genome_process_registry(
 ) -> WholeCellGenomeProcessRegistry {
     let mut species = Vec::new();
     let mut reactions = Vec::new();
+    let operon_domain_map: HashMap<String, String> = package
+        .chromosome_domains
+        .iter()
+        .flat_map(|domain| {
+            domain
+                .operons
+                .iter()
+                .map(|operon| (operon.clone(), domain.id.clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let gene_domain_map: HashMap<String, String> = package
+        .chromosome_domains
+        .iter()
+        .flat_map(|domain| {
+            domain
+                .genes
+                .iter()
+                .map(|gene| (gene.clone(), domain.id.clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
     let mut localized_pool_requests: HashMap<
-        (WholeCellBulkField, WholeCellSpatialScope, WholeCellPatchDomain),
+        (
+            WholeCellBulkField,
+            WholeCellSpatialScope,
+            WholeCellPatchDomain,
+        ),
         LocalizedPoolRequest,
     > = HashMap::new();
     let atp_pool = find_pool_species_id_by_hint(package, "atp");
     let adp_pool = find_pool_species_id_by_hint(package, "adp");
     let nucleotide_pool = find_pool_species_id_by_hint(package, "nucleotide");
     let amino_pool = find_pool_species_id_by_hint(package, "amino");
-    let global_pools_by_field: HashMap<
-        WholeCellBulkField,
-        (String, &WholeCellMoleculePoolSpec),
-    > = package
-        .pools
-        .iter()
-        .filter_map(|pool| {
-            infer_pool_bulk_field(&pool.species)
-                .map(|field| (field, (pool_species_id(&pool.species), pool)))
-        })
-        .collect();
+    let global_pools_by_field: HashMap<WholeCellBulkField, (String, &WholeCellMoleculePoolSpec)> =
+        package
+            .pools
+            .iter()
+            .filter_map(|pool| {
+                infer_pool_bulk_field(&pool.species)
+                    .map(|field| (field, (pool_species_id(&pool.species), pool)))
+            })
+            .collect();
     let mut localized_pool_participant =
         |global_species_id: &String,
          field: WholeCellBulkField,
@@ -2509,6 +2780,8 @@ pub fn compile_genome_process_registry(
                 subsystem_targets,
             )
         };
+    let operon_domain = |operon: &str| operon_domain_map.get(operon).cloned();
+    let gene_domain = |gene: &str| gene_domain_map.get(gene).cloned();
 
     for pool in &package.pools {
         let species_name = pool.species.clone();
@@ -2552,6 +2825,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: Vec::new(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: None,
         });
     }
 
@@ -2575,6 +2849,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: Vec::new(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: operon_domain(&rna.operon),
         });
     }
 
@@ -2602,6 +2877,8 @@ pub fn compile_genome_process_registry(
             subsystem_targets: protein.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: gene_domain(&protein.gene)
+                .or_else(|| operon_domain(&protein.operon)),
         });
     }
 
@@ -2635,6 +2912,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         species.push(WholeCellSpeciesSpec {
             id: nucleation_id.clone(),
@@ -2650,6 +2928,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         species.push(WholeCellSpeciesSpec {
             id: elongation_id.clone(),
@@ -2665,6 +2944,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         species.push(WholeCellSpeciesSpec {
             id: mature_id.clone(),
@@ -2679,6 +2959,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
     }
 
@@ -2709,6 +2990,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: Vec::new(),
             spatial_scope: registry_spatial_scope(asset_class, compartment, &[]),
             patch_domain,
+            chromosome_domain: None,
         });
     }
 
@@ -2723,8 +3005,8 @@ pub fn compile_genome_process_registry(
             registry_spatial_scope(operon_asset_class, operon_compartment, &[]);
         let operon_patch_domain =
             registry_patch_domain(operon_asset_class, operon_compartment, &[], &operon.name);
-        let operon_signal_seed = operon.basal_activity.max(0.01)
-            * (operon.genes.len().max(1) as f32).sqrt().max(1.0);
+        let operon_signal_seed =
+            operon.basal_activity.max(0.01) * (operon.genes.len().max(1) as f32).sqrt().max(1.0);
         let mut reactants = Vec::new();
         if let Some(species_id) = nucleotide_pool.as_ref() {
             reactants.push(WholeCellReactionParticipantSpec {
@@ -2763,6 +3045,7 @@ pub fn compile_genome_process_registry(
                 subsystem_targets: Vec::new(),
                 spatial_scope: operon_spatial_scope,
                 patch_domain: operon_patch_domain,
+                chromosome_domain: operon_domain(&operon.name),
             });
         }
 
@@ -2819,6 +3102,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: Vec::new(),
             spatial_scope: operon_spatial_scope,
             patch_domain: operon_patch_domain,
+            chromosome_domain: operon_domain(&operon.name),
         });
     }
 
@@ -2871,6 +3155,8 @@ pub fn compile_genome_process_registry(
             subsystem_targets: protein.subsystem_targets.clone(),
             spatial_scope: protein_spatial_scope,
             patch_domain: protein_patch_domain,
+            chromosome_domain: gene_domain(&protein.gene)
+                .or_else(|| operon_domain(&protein.operon)),
         });
     }
 
@@ -2914,6 +3200,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: Vec::new(),
             spatial_scope: rna_spatial_scope,
             patch_domain: rna_patch_domain,
+            chromosome_domain: operon_domain(&rna.operon),
         });
     }
 
@@ -2963,6 +3250,8 @@ pub fn compile_genome_process_registry(
             subsystem_targets: protein.subsystem_targets.clone(),
             spatial_scope: protein_spatial_scope,
             patch_domain: protein_patch_domain,
+            chromosome_domain: gene_domain(&protein.gene)
+                .or_else(|| operon_domain(&protein.operon)),
         });
     }
 
@@ -3040,6 +3329,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         let mut nucleation_reactants = vec![WholeCellReactionParticipantSpec {
             species_id: subunit_pool_id.clone(),
@@ -3074,6 +3364,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         let mut elongation_reactants = vec![
             WholeCellReactionParticipantSpec {
@@ -3114,6 +3405,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         let mut maturation_reactants = vec![WholeCellReactionParticipantSpec {
             species_id: elongation_id.clone(),
@@ -3150,6 +3442,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         let mut repair_reactants = vec![WholeCellReactionParticipantSpec {
             species_id: subunit_pool_id.clone(),
@@ -3206,6 +3499,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
         let mut turnover_reactants = vec![WholeCellReactionParticipantSpec {
             species_id: mature_id,
@@ -3240,6 +3534,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: complex.subsystem_targets.clone(),
             spatial_scope: complex_spatial_scope,
             patch_domain: complex_patch_domain,
+            chromosome_domain: operon_domain(&complex.operon),
         });
     }
 
@@ -3284,8 +3579,7 @@ pub fn compile_genome_process_registry(
                 WholeCellPatchDomain::MembraneBand
                     | WholeCellPatchDomain::SeptumPatch
                     | WholeCellPatchDomain::PolarPatch
-            )
-        {
+            ) {
             match species_spec.asset_class {
                 WholeCellAssetClass::Membrane | WholeCellAssetClass::Constriction => 1.0,
                 _ => 0.45,
@@ -3313,7 +3607,11 @@ pub fn compile_genome_process_registry(
             continue;
         }
         let signal_seed = reaction_spec.nominal_rate.max(0.01)
-            * (reaction_spec.reactants.len().max(reaction_spec.products.len()).max(1) as f32)
+            * (reaction_spec
+                .reactants
+                .len()
+                .max(reaction_spec.products.len())
+                .max(1) as f32)
                 .sqrt();
         for (field, weight) in localized_pool_fields_for_asset_class(reaction_spec.asset_class) {
             if !localized_pool_supports_bulk_field(*field) {
@@ -3413,9 +3711,8 @@ pub fn compile_genome_process_registry(
                 | WholeCellPatchDomain::PolarPatch => "membrane".to_string(),
                 WholeCellPatchDomain::NucleoidTrack => "chromosome".to_string(),
                 WholeCellPatchDomain::Distributed => match spatial_scope {
-                    WholeCellSpatialScope::MembraneAdjacent | WholeCellSpatialScope::SeptumLocal => {
-                        "membrane".to_string()
-                    }
+                    WholeCellSpatialScope::MembraneAdjacent
+                    | WholeCellSpatialScope::SeptumLocal => "membrane".to_string(),
                     WholeCellSpatialScope::NucleoidLocal => "chromosome".to_string(),
                     WholeCellSpatialScope::WellMixed => "cytosol".to_string(),
                 },
@@ -3428,6 +3725,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: request.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: None,
         });
         reactions.push(WholeCellReactionSpec {
             id: format!(
@@ -3452,6 +3750,7 @@ pub fn compile_genome_process_registry(
             subsystem_targets: request.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: None,
         });
         reactions.push(WholeCellReactionSpec {
             id: format!(
@@ -3476,11 +3775,13 @@ pub fn compile_genome_process_registry(
             subsystem_targets: request.subsystem_targets.clone(),
             spatial_scope,
             patch_domain,
+            chromosome_domain: None,
         });
     }
 
     WholeCellGenomeProcessRegistry {
         organism: package.organism.clone(),
+        chromosome_domains: package.chromosome_domains.clone(),
         species,
         reactions,
     }
@@ -3630,6 +3931,7 @@ fn build_program_spec_from_organism(
     organism: WholeCellOrganismSpec,
     source_dataset: Option<String>,
 ) -> Result<WholeCellProgramSpec, String> {
+    let organism = with_compiled_chromosome_domains(organism);
     let assets = compile_genome_asset_package(&organism);
     let process_registry = compile_genome_process_registry(&assets);
     let mut spec = WholeCellProgramSpec {
@@ -3792,7 +4094,25 @@ pub fn compile_organism_spec_from_bundle_manifest_path(
         Vec::new()
     };
 
-    Ok(WholeCellOrganismSpec {
+    let chromosome_domains = if let Some(chromosome_domains_json) =
+        manifest.chromosome_domains_json.as_deref()
+    {
+        let domains_path = resolve_manifest_relative_path(&manifest_path, chromosome_domains_json)?;
+        serde_json::from_str::<Vec<WholeCellChromosomeDomainSpec>>(&read_text_file(
+            &domains_path,
+            "chromosome domain JSON",
+        )?)
+        .map_err(|error| {
+            format!(
+                "failed to parse chromosome domains {}: {error}",
+                domains_path.display()
+            )
+        })?
+    } else {
+        Vec::new()
+    };
+
+    Ok(with_compiled_chromosome_domains(WholeCellOrganismSpec {
         organism: manifest
             .organism
             .clone()
@@ -3802,10 +4122,11 @@ pub fn compile_organism_spec_from_bundle_manifest_path(
         terminus_bp: metadata.terminus_bp.min(chromosome_length_bp.max(1)),
         geometry: metadata.geometry,
         composition: metadata.composition,
+        chromosome_domains,
         pools,
         genes,
         transcription_units,
-    })
+    }))
 }
 
 pub fn compile_program_spec_from_bundle_manifest_path(
@@ -3861,14 +4182,43 @@ fn hydrate_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
             spec.organism_data = Some(resolve_bundled_organism_spec(reference)?);
         }
     }
+    if let Some(organism) = spec.organism_data.take() {
+        spec.organism_data = Some(with_compiled_chromosome_domains(organism));
+    }
     if spec.organism_assets.is_none() {
         if let Some(organism) = spec.organism_data.as_ref() {
             spec.organism_assets = Some(compile_genome_asset_package(organism));
         } else if let Some(reference) = spec.organism_data_ref.as_deref() {
             spec.organism_assets = Some(resolve_bundled_genome_asset_package(reference)?);
         }
+    } else if let (Some(organism), Some(assets)) =
+        (spec.organism_data.as_ref(), spec.organism_assets.as_mut())
+    {
+        if assets.chromosome_domains.is_empty() {
+            *assets = compile_genome_asset_package(organism);
+        }
     }
-    if spec.organism_process_registry.is_none() {
+    let refresh_registry = match (
+        spec.organism_assets.as_ref(),
+        spec.organism_process_registry.as_ref(),
+    ) {
+        (Some(assets), Some(registry)) if !assets.chromosome_domains.is_empty() => {
+            registry.chromosome_domains.is_empty()
+                || (registry
+                    .species
+                    .iter()
+                    .filter(|species| species.operon.is_some())
+                    .all(|species| species.chromosome_domain.is_none())
+                    && registry
+                        .reactions
+                        .iter()
+                        .filter(|reaction| reaction.operon.is_some())
+                        .all(|reaction| reaction.chromosome_domain.is_none()))
+        }
+        (_, None) => true,
+        _ => false,
+    };
+    if refresh_registry {
         if let Some(assets) = spec.organism_assets.as_ref() {
             spec.organism_process_registry = Some(compile_genome_process_registry(assets));
         }
@@ -3897,7 +4247,8 @@ pub fn bundled_syn3a_program_spec_json() -> &'static str {
 }
 
 pub fn parse_organism_spec_json(spec_json: &str) -> Result<WholeCellOrganismSpec, String> {
-    serde_json::from_str(spec_json)
+    serde_json::from_str::<WholeCellOrganismSpec>(spec_json)
+        .map(with_compiled_chromosome_domains)
         .map_err(|error| format!("failed to parse organism spec: {error}"))
 }
 
@@ -4013,7 +4364,37 @@ pub fn bundled_syn3a_program_spec() -> Result<WholeCellProgramSpec, String> {
 pub fn parse_saved_state_json(state_json: &str) -> Result<WholeCellSavedState, String> {
     let mut state: WholeCellSavedState = serde_json::from_str(state_json)
         .map_err(|error| format!("failed to parse saved state: {error}"))?;
-    if state.organism_process_registry.is_none() {
+    if let Some(organism) = state.organism_data.take() {
+        state.organism_data = Some(with_compiled_chromosome_domains(organism));
+    }
+    if let (Some(organism), Some(assets)) =
+        (state.organism_data.as_ref(), state.organism_assets.as_mut())
+    {
+        if assets.chromosome_domains.is_empty() {
+            *assets = compile_genome_asset_package(organism);
+        }
+    }
+    let refresh_registry = match (
+        state.organism_assets.as_ref(),
+        state.organism_process_registry.as_ref(),
+    ) {
+        (Some(assets), Some(registry)) if !assets.chromosome_domains.is_empty() => {
+            registry.chromosome_domains.is_empty()
+                || (registry
+                    .species
+                    .iter()
+                    .filter(|species| species.operon.is_some())
+                    .all(|species| species.chromosome_domain.is_none())
+                    && registry
+                        .reactions
+                        .iter()
+                        .filter(|reaction| reaction.operon.is_some())
+                        .all(|reaction| reaction.chromosome_domain.is_none()))
+        }
+        (_, None) => true,
+        _ => false,
+    };
+    if refresh_registry {
         if let Some(assets) = state.organism_assets.as_ref() {
             state.organism_process_registry = Some(compile_genome_process_registry(assets));
         }
@@ -4074,10 +4455,19 @@ mod tests {
         assert!(profile.transcription_unit_count >= 4);
         assert!(profile.process_scales.translation > 0.9);
         assert!(profile.metabolic_burden_scale > 0.9);
+        assert!(organism.chromosome_domains.len() >= 4);
         assert!(assets.operons.len() >= 4);
+        assert_eq!(
+            assets.chromosome_domains.len(),
+            organism.chromosome_domains.len()
+        );
         assert_eq!(assets.rnas.len(), organism.genes.len());
         assert_eq!(assets.proteins.len(), organism.genes.len());
         assert!(assets.complexes.len() >= 4);
+        assert_eq!(
+            registry.chromosome_domains.len(),
+            organism.chromosome_domains.len()
+        );
         assert!(registry.species.len() > assets.proteins.len());
         assert!(registry.reactions.len() >= assets.proteins.len());
         assert!(spec.provenance.compiled_ir_hash.is_some());
@@ -4144,6 +4534,15 @@ mod tests {
         assert_eq!(package.rnas.len(), organism.genes.len());
         assert_eq!(package.proteins.len(), organism.genes.len());
         assert!(package.complexes.len() >= organism.transcription_units.len());
+        assert_eq!(
+            summary.chromosome_domain_count,
+            package.chromosome_domains.len()
+        );
+        assert!(package.chromosome_domains.len() >= 4);
+        assert!(package
+            .chromosome_domains
+            .iter()
+            .all(|domain| !domain.operons.is_empty()));
         assert!(summary.operon_count >= organism.transcription_units.len());
         assert!(summary.protein_count >= 8);
         assert!(summary.targeted_complex_count >= 4);
@@ -4156,6 +4555,7 @@ mod tests {
         let package = parse_genome_asset_package_json(package_json).expect("parsed asset package");
 
         assert_eq!(package.organism, "JCVI-syn3A");
+        assert!(package.chromosome_domains.len() >= 4);
         assert!(package.operons.iter().any(|operon| operon.polycistronic));
         assert!(package
             .complexes
@@ -4170,6 +4570,10 @@ mod tests {
         let summary = WholeCellGenomeProcessRegistrySummary::from(&registry);
 
         assert_eq!(registry.organism, "JCVI-syn3A");
+        assert_eq!(
+            registry.chromosome_domains.len(),
+            package.chromosome_domains.len()
+        );
         assert!(summary.species_count > package.proteins.len());
         assert_eq!(summary.rna_species_count, package.rnas.len());
         assert_eq!(summary.protein_species_count, package.proteins.len());
@@ -4198,9 +4602,17 @@ mod tests {
             .iter()
             .any(|species| species.id == "ribosome_biogenesis_operon_complex_subunit_pool"));
         assert!(registry
+            .species
+            .iter()
+            .any(|species| species.operon.is_some() && species.chromosome_domain.is_some()));
+        assert!(registry
             .reactions
             .iter()
             .any(|reaction| reaction.reaction_class == WholeCellReactionClass::PoolTransport));
+        assert!(registry
+            .reactions
+            .iter()
+            .any(|reaction| reaction.operon.is_some() && reaction.chromosome_domain.is_some()));
         assert!(registry
             .reactions
             .iter()
@@ -4296,18 +4708,16 @@ mod tests {
         assert!(registry.reactions.iter().any(|reaction| {
             reaction.reaction_class == WholeCellReactionClass::LocalizedPoolTransfer
                 && reaction.patch_domain == WholeCellPatchDomain::MembraneBand
-                && reaction
-                    .products
-                    .iter()
-                    .any(|participant| participant.species_id == "pool_membrane_band_membrane_precursors")
+                && reaction.products.iter().any(|participant| {
+                    participant.species_id == "pool_membrane_band_membrane_precursors"
+                })
         }));
         assert!(registry.reactions.iter().any(|reaction| {
             reaction.reaction_class == WholeCellReactionClass::LocalizedPoolTurnover
                 && reaction.patch_domain == WholeCellPatchDomain::SeptumPatch
-                && reaction
-                    .reactants
-                    .iter()
-                    .any(|participant| participant.species_id == "pool_septum_patch_membrane_precursors")
+                && reaction.reactants.iter().any(|participant| {
+                    participant.species_id == "pool_septum_patch_membrane_precursors"
+                })
         }));
         assert!(registry.reactions.iter().any(|reaction| {
             reaction.reaction_class == WholeCellReactionClass::LocalizedPoolTransfer

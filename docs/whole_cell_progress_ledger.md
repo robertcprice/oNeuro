@@ -522,3 +522,28 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `chromosome locality is now domain-resolved, but the domains are still inferred from dynamic axial weights rather than explicit compiled chromosome-domain chemistry assets and domain-specific reaction ownership`
+
+### 2026-03-11 - Phase 7 / Compiled Chromosome Domain Ownership Slice
+
+- Summary:
+  - added explicit `chromosome_domains` to the native organism spec, compiled asset package, and process registry, plus `chromosome_domain` ownership on compiled species and reactions so chromosome locality is now part of the Rust IR instead of only runtime inference
+  - taught the Rust bundle compiler and hydration path to normalize or derive chromosome-domain assets, backfill older program and saved-state payloads, and propagate domain ownership into operon-, gene-, and complex-linked reactions without requiring a separate handwritten runtime map
+  - switched the whole-cell runtime to read compiled domain intervals and axial centers when assigning loci, fork support, and expression support, while keeping the old fixed-slice logic only as a fallback when compiled domains are absent
+  - updated the Python bundle POC compiler to emit the same compiled chromosome-domain metadata so the bundle artifacts used for debugging and inspection stay aligned with the native Rust/Metal execution path
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `src/oneuro/whole_cell/assets/compiler.py`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `cargo fmt --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_compiled_chromosome_domain_centers_bias_weight_peaks --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `chromosome domain ownership is now compiled into the IR, but the domain chemistry itself is still derived from generic source geometry rather than richer organism-specific domain assets and domain-resolved reaction datasets`
