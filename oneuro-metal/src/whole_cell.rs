@@ -24,7 +24,7 @@ use crate::whole_cell_data::{
     initialize_runtime_reaction_state, initialize_runtime_species_state, parse_program_spec_json,
     parse_saved_state_json, saved_state_to_json, WholeCellBulkField, WholeCellComplexAssemblyState,
     WholeCellComplexSpec, WholeCellContractSchema, WholeCellGenomeAssetPackage,
-    WholeCellGenomeAssetSummary, WholeCellGenomeProcessRegistry,
+    WholeCellGenomeAssetSummary, WholeCellGenomeFeature, WholeCellGenomeProcessRegistry,
     WholeCellGenomeProcessRegistrySummary, WholeCellLatticeState, WholeCellLocalChemistrySpec,
     WholeCellMoleculePoolSpec, WholeCellNamedComplexState, WholeCellOrganismExpressionState,
     WholeCellOrganismProfile, WholeCellOrganismSpec, WholeCellOrganismSummary,
@@ -2096,6 +2096,88 @@ impl WholeCellSimulator {
         (0.78 + 0.18 * transcript_signal + 0.24 * protein_signal).clamp(0.70, 1.45)
     }
 
+    fn expression_lengths_for_operon(
+        organism: &WholeCellOrganismSpec,
+        genes: &[String],
+    ) -> (f32, f32) {
+        let mut total_nt = 0.0;
+        let mut gene_count = 0usize;
+        for gene_name in genes {
+            if let Some(feature) = organism.genes.iter().find(|feature| feature.gene == *gene_name) {
+                let gene_nt = feature
+                    .end_bp
+                    .saturating_sub(feature.start_bp)
+                    .saturating_add(1)
+                    .max(90) as f32;
+                total_nt += gene_nt;
+                gene_count += 1;
+            }
+        }
+        if gene_count == 0 {
+            total_nt = 900.0 * genes.len().max(1) as f32;
+        }
+        let total_aa = (total_nt / 3.0).max(30.0);
+        (total_nt.max(90.0), total_aa)
+    }
+
+    fn expression_lengths_for_gene(feature: &WholeCellGenomeFeature) -> (f32, f32) {
+        let total_nt = feature
+            .end_bp
+            .saturating_sub(feature.start_bp)
+            .saturating_add(1)
+            .max(90) as f32;
+        let total_aa = (total_nt / 3.0).max(30.0);
+        (total_nt, total_aa)
+    }
+
+    fn normalize_expression_execution_state(unit: &mut WholeCellTranscriptionUnitState) {
+        unit.transcription_length_nt = unit.transcription_length_nt.max(90.0);
+        unit.translation_length_aa = unit.translation_length_aa.max(30.0);
+
+        let transcript_pool_total = unit.nascent_transcript_abundance.max(0.0)
+            + unit.mature_transcript_abundance.max(0.0)
+            + unit.damaged_transcript_abundance.max(0.0);
+        if transcript_pool_total <= 1.0e-6 && unit.transcript_abundance > 0.0 {
+            unit.mature_transcript_abundance = unit.transcript_abundance.max(0.0);
+        }
+
+        let protein_pool_total = unit.nascent_protein_abundance.max(0.0)
+            + unit.mature_protein_abundance.max(0.0)
+            + unit.damaged_protein_abundance.max(0.0);
+        if protein_pool_total <= 1.0e-6 && unit.protein_abundance > 0.0 {
+            unit.mature_protein_abundance = unit.protein_abundance.max(0.0);
+        }
+
+        unit.transcription_progress_nt =
+            unit.transcription_progress_nt.clamp(0.0, unit.transcription_length_nt.max(1.0));
+        unit.translation_progress_aa =
+            unit.translation_progress_aa.clamp(0.0, unit.translation_length_aa.max(1.0));
+        unit.promoter_open_fraction = unit.promoter_open_fraction.clamp(0.0, 1.0);
+        unit.active_rnap_occupancy = unit.active_rnap_occupancy.max(0.0);
+        unit.active_ribosome_occupancy = unit.active_ribosome_occupancy.max(0.0);
+        unit.nascent_transcript_abundance = unit.nascent_transcript_abundance.max(0.0);
+        unit.mature_transcript_abundance = unit.mature_transcript_abundance.max(0.0);
+        unit.damaged_transcript_abundance = unit.damaged_transcript_abundance.max(0.0);
+        unit.nascent_protein_abundance = unit.nascent_protein_abundance.max(0.0);
+        unit.mature_protein_abundance = unit.mature_protein_abundance.max(0.0);
+        unit.damaged_protein_abundance = unit.damaged_protein_abundance.max(0.0);
+        unit.transcript_abundance = (unit.nascent_transcript_abundance
+            + unit.mature_transcript_abundance
+            + unit.damaged_transcript_abundance)
+            .clamp(0.0, 1024.0);
+        unit.protein_abundance = (unit.nascent_protein_abundance
+            + unit.mature_protein_abundance
+            + unit.damaged_protein_abundance)
+            .clamp(0.0, 2048.0);
+    }
+
+    fn subtract_expression_pool(pool: &mut f32, delta: f32) -> f32 {
+        let available = pool.max(0.0);
+        let removed = available.min(delta.max(0.0));
+        *pool = (available - removed).max(0.0);
+        removed
+    }
+
     fn complex_assembly_signal_scale(signal: f32, mean_signal: f32, fallback: f32) -> f32 {
         if mean_signal <= 1.0e-6 {
             fallback
@@ -2687,9 +2769,26 @@ impl WholeCellSimulator {
         else {
             return false;
         };
+        Self::normalize_expression_execution_state(unit);
         if transcript_delta.is_finite() && transcript_delta.abs() > 1.0e-6 {
-            unit.transcript_abundance =
-                (unit.transcript_abundance + transcript_delta).clamp(0.0, 1024.0);
+            if transcript_delta >= 0.0 {
+                unit.mature_transcript_abundance =
+                    (unit.mature_transcript_abundance + transcript_delta).clamp(0.0, 1024.0);
+            } else {
+                let mut remaining = -transcript_delta;
+                remaining -= Self::subtract_expression_pool(
+                    &mut unit.damaged_transcript_abundance,
+                    remaining,
+                );
+                remaining -= Self::subtract_expression_pool(
+                    &mut unit.nascent_transcript_abundance,
+                    remaining,
+                );
+                let _ = Self::subtract_expression_pool(
+                    &mut unit.mature_transcript_abundance,
+                    remaining,
+                );
+            }
             if dt_scale > 0.0 {
                 if transcript_delta >= 0.0 {
                     unit.transcript_synthesis_rate += transcript_delta / dt_scale;
@@ -2699,7 +2798,18 @@ impl WholeCellSimulator {
             }
         }
         if protein_delta.is_finite() && protein_delta.abs() > 1.0e-6 {
-            unit.protein_abundance = (unit.protein_abundance + protein_delta).clamp(0.0, 2048.0);
+            if protein_delta >= 0.0 {
+                unit.mature_protein_abundance =
+                    (unit.mature_protein_abundance + protein_delta).clamp(0.0, 2048.0);
+            } else {
+                let mut remaining = -protein_delta;
+                remaining -=
+                    Self::subtract_expression_pool(&mut unit.damaged_protein_abundance, remaining);
+                remaining -=
+                    Self::subtract_expression_pool(&mut unit.nascent_protein_abundance, remaining);
+                let _ =
+                    Self::subtract_expression_pool(&mut unit.mature_protein_abundance, remaining);
+            }
             if dt_scale > 0.0 {
                 if protein_delta >= 0.0 {
                     unit.protein_synthesis_rate += protein_delta / dt_scale;
@@ -2708,10 +2818,14 @@ impl WholeCellSimulator {
                 }
             }
         }
+        Self::normalize_expression_execution_state(unit);
         true
     }
 
     fn refresh_expression_inventory_totals(&mut self) {
+        for unit in &mut self.organism_expression.transcription_units {
+            Self::normalize_expression_execution_state(unit);
+        }
         self.organism_expression.total_transcript_abundance = self
             .organism_expression
             .transcription_units
@@ -4263,6 +4377,8 @@ impl WholeCellSimulator {
             } else {
                 1.0
             };
+            let (transcription_length_nt, translation_length_aa) =
+                Self::expression_lengths_for_operon(&organism, &unit.genes);
             let previous_state = previous_units
                 .iter()
                 .find(|previous| previous.name == unit.name);
@@ -4327,6 +4443,45 @@ impl WholeCellSimulator {
                 protein_turnover_rate: previous_state
                     .map(|previous| previous.protein_turnover_rate)
                     .unwrap_or(0.0),
+                promoter_open_fraction: previous_state
+                    .map(|previous| previous.promoter_open_fraction)
+                    .unwrap_or(0.0),
+                active_rnap_occupancy: previous_state
+                    .map(|previous| previous.active_rnap_occupancy)
+                    .unwrap_or(0.0),
+                transcription_length_nt: previous_state
+                    .map(|previous| previous.transcription_length_nt.max(90.0))
+                    .unwrap_or(transcription_length_nt),
+                transcription_progress_nt: previous_state
+                    .map(|previous| previous.transcription_progress_nt)
+                    .unwrap_or(0.0),
+                nascent_transcript_abundance: previous_state
+                    .map(|previous| previous.nascent_transcript_abundance)
+                    .unwrap_or(0.0),
+                mature_transcript_abundance: previous_state
+                    .map(|previous| previous.mature_transcript_abundance)
+                    .unwrap_or(transcript_abundance),
+                damaged_transcript_abundance: previous_state
+                    .map(|previous| previous.damaged_transcript_abundance)
+                    .unwrap_or(0.0),
+                active_ribosome_occupancy: previous_state
+                    .map(|previous| previous.active_ribosome_occupancy)
+                    .unwrap_or(0.0),
+                translation_length_aa: previous_state
+                    .map(|previous| previous.translation_length_aa.max(30.0))
+                    .unwrap_or(translation_length_aa),
+                translation_progress_aa: previous_state
+                    .map(|previous| previous.translation_progress_aa)
+                    .unwrap_or(0.0),
+                nascent_protein_abundance: previous_state
+                    .map(|previous| previous.nascent_protein_abundance)
+                    .unwrap_or(0.0),
+                mature_protein_abundance: previous_state
+                    .map(|previous| previous.mature_protein_abundance)
+                    .unwrap_or(protein_abundance),
+                damaged_protein_abundance: previous_state
+                    .map(|previous| previous.damaged_protein_abundance)
+                    .unwrap_or(0.0),
                 process_drive: unit_weights.clamped(),
             });
         }
@@ -4335,6 +4490,8 @@ impl WholeCellSimulator {
             for feature in &organism.genes {
                 let midpoint_bp = 0.5 * (feature.start_bp as f32 + feature.end_bp as f32);
                 let copy_gain = Self::gene_copy_gain(&organism, midpoint_bp, replicated_fraction);
+                let (transcription_length_nt, translation_length_aa) =
+                    Self::expression_lengths_for_gene(feature);
                 let previous_state = previous_units
                     .iter()
                     .find(|previous| previous.name == feature.gene);
@@ -4393,6 +4550,45 @@ impl WholeCellSimulator {
                         .unwrap_or(0.0),
                     protein_turnover_rate: previous_state
                         .map(|previous| previous.protein_turnover_rate)
+                        .unwrap_or(0.0),
+                    promoter_open_fraction: previous_state
+                        .map(|previous| previous.promoter_open_fraction)
+                        .unwrap_or(0.0),
+                    active_rnap_occupancy: previous_state
+                        .map(|previous| previous.active_rnap_occupancy)
+                        .unwrap_or(0.0),
+                    transcription_length_nt: previous_state
+                        .map(|previous| previous.transcription_length_nt.max(90.0))
+                        .unwrap_or(transcription_length_nt),
+                    transcription_progress_nt: previous_state
+                        .map(|previous| previous.transcription_progress_nt)
+                        .unwrap_or(0.0),
+                    nascent_transcript_abundance: previous_state
+                        .map(|previous| previous.nascent_transcript_abundance)
+                        .unwrap_or(0.0),
+                    mature_transcript_abundance: previous_state
+                        .map(|previous| previous.mature_transcript_abundance)
+                        .unwrap_or(transcript_abundance),
+                    damaged_transcript_abundance: previous_state
+                        .map(|previous| previous.damaged_transcript_abundance)
+                        .unwrap_or(0.0),
+                    active_ribosome_occupancy: previous_state
+                        .map(|previous| previous.active_ribosome_occupancy)
+                        .unwrap_or(0.0),
+                    translation_length_aa: previous_state
+                        .map(|previous| previous.translation_length_aa.max(30.0))
+                        .unwrap_or(translation_length_aa),
+                    translation_progress_aa: previous_state
+                        .map(|previous| previous.translation_progress_aa)
+                        .unwrap_or(0.0),
+                    nascent_protein_abundance: previous_state
+                        .map(|previous| previous.nascent_protein_abundance)
+                        .unwrap_or(0.0),
+                    mature_protein_abundance: previous_state
+                        .map(|previous| previous.mature_protein_abundance)
+                        .unwrap_or(protein_abundance),
+                    damaged_protein_abundance: previous_state
+                        .map(|previous| previous.damaged_protein_abundance)
                         .unwrap_or(0.0),
                     process_drive: feature.process_weights.clamped(),
                 });
@@ -4510,56 +4706,176 @@ impl WholeCellSimulator {
         }
         let dt_scale = (dt / self.config.dt_ms.max(0.05)).clamp(0.5, 4.0);
         let crowding = self.organism_expression.crowding_penalty.clamp(0.65, 1.10);
+        let transcription_flux = transcription_flux.max(0.0);
+        let translation_flux = translation_flux.max(0.0);
+        let engaged_rnap_capacity = self.active_rnap.clamp(8.0, 256.0)
+            * (0.08 + 0.04 * transcription_flux.clamp(0.0, 2.5));
+        let engaged_ribosome_capacity = self.active_ribosomes.clamp(12.0, 320.0)
+            * (0.10 + 0.05 * translation_flux.clamp(0.0, 2.5));
+
+        let mut transcription_demands =
+            Vec::with_capacity(self.organism_expression.transcription_units.len());
+        let mut translation_demands =
+            Vec::with_capacity(self.organism_expression.transcription_units.len());
 
         for unit in &mut self.organism_expression.transcription_units {
+            Self::normalize_expression_execution_state(unit);
             let gene_scale = (unit.gene_count.max(1) as f32).sqrt();
             let support = unit.support_level.clamp(0.55, 1.55);
             let stress = unit.stress_penalty.clamp(0.80, 1.60);
-            let transcript_signal =
-                Self::saturating_signal(unit.transcript_abundance, 8.0 + 2.0 * gene_scale);
-            let transcript_synthesis = transcription_flux.max(0.0)
+            unit.promoter_open_fraction = Self::finite_scale(
+                0.34
+                    + 0.30 * support
+                    + 0.16 * unit.copy_gain.clamp(0.8, 1.5)
+                    + 0.12 * crowding
+                    - 0.18 * (stress - 1.0).max(0.0),
+                0.5,
+                0.05,
+                1.0,
+            );
+            let transcription_demand = unit.promoter_open_fraction
+                * unit.effective_activity
+                * (0.55 + 0.25 * gene_scale)
+                * (0.75 + 0.25 * crowding)
+                * (0.85 + 0.25 * transcription_flux);
+            let transcript_signal = Self::saturating_signal(
+                unit.mature_transcript_abundance + 0.5 * unit.nascent_transcript_abundance,
+                8.0 + 2.0 * gene_scale,
+            );
+            let translation_demand = transcript_signal
                 * unit.effective_activity
                 * support
-                * (0.035 + 0.010 * gene_scale)
-                * dt_scale
-                * crowding;
-            let transcript_turnover = unit.transcript_abundance
-                * (0.010 + 0.014 * (stress - 1.0).max(0.0) + 0.006 * (1.0 - support).max(0.0))
-                * dt_scale;
-            unit.transcript_abundance = (unit.transcript_abundance + transcript_synthesis
-                - transcript_turnover)
-                .clamp(0.0, 1024.0);
-
-            let protein_synthesis = translation_flux.max(0.0)
-                * unit.effective_activity
-                * (0.030 + 0.008 * gene_scale)
-                * (0.55 + 0.45 * transcript_signal)
-                * dt_scale
-                * crowding;
-            let protein_turnover = unit.protein_abundance
-                * (0.004 + 0.007 * (stress - 1.0).max(0.0) + 0.004 * (1.0 - support).max(0.0))
-                * dt_scale;
-            unit.protein_abundance =
-                (unit.protein_abundance + protein_synthesis - protein_turnover).clamp(0.0, 2048.0);
-
-            unit.transcript_synthesis_rate = transcript_synthesis.max(0.0);
-            unit.protein_synthesis_rate = protein_synthesis.max(0.0);
-            unit.transcript_turnover_rate = transcript_turnover.max(0.0);
-            unit.protein_turnover_rate = protein_turnover.max(0.0);
+                * (0.45 + 0.20 * gene_scale)
+                * (0.80 + 0.20 * translation_flux);
+            transcription_demands.push(transcription_demand.max(0.0));
+            translation_demands.push(translation_demand.max(0.0));
         }
 
-        self.organism_expression.total_transcript_abundance = self
+        let total_transcription_demand = transcription_demands
+            .iter()
+            .copied()
+            .sum::<f32>()
+            .max(1.0e-6);
+        let total_translation_demand = translation_demands
+            .iter()
+            .copied()
+            .sum::<f32>()
+            .max(1.0e-6);
+
+        for ((unit, transcription_demand), translation_demand) in self
             .organism_expression
             .transcription_units
-            .iter()
-            .map(|unit| unit.transcript_abundance)
-            .sum::<f32>();
-        self.organism_expression.total_protein_abundance = self
-            .organism_expression
-            .transcription_units
-            .iter()
-            .map(|unit| unit.protein_abundance)
-            .sum::<f32>();
+            .iter_mut()
+            .zip(transcription_demands.into_iter())
+            .zip(translation_demands.into_iter())
+        {
+            let gene_scale = (unit.gene_count.max(1) as f32).sqrt();
+            let support = unit.support_level.clamp(0.55, 1.55);
+            let stress = unit.stress_penalty.clamp(0.80, 1.60);
+
+            let rnap_target = engaged_rnap_capacity
+                * (transcription_demand / total_transcription_demand)
+                * (0.60 + 0.40 * unit.promoter_open_fraction);
+            let ribosome_target = engaged_ribosome_capacity
+                * (translation_demand / total_translation_demand)
+                * (0.55
+                    + 0.45 * Self::saturating_signal(unit.mature_transcript_abundance, 6.0));
+            let rnap_ceiling = (3.0 + 2.5 * gene_scale * unit.copy_gain.clamp(0.8, 1.8)).max(1.0);
+            let ribosome_ceiling =
+                (4.0 + 3.5 * gene_scale * unit.copy_gain.clamp(0.8, 1.8)).max(1.0);
+            unit.active_rnap_occupancy = (0.58 * unit.active_rnap_occupancy + 0.42 * rnap_target)
+                .clamp(0.0, rnap_ceiling);
+            unit.active_ribosome_occupancy =
+                (0.56 * unit.active_ribosome_occupancy + 0.44 * ribosome_target)
+                    .clamp(0.0, ribosome_ceiling);
+
+            let transcription_elongation_rate = (18.0
+                + 14.0 * support
+                + 5.0 * transcription_flux
+                - 3.0 * (stress - 1.0).max(0.0))
+                .max(6.0);
+            unit.transcription_progress_nt +=
+                unit.active_rnap_occupancy * transcription_elongation_rate * dt_scale * crowding;
+            let completed_transcripts =
+                (unit.transcription_progress_nt / unit.transcription_length_nt.max(1.0)).max(0.0);
+            unit.transcription_progress_nt %= unit.transcription_length_nt.max(1.0);
+
+            let nascent_transcript_target =
+                unit.active_rnap_occupancy * (0.35 + 0.10 * support + 0.08 * gene_scale);
+            unit.nascent_transcript_abundance =
+                (0.62 * unit.nascent_transcript_abundance + 0.38 * nascent_transcript_target)
+                    .clamp(0.0, 512.0);
+            let transcript_damage = unit.mature_transcript_abundance
+                * (0.0015 + 0.008 * (stress - 1.0).max(0.0) + 0.003 * (1.0 - support).max(0.0))
+                * dt_scale;
+            let transcript_turnover = unit.mature_transcript_abundance
+                * (0.008 + 0.010 * (stress - 1.0).max(0.0) + 0.004 * (1.0 - support).max(0.0))
+                * dt_scale;
+            let transcript_damage_clearance = unit.damaged_transcript_abundance
+                * (0.012 + 0.010 * support)
+                * dt_scale;
+            let matured_transcripts = completed_transcripts
+                * (0.68 + 0.22 * support + 0.10 * crowding)
+                * transcription_flux.max(0.25);
+            unit.mature_transcript_abundance = (unit.mature_transcript_abundance
+                + matured_transcripts
+                - transcript_turnover
+                - transcript_damage)
+                .clamp(0.0, 1024.0);
+            unit.damaged_transcript_abundance = (unit.damaged_transcript_abundance
+                + transcript_damage
+                - transcript_damage_clearance)
+                .clamp(0.0, 512.0);
+
+            let translation_elongation_rate = (9.0
+                + 8.0 * support
+                + 4.0 * translation_flux
+                - 2.0 * (stress - 1.0).max(0.0))
+                .max(3.0);
+            unit.translation_progress_aa +=
+                unit.active_ribosome_occupancy * translation_elongation_rate * dt_scale * crowding;
+            let completed_proteins =
+                (unit.translation_progress_aa / unit.translation_length_aa.max(1.0)).max(0.0);
+            unit.translation_progress_aa %= unit.translation_length_aa.max(1.0);
+
+            let nascent_protein_target =
+                unit.active_ribosome_occupancy * (0.28 + 0.08 * support + 0.06 * gene_scale);
+            unit.nascent_protein_abundance =
+                (0.64 * unit.nascent_protein_abundance + 0.36 * nascent_protein_target)
+                    .clamp(0.0, 768.0);
+            let protein_damage = unit.mature_protein_abundance
+                * (0.0008 + 0.005 * (stress - 1.0).max(0.0) + 0.002 * (1.0 - support).max(0.0))
+                * dt_scale;
+            let protein_turnover = unit.mature_protein_abundance
+                * (0.003 + 0.005 * (stress - 1.0).max(0.0) + 0.002 * (1.0 - support).max(0.0))
+                * dt_scale;
+            let protein_damage_clearance = unit.damaged_protein_abundance
+                * (0.007 + 0.008 * support)
+                * dt_scale;
+            let matured_proteins = completed_proteins
+                * (0.70 + 0.20 * support + 0.10 * crowding)
+                * translation_flux.max(0.25);
+            unit.mature_protein_abundance = (unit.mature_protein_abundance
+                + matured_proteins
+                - protein_turnover
+                - protein_damage)
+                .clamp(0.0, 2048.0);
+            unit.damaged_protein_abundance = (unit.damaged_protein_abundance
+                + protein_damage
+                - protein_damage_clearance)
+                .clamp(0.0, 1024.0);
+
+            unit.transcript_synthesis_rate = (matured_transcripts / dt_scale.max(1.0e-6)).max(0.0);
+            unit.protein_synthesis_rate = (matured_proteins / dt_scale.max(1.0e-6)).max(0.0);
+            unit.transcript_turnover_rate =
+                ((transcript_turnover + transcript_damage_clearance) / dt_scale.max(1.0e-6))
+                    .max(0.0);
+            unit.protein_turnover_rate =
+                ((protein_turnover + protein_damage_clearance) / dt_scale.max(1.0e-6)).max(0.0);
+            Self::normalize_expression_execution_state(unit);
+        }
+
+        self.refresh_expression_inventory_totals();
     }
 
     fn organism_process_scales(&self) -> WholeCellOrganismProcessScales {
@@ -5901,6 +6217,19 @@ mod tests {
             protein_synthesis_rate: 0.0,
             transcript_turnover_rate: 0.0,
             protein_turnover_rate: 0.0,
+            promoter_open_fraction: 0.0,
+            active_rnap_occupancy: 0.0,
+            transcription_length_nt: 900.0,
+            transcription_progress_nt: 0.0,
+            nascent_transcript_abundance: 0.0,
+            mature_transcript_abundance: 16.0,
+            damaged_transcript_abundance: 0.0,
+            active_ribosome_occupancy: 0.0,
+            translation_length_aa: 300.0,
+            translation_progress_aa: 0.0,
+            nascent_protein_abundance: 0.0,
+            mature_protein_abundance: 10.0,
+            damaged_protein_abundance: 0.0,
             process_drive: WholeCellProcessWeights::default(),
         }];
         sim.refresh_expression_inventory_totals();
@@ -6006,6 +6335,19 @@ mod tests {
             protein_synthesis_rate: 0.0,
             transcript_turnover_rate: 0.0,
             protein_turnover_rate: 0.0,
+            promoter_open_fraction: 0.0,
+            active_rnap_occupancy: 0.0,
+            transcription_length_nt: 1800.0,
+            transcription_progress_nt: 0.0,
+            nascent_transcript_abundance: 0.0,
+            mature_transcript_abundance: 12.0,
+            damaged_transcript_abundance: 0.0,
+            active_ribosome_occupancy: 0.0,
+            translation_length_aa: 600.0,
+            translation_progress_aa: 0.0,
+            nascent_protein_abundance: 0.0,
+            mature_protein_abundance: 16.0,
+            damaged_protein_abundance: 0.0,
             process_drive: WholeCellProcessWeights::default(),
         }];
         sim.organism_species = vec![WholeCellSpeciesRuntimeState {
@@ -6925,6 +7267,69 @@ mod tests {
         assert!(end_ribosome.protein_synthesis_rate > 0.0);
         assert!(end_ribosome.transcript_abundance != start_ribosome.transcript_abundance);
         assert!(end_ribosome.protein_abundance != start_ribosome.protein_abundance);
+    }
+
+    #[test]
+    fn test_expression_execution_state_tracks_occupancy_and_product_pools() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+
+        sim.run(12);
+
+        let expression = sim
+            .organism_expression_state()
+            .expect("updated organism expression");
+        let ribosome_unit = expression
+            .transcription_units
+            .iter()
+            .find(|unit| unit.name == "ribosome_biogenesis_operon")
+            .expect("ribosome operon");
+
+        assert!(ribosome_unit.transcription_length_nt >= 90.0);
+        assert!(ribosome_unit.translation_length_aa >= 30.0);
+        assert!(ribosome_unit.promoter_open_fraction > 0.0);
+        assert!(ribosome_unit.active_rnap_occupancy > 0.0);
+        assert!(ribosome_unit.active_ribosome_occupancy > 0.0);
+        assert!(ribosome_unit.mature_transcript_abundance > 0.0);
+        assert!(ribosome_unit.mature_protein_abundance > 0.0);
+        assert!(ribosome_unit.transcript_abundance >= ribosome_unit.mature_transcript_abundance);
+        assert!(ribosome_unit.protein_abundance >= ribosome_unit.mature_protein_abundance);
+    }
+
+    #[test]
+    fn test_saved_state_round_trip_preserves_expression_execution_state() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+
+        sim.run(10);
+
+        let saved = sim.save_state_json().expect("serialize saved state");
+        let restored =
+            WholeCellSimulator::from_saved_state_json(&saved).expect("restore saved state");
+        let original = sim
+            .organism_expression_state()
+            .expect("original expression state");
+        let reloaded = restored
+            .organism_expression_state()
+            .expect("restored expression state");
+        let original_unit = original
+            .transcription_units
+            .iter()
+            .find(|unit| unit.name == "ribosome_biogenesis_operon")
+            .expect("original ribosome unit");
+        let reloaded_unit = reloaded
+            .transcription_units
+            .iter()
+            .find(|unit| unit.name == "ribosome_biogenesis_operon")
+            .expect("reloaded ribosome unit");
+
+        assert!((reloaded_unit.promoter_open_fraction - original_unit.promoter_open_fraction).abs() < 1.0e-6);
+        assert!((reloaded_unit.active_rnap_occupancy - original_unit.active_rnap_occupancy).abs() < 1.0e-6);
+        assert!((reloaded_unit.transcription_progress_nt - original_unit.transcription_progress_nt).abs() < 1.0e-6);
+        assert!((reloaded_unit.mature_transcript_abundance - original_unit.mature_transcript_abundance).abs() < 1.0e-6);
+        assert!((reloaded_unit.active_ribosome_occupancy - original_unit.active_ribosome_occupancy).abs() < 1.0e-6);
+        assert!((reloaded_unit.translation_progress_aa - original_unit.translation_progress_aa).abs() < 1.0e-6);
+        assert!((reloaded_unit.mature_protein_abundance - original_unit.mature_protein_abundance).abs() < 1.0e-6);
     }
 
     #[test]

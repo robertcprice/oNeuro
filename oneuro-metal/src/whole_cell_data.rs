@@ -785,7 +785,41 @@ pub struct WholeCellTranscriptionUnitState {
     pub protein_synthesis_rate: f32,
     pub transcript_turnover_rate: f32,
     pub protein_turnover_rate: f32,
+    #[serde(default)]
+    pub promoter_open_fraction: f32,
+    #[serde(default)]
+    pub active_rnap_occupancy: f32,
+    #[serde(default = "default_expression_length_nt")]
+    pub transcription_length_nt: f32,
+    #[serde(default)]
+    pub transcription_progress_nt: f32,
+    #[serde(default)]
+    pub nascent_transcript_abundance: f32,
+    #[serde(default)]
+    pub mature_transcript_abundance: f32,
+    #[serde(default)]
+    pub damaged_transcript_abundance: f32,
+    #[serde(default)]
+    pub active_ribosome_occupancy: f32,
+    #[serde(default = "default_expression_length_aa")]
+    pub translation_length_aa: f32,
+    #[serde(default)]
+    pub translation_progress_aa: f32,
+    #[serde(default)]
+    pub nascent_protein_abundance: f32,
+    #[serde(default)]
+    pub mature_protein_abundance: f32,
+    #[serde(default)]
+    pub damaged_protein_abundance: f32,
     pub process_drive: WholeCellProcessWeights,
+}
+
+fn default_expression_length_nt() -> f32 {
+    90.0
+}
+
+fn default_expression_length_aa() -> f32 {
+    30.0
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

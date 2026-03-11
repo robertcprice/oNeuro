@@ -177,3 +177,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the scheduler is now explicit and restartable, but local chemistry probes still use simple interval checks inside the atomistic stage and the next execution slice is deeper registry-driven solver ownership plus finer multiscale coupling`
+
+### 2026-03-11 - Phase 3 / Explicit Expression Execution Slice
+
+- Summary:
+  - extended transcription-unit runtime state with explicit promoter openness, RNAP occupancy, transcription progress, ribosome occupancy, translation progress, and mature/nascent/damaged RNA and protein pools
+  - replaced the old direct abundance-only update path with occupancy-driven transcription and translation execution at the compiled transcription-unit layer while keeping restart compatibility through the existing organism-expression payload
+  - added progression and restart tests that verify the explicit execution state advances during simulation and round-trips through saved-state JSON without drift
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase4-expression.12904 && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase4-expression.12904 && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `expression now carries explicit unit execution state, but assembly, chromosome, and membrane layers still depend on aggregate runtime channels and need the same treatment in later slices`
