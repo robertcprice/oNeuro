@@ -4094,6 +4094,40 @@ impl WholeCellSimulator {
         }
     }
 
+    fn bulk_field_concentration_for_locality_with_domain(
+        &self,
+        cache: &WholeCellSpatialCouplingCache,
+        field: WholeCellBulkField,
+        spatial_scope: WholeCellSpatialScope,
+        patch_domain: WholeCellPatchDomain,
+        chromosome_domain: Option<&str>,
+    ) -> f32 {
+        if chromosome_domain.is_none() {
+            return Self::bulk_field_concentration_for_locality(
+                cache,
+                field,
+                spatial_scope,
+                patch_domain,
+            );
+        }
+        let Some(lattice_species) = Self::lattice_species_for_bulk_field(field) else {
+            return Self::bulk_field_concentration_for_locality(
+                cache,
+                field,
+                spatial_scope,
+                patch_domain,
+            );
+        };
+        let uniform_weights = vec![1.0; self.lattice.total_voxels()];
+        let weights = self.locality_weights(
+            spatial_scope,
+            patch_domain,
+            chromosome_domain,
+            &uniform_weights,
+        );
+        self.weighted_species_mean(lattice_species, &weights)
+    }
+
     fn localized_pool_signal_target(field: WholeCellBulkField) -> f32 {
         match field {
             WholeCellBulkField::ATP => 0.52,
@@ -4120,7 +4154,18 @@ impl WholeCellSimulator {
         field: WholeCellRdmeDriveField,
         spatial_scope: WholeCellSpatialScope,
         patch_domain: WholeCellPatchDomain,
+        chromosome_domain: Option<&str>,
     ) -> f32 {
+        if chromosome_domain.is_some() {
+            let uniform_weights = vec![1.0; self.lattice.total_voxels()];
+            let weights = self.locality_weights(
+                spatial_scope,
+                patch_domain,
+                chromosome_domain,
+                &uniform_weights,
+            );
+            return self.rdme_drive_fields.weighted_mean(field, &weights);
+        }
         let scope_value = Self::spatial_scope_field(spatial_scope)
             .map(|scope_field| self.localized_drive_mean(field, scope_field))
             .unwrap_or_else(|| self.drive_field_mean(field));
@@ -4146,6 +4191,7 @@ impl WholeCellSimulator {
         WholeCellBulkField,
         WholeCellSpatialScope,
         WholeCellPatchDomain,
+        Option<String>,
     )> {
         let participants = if use_products {
             &reaction.products
@@ -4160,7 +4206,15 @@ impl WholeCellSimulator {
             {
                 return None;
             }
-            Some((field, species.spatial_scope, species.patch_domain))
+            Some((
+                field,
+                species.spatial_scope,
+                species.patch_domain,
+                species
+                    .chromosome_domain
+                    .clone()
+                    .or_else(|| reaction.chromosome_domain.clone()),
+            ))
         })
     }
 
@@ -4170,19 +4224,26 @@ impl WholeCellSimulator {
         species_state: &HashMap<String, WholeCellSpeciesRuntimeState>,
         cache: &WholeCellSpatialCouplingCache,
     ) -> f32 {
-        let Some((field, spatial_scope, patch_domain)) =
+        let Some((field, spatial_scope, patch_domain, chromosome_domain)) =
             Self::localized_pool_reaction_field(reaction, species_state, true)
         else {
             return 1.0;
         };
         let local_level = Self::saturating_signal(
-            Self::bulk_field_concentration_for_locality(cache, field, spatial_scope, patch_domain),
+            self.bulk_field_concentration_for_locality_with_domain(
+                cache,
+                field,
+                spatial_scope,
+                patch_domain,
+                chromosome_domain.as_deref(),
+            ),
             Self::localized_pool_signal_target(field),
         );
         let crowding = self.drive_field_mean_for_locality(
             WholeCellRdmeDriveField::Crowding,
             spatial_scope,
             patch_domain,
+            chromosome_domain.as_deref(),
         );
         let (demand, support, base, max_scale) = match field {
             WholeCellBulkField::ATP => (
@@ -4190,11 +4251,13 @@ impl WholeCellSimulator {
                     WholeCellRdmeDriveField::AtpDemand,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 self.drive_field_mean_for_locality(
                     WholeCellRdmeDriveField::EnergySource,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 0.16,
                 2.6,
@@ -4204,11 +4267,13 @@ impl WholeCellSimulator {
                     WholeCellRdmeDriveField::AminoDemand,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 0.42 * self.drive_field_mean_for_locality(
                     WholeCellRdmeDriveField::EnergySource,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 0.14,
                 2.4,
@@ -4218,11 +4283,13 @@ impl WholeCellSimulator {
                     WholeCellRdmeDriveField::NucleotideDemand,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 0.36 * self.drive_field_mean_for_locality(
                     WholeCellRdmeDriveField::EnergySource,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 0.15,
                 2.5,
@@ -4232,11 +4299,13 @@ impl WholeCellSimulator {
                     WholeCellRdmeDriveField::MembraneDemand,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 self.drive_field_mean_for_locality(
                     WholeCellRdmeDriveField::MembraneSource,
                     spatial_scope,
                     patch_domain,
+                    chromosome_domain.as_deref(),
                 ),
                 0.16,
                 2.6,
@@ -4259,40 +4328,51 @@ impl WholeCellSimulator {
         species_state: &HashMap<String, WholeCellSpeciesRuntimeState>,
         cache: &WholeCellSpatialCouplingCache,
     ) -> f32 {
-        let Some((field, spatial_scope, patch_domain)) =
+        let Some((field, spatial_scope, patch_domain, chromosome_domain)) =
             Self::localized_pool_reaction_field(reaction, species_state, false)
         else {
             return 1.0;
         };
         let local_level = Self::saturating_signal(
-            Self::bulk_field_concentration_for_locality(cache, field, spatial_scope, patch_domain),
+            self.bulk_field_concentration_for_locality_with_domain(
+                cache,
+                field,
+                spatial_scope,
+                patch_domain,
+                chromosome_domain.as_deref(),
+            ),
             Self::localized_pool_signal_target(field),
         );
         let crowding = self.drive_field_mean_for_locality(
             WholeCellRdmeDriveField::Crowding,
             spatial_scope,
             patch_domain,
+            chromosome_domain.as_deref(),
         );
         let demand = match field {
             WholeCellBulkField::ATP => self.drive_field_mean_for_locality(
                 WholeCellRdmeDriveField::AtpDemand,
                 spatial_scope,
                 patch_domain,
+                chromosome_domain.as_deref(),
             ),
             WholeCellBulkField::AminoAcids => self.drive_field_mean_for_locality(
                 WholeCellRdmeDriveField::AminoDemand,
                 spatial_scope,
                 patch_domain,
+                chromosome_domain.as_deref(),
             ),
             WholeCellBulkField::Nucleotides => self.drive_field_mean_for_locality(
                 WholeCellRdmeDriveField::NucleotideDemand,
                 spatial_scope,
                 patch_domain,
+                chromosome_domain.as_deref(),
             ),
             WholeCellBulkField::MembranePrecursors => self.drive_field_mean_for_locality(
                 WholeCellRdmeDriveField::MembraneDemand,
                 spatial_scope,
                 patch_domain,
+                chromosome_domain.as_deref(),
             ),
             WholeCellBulkField::ADP | WholeCellBulkField::Glucose | WholeCellBulkField::Oxygen => {
                 0.0
@@ -4376,10 +4456,47 @@ impl WholeCellSimulator {
             [Self::patch_domain_index(target_patch_domain)]
     }
 
+    fn chromosome_domain_overlap(
+        &self,
+        source_domain: Option<&str>,
+        target_domain: Option<&str>,
+    ) -> f32 {
+        match (source_domain, target_domain) {
+            (Some(source), Some(target)) if source == target => 1.0,
+            (Some(source), Some(target)) => {
+                let Some(source_index) = self.chromosome_domain_index_by_id(source) else {
+                    return 1.0;
+                };
+                let Some(target_index) = self.chromosome_domain_index_by_id(target) else {
+                    return 1.0;
+                };
+                let source_weights = self.chromosome_domain_weights(source_index);
+                let target_weights = self.chromosome_domain_weights(target_index);
+                let source_total = source_weights
+                    .iter()
+                    .map(|value| value.max(0.0))
+                    .sum::<f32>();
+                if source_total <= 1.0e-6 {
+                    1.0
+                } else {
+                    let shared = source_weights
+                        .iter()
+                        .zip(target_weights.iter())
+                        .map(|(lhs, rhs)| lhs.max(0.0).min(rhs.max(0.0)))
+                        .sum::<f32>();
+                    (shared / source_total).clamp(0.02, 1.0)
+                }
+            }
+            _ => 1.0,
+        }
+    }
+
     fn effective_runtime_species_count_for_locality(
+        &self,
         species: &WholeCellSpeciesRuntimeState,
         target_scope: WholeCellSpatialScope,
         target_patch_domain: WholeCellPatchDomain,
+        target_chromosome_domain: Option<&str>,
         cache: &WholeCellSpatialCouplingCache,
     ) -> f32 {
         let preferred_scope = if target_scope == WholeCellSpatialScope::WellMixed {
@@ -4394,17 +4511,26 @@ impl WholeCellSimulator {
         };
         if let Some(field) = species.bulk_field {
             return Self::bulk_field_species_scale(field)
-                * Self::bulk_field_concentration_for_locality(
-                    cache,
-                    field,
-                    preferred_scope,
-                    preferred_patch_domain,
-                )
-                .max(0.0);
+                * self
+                    .bulk_field_concentration_for_locality_with_domain(
+                        cache,
+                        field,
+                        preferred_scope,
+                        preferred_patch_domain,
+                        species
+                            .chromosome_domain
+                            .as_deref()
+                            .or(target_chromosome_domain),
+                    )
+                    .max(0.0);
         }
         species.count.max(0.0)
             * Self::spatial_scope_overlap(cache, species.spatial_scope, preferred_scope)
             * Self::patch_domain_overlap(cache, species.patch_domain, preferred_patch_domain)
+            * self.chromosome_domain_overlap(
+                species.chromosome_domain.as_deref(),
+                target_chromosome_domain,
+            )
     }
 
     fn locality_weights(
@@ -4825,6 +4951,7 @@ impl WholeCellSimulator {
         field: WholeCellBulkField,
         spatial_scope: WholeCellSpatialScope,
         patch_domain: WholeCellPatchDomain,
+        chromosome_domain: Option<&str>,
         delta_count: f32,
     ) -> bool {
         if !delta_count.is_finite() || delta_count.abs() <= 1.0e-6 {
@@ -4835,7 +4962,12 @@ impl WholeCellSimulator {
             return false;
         }
         let uniform_weights = vec![1.0; self.lattice.total_voxels()];
-        let weights = self.locality_weights(spatial_scope, patch_domain, None, &uniform_weights);
+        let weights = self.locality_weights(
+            spatial_scope,
+            patch_domain,
+            chromosome_domain,
+            &uniform_weights,
+        );
         match field {
             WholeCellBulkField::ATP => {
                 if spatial_scope == WholeCellSpatialScope::WellMixed
@@ -5249,6 +5381,7 @@ impl WholeCellSimulator {
                 WholeCellBulkField,
                 WholeCellSpatialScope,
                 WholeCellPatchDomain,
+                Option<String>,
             ),
             f32,
         > = HashMap::new();
@@ -5269,10 +5402,11 @@ impl WholeCellSimulator {
                         let count = species_state
                             .get(&participant.species_id)
                             .map(|species| {
-                                Self::effective_runtime_species_count_for_locality(
+                                self.effective_runtime_species_count_for_locality(
                                     species,
                                     reaction_scope,
                                     reaction_patch_domain,
+                                    reaction.chromosome_domain.as_deref(),
                                     &spatial_cache,
                                 )
                             })
@@ -5292,10 +5426,11 @@ impl WholeCellSimulator {
                     let count = species_state
                         .get(species_id)
                         .map(|species| {
-                            Self::effective_runtime_species_count_for_locality(
+                            self.effective_runtime_species_count_for_locality(
                                 species,
                                 reaction_scope,
                                 reaction_patch_domain,
+                                reaction.chromosome_domain.as_deref(),
                                 &spatial_cache,
                             )
                         })
@@ -5434,6 +5569,7 @@ impl WholeCellSimulator {
                 .max(0.0);
             let reaction_class = reaction.reaction_class;
             let reaction_operon = reaction.operon.clone();
+            let reaction_chromosome_domain = reaction.chromosome_domain.clone();
             let reaction_reactants = if dt_scale > 0.0 {
                 reaction.reactants.clone()
             } else {
@@ -5464,7 +5600,15 @@ impl WholeCellSimulator {
                     if let Some(species) = species_state.get(&participant.species_id) {
                         if let Some(field) = species.bulk_field {
                             *bulk_field_deltas
-                                .entry((field, species.spatial_scope, species.patch_domain))
+                                .entry((
+                                    field,
+                                    species.spatial_scope,
+                                    species.patch_domain,
+                                    species
+                                        .chromosome_domain
+                                        .clone()
+                                        .or_else(|| reaction_chromosome_domain.clone()),
+                                ))
                                 .or_insert(0.0) -= extent * participant.stoichiometry.max(0.0);
                         }
                     }
@@ -5476,7 +5620,15 @@ impl WholeCellSimulator {
                     if let Some(species) = species_state.get(&participant.species_id) {
                         if let Some(field) = species.bulk_field {
                             *bulk_field_deltas
-                                .entry((field, species.spatial_scope, species.patch_domain))
+                                .entry((
+                                    field,
+                                    species.spatial_scope,
+                                    species.patch_domain,
+                                    species
+                                        .chromosome_domain
+                                        .clone()
+                                        .or_else(|| reaction_chromosome_domain.clone()),
+                                ))
                                 .or_insert(0.0) += extent * participant.stoichiometry.max(0.0);
                         }
                     }
@@ -5568,9 +5720,14 @@ impl WholeCellSimulator {
                 }
             }
             let mut lattice_bulk_changed = false;
-            for ((field, scope, patch_domain), delta) in bulk_field_deltas {
-                lattice_bulk_changed |=
-                    self.apply_bulk_field_delta(field, scope, patch_domain, delta);
+            for ((field, scope, patch_domain, chromosome_domain), delta) in bulk_field_deltas {
+                lattice_bulk_changed |= self.apply_bulk_field_delta(
+                    field,
+                    scope,
+                    patch_domain,
+                    chromosome_domain.as_deref(),
+                    delta,
+                );
             }
             let mut expression_changed = false;
             for (operon, sum) in transcript_delta_sum {
@@ -10222,6 +10379,122 @@ mod tests {
         assert!(after_nucleoid > before_nucleoid);
         assert!(after_nucleoid > membrane_nucleotides);
         assert!(sim.organism_reactions[0].current_flux > 0.0);
+    }
+
+    #[test]
+    fn test_localized_pool_transfer_preserves_compiled_chromosome_domain() {
+        let mut left_sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let mut right_sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let organism = left_sim
+            .organism_data
+            .as_ref()
+            .expect("bundled organism data");
+        let left_domain = organism
+            .chromosome_domains
+            .first()
+            .expect("first chromosome domain")
+            .id
+            .clone();
+        let right_domain = organism
+            .chromosome_domains
+            .last()
+            .expect("last chromosome domain")
+            .id
+            .clone();
+
+        for (sim, domain_id) in [(&mut left_sim, left_domain), (&mut right_sim, right_domain)] {
+            sim.lattice
+                .fill_species(IntracellularSpecies::Nucleotides, 0.18);
+            sim.sync_from_lattice();
+            sim.organism_species = vec![
+                WholeCellSpeciesRuntimeState {
+                    id: "pool_nucleotides".to_string(),
+                    name: "nucleotides".to_string(),
+                    species_class: WholeCellSpeciesClass::Pool,
+                    compartment: "cytosol".to_string(),
+                    asset_class: WholeCellAssetClass::Replication,
+                    basal_abundance: 42.0,
+                    bulk_field: Some(WholeCellBulkField::Nucleotides),
+                    spatial_scope: WholeCellSpatialScope::WellMixed,
+                    patch_domain: WholeCellPatchDomain::Distributed,
+                    chromosome_domain: None,
+                    operon: None,
+                    parent_complex: None,
+                    subsystem_targets: Vec::new(),
+                    count: 42.0,
+                    anchor_count: 42.0,
+                    synthesis_rate: 0.0,
+                    turnover_rate: 0.0,
+                },
+                WholeCellSpeciesRuntimeState {
+                    id: "pool_nucleoid_track_nucleotides".to_string(),
+                    name: "nucleoid track nucleotides pool".to_string(),
+                    species_class: WholeCellSpeciesClass::Pool,
+                    compartment: "chromosome".to_string(),
+                    asset_class: WholeCellAssetClass::Replication,
+                    basal_abundance: 10.0,
+                    bulk_field: Some(WholeCellBulkField::Nucleotides),
+                    spatial_scope: WholeCellSpatialScope::NucleoidLocal,
+                    patch_domain: WholeCellPatchDomain::NucleoidTrack,
+                    chromosome_domain: None,
+                    operon: None,
+                    parent_complex: None,
+                    subsystem_targets: vec![Syn3ASubsystemPreset::ReplisomeTrack],
+                    count: 3.0,
+                    anchor_count: 3.0,
+                    synthesis_rate: 0.0,
+                    turnover_rate: 0.0,
+                },
+            ];
+            sim.organism_reactions = vec![WholeCellReactionRuntimeState {
+                id: "pool_nucleoid_track_nucleotides_localized_transfer".to_string(),
+                name: "nucleoid track nucleotides localized transfer".to_string(),
+                reaction_class: WholeCellReactionClass::LocalizedPoolTransfer,
+                asset_class: WholeCellAssetClass::Replication,
+                nominal_rate: 8.5,
+                catalyst: None,
+                operon: Some("replication_cycle_operon".to_string()),
+                reactants: vec![crate::whole_cell_data::WholeCellReactionParticipantSpec {
+                    species_id: "pool_nucleotides".to_string(),
+                    stoichiometry: 1.0,
+                }],
+                products: vec![crate::whole_cell_data::WholeCellReactionParticipantSpec {
+                    species_id: "pool_nucleoid_track_nucleotides".to_string(),
+                    stoichiometry: 1.0,
+                }],
+                subsystem_targets: vec![Syn3ASubsystemPreset::ReplisomeTrack],
+                spatial_scope: WholeCellSpatialScope::NucleoidLocal,
+                patch_domain: WholeCellPatchDomain::NucleoidTrack,
+                chromosome_domain: Some(domain_id),
+                current_flux: 0.0,
+                cumulative_extent: 0.0,
+                reactant_satisfaction: 1.0,
+                catalyst_support: 1.0,
+            }];
+            sim.refresh_spatial_fields();
+            sim.refresh_rdme_drive_fields();
+            sim.update_runtime_process_reactions(1.0, 0.0, 0.0);
+        }
+
+        let left_domain_zero =
+            left_sim.chromosome_domain_species_mean(IntracellularSpecies::Nucleotides, 0);
+        let left_domain_last = left_sim.chromosome_domain_species_mean(
+            IntracellularSpecies::Nucleotides,
+            (left_sim.chromosome_domain_count().saturating_sub(1)) as u32,
+        );
+        let right_domain_zero =
+            right_sim.chromosome_domain_species_mean(IntracellularSpecies::Nucleotides, 0);
+        let right_domain_last = right_sim.chromosome_domain_species_mean(
+            IntracellularSpecies::Nucleotides,
+            (right_sim.chromosome_domain_count().saturating_sub(1)) as u32,
+        );
+
+        assert!(left_sim.organism_reactions[0].current_flux > 0.0);
+        assert!(right_sim.organism_reactions[0].current_flux > 0.0);
+        assert!(left_domain_zero > left_domain_last);
+        assert!(right_domain_last > right_domain_zero);
     }
 
     #[test]

@@ -565,3 +565,22 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `compiled chromosome domains now bias RDME chemistry fields, but bulk-delta application and broader solver ownership still need to carry domain IDs through the remaining localized pool and reaction execution paths`
+
+### 2026-03-11 - Phase 7 / Chromosome Domain Bulk Transfer Slice
+
+- Summary:
+  - carried compiled `chromosome_domain` ownership through localized pool hinting, runtime reactant availability, and bulk-field delta application so reaction execution now preserves the domain that requested nucleoid-local chemistry instead of collapsing back to generic nucleoid-wide transfer
+  - added domain-aware bulk concentration and drive-field readers that reuse the same compiled domain weight maps, keeping reaction satisfaction, localized transfer hints, and weighted lattice deltas on one shared locality basis
+  - added a regression that runs the same localized nucleotide-transfer reaction against the first versus last compiled chromosome domain and verifies that the nucleotide pool shifts into the matching compiled domain after execution
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell.rs`
+  - `cargo test -q test_rdme_drive_fields_follow_compiled_chromosome_domains --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_localized_pool_transfer_preserves_compiled_chromosome_domain --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `compiled chromosome domains now survive localized pool execution, but the compiler still emits generic nucleoid-track pool species and reactions rather than explicitly domain-scoped localized pool assets`
