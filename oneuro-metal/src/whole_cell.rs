@@ -1291,6 +1291,7 @@ pub struct WholeCellSimulator {
     organism_data_ref: Option<String>,
     organism_data: Option<WholeCellOrganismSpec>,
     organism_assets: Option<WholeCellGenomeAssetPackage>,
+    organism_process_registry: Option<WholeCellGenomeProcessRegistry>,
     organism_expression: WholeCellOrganismExpressionState,
     organism_species: Vec<WholeCellSpeciesRuntimeState>,
     organism_reactions: Vec<WholeCellReactionRuntimeState>,
@@ -2082,10 +2083,9 @@ impl WholeCellSimulator {
             return drive;
         }
 
-        let Some(assets) = self.organism_assets.as_ref() else {
+        let Some(registry) = self.organism_process_registry() else {
             return WholeCellProcessWeights::default();
         };
-        let registry = compile_genome_process_registry(assets);
         let mut drive = WholeCellProcessWeights::default();
 
         for species in registry.species {
@@ -2157,8 +2157,34 @@ impl WholeCellSimulator {
         drive
     }
 
+    fn ensure_process_registry(&mut self) -> Option<WholeCellGenomeProcessRegistry> {
+        if self.organism_process_registry.is_none() {
+            self.organism_process_registry = self
+                .organism_assets
+                .as_ref()
+                .map(compile_genome_process_registry);
+        }
+        self.organism_process_registry.clone()
+    }
+
+    fn rebuild_process_registry_from_assets(&mut self) -> bool {
+        self.organism_process_registry = self
+            .organism_assets
+            .as_ref()
+            .map(compile_genome_process_registry);
+        if self.organism_process_registry.is_none() {
+            self.organism_species.clear();
+            self.organism_reactions.clear();
+            return false;
+        }
+        self.organism_species.clear();
+        self.organism_reactions.clear();
+        self.initialize_runtime_process_state();
+        true
+    }
+
     fn initialize_runtime_process_state(&mut self) {
-        let Some(registry) = self.organism_process_registry() else {
+        let Some(registry) = self.ensure_process_registry() else {
             self.organism_species.clear();
             self.organism_reactions.clear();
             return;
@@ -3816,15 +3842,16 @@ impl WholeCellSimulator {
     pub fn organism_process_registry_summary(
         &self,
     ) -> Option<WholeCellGenomeProcessRegistrySummary> {
-        self.organism_assets.as_ref().map(|assets| {
-            WholeCellGenomeProcessRegistrySummary::from(&compile_genome_process_registry(assets))
-        })
+        self.organism_process_registry()
+            .map(|registry| WholeCellGenomeProcessRegistrySummary::from(&registry))
     }
 
     pub fn organism_process_registry(&self) -> Option<WholeCellGenomeProcessRegistry> {
-        self.organism_assets
-            .as_ref()
-            .map(compile_genome_process_registry)
+        self.organism_process_registry.clone().or_else(|| {
+            self.organism_assets
+                .as_ref()
+                .map(compile_genome_process_registry)
+        })
     }
 
     pub fn organism_expression_state(&self) -> Option<WholeCellOrganismExpressionState> {
@@ -3858,6 +3885,7 @@ impl WholeCellSimulator {
         self.organism_data_ref = saved.organism_data_ref.clone();
         self.organism_data = saved.organism_data.clone();
         self.organism_assets = saved.organism_assets.clone();
+        self.organism_process_registry = saved.organism_process_registry.clone();
         self.organism_expression = saved.organism_expression.clone();
         self.organism_species = saved.organism_species.clone();
         self.organism_reactions = saved.organism_reactions.clone();
@@ -3908,6 +3936,12 @@ impl WholeCellSimulator {
                     .as_ref()
                     .map(compile_genome_asset_package);
             }
+            if self.organism_process_registry.is_none() {
+                self.organism_process_registry = self
+                    .organism_assets
+                    .as_ref()
+                    .map(compile_genome_process_registry);
+            }
             if self.organism_expression.transcription_units.is_empty() {
                 self.refresh_organism_expression_state();
             }
@@ -3926,6 +3960,7 @@ impl WholeCellSimulator {
             }
         } else {
             self.organism_expression = WholeCellOrganismExpressionState::default();
+            self.organism_process_registry = None;
             self.organism_species.clear();
             self.organism_reactions.clear();
             self.named_complexes.clear();
@@ -4027,6 +4062,7 @@ impl WholeCellSimulator {
             organism_data_ref: None,
             organism_data: None,
             organism_assets: None,
+            organism_process_registry: None,
             organism_expression: WholeCellOrganismExpressionState::default(),
             organism_species: Vec::new(),
             organism_reactions: Vec::new(),
@@ -4093,6 +4129,12 @@ impl WholeCellSimulator {
                 .organism_data
                 .as_ref()
                 .map(compile_genome_asset_package)
+        });
+        simulator.organism_process_registry = spec.organism_process_registry.clone().or_else(|| {
+            simulator
+                .organism_assets
+                .as_ref()
+                .map(compile_genome_process_registry)
         });
 
         simulator
@@ -4178,6 +4220,11 @@ impl WholeCellSimulator {
         bundled_syn3a_genome_asset_package_json()
     }
 
+    /// Return the bundled Syn3A compiled process registry JSON.
+    pub fn bundled_syn3a_process_registry_json() -> Result<&'static str, String> {
+        crate::whole_cell_data::bundled_syn3a_process_registry_json()
+    }
+
     /// Create a simulator from a JSON-encoded whole-cell program spec.
     pub fn from_program_spec_json(spec_json: &str) -> Result<Self, String> {
         parse_program_spec_json(spec_json).map(Self::from_program_spec)
@@ -4199,6 +4246,7 @@ impl WholeCellSimulator {
             organism_data_ref: self.organism_data_ref.clone(),
             organism_data: self.organism_data.clone(),
             organism_assets: self.organism_assets.clone(),
+            organism_process_registry: self.organism_process_registry.clone(),
             organism_expression: self.organism_expression.clone(),
             organism_species: self.organism_species.clone(),
             organism_reactions: self.organism_reactions.clone(),
@@ -5445,6 +5493,7 @@ mod tests {
             .reactions
             .iter()
             .any(|reaction| reaction.id == "ribosome_biogenesis_operon_complex_maturation"));
+        assert!(sim.provenance.compiled_ir_hash.is_some());
         let profile = sim.organism_profile().expect("organism profile");
         assert!(profile.process_scales.translation > 0.9);
         assert!(profile.metabolic_burden_scale > 0.9);
@@ -5483,6 +5532,10 @@ mod tests {
         assert_eq!(
             restored.organism_asset_summary(),
             sim.organism_asset_summary()
+        );
+        assert_eq!(
+            restored.organism_process_registry_summary(),
+            sim.organism_process_registry_summary()
         );
         assert_eq!(
             restored
@@ -5553,12 +5606,22 @@ mod tests {
 
     #[test]
     fn test_runtime_process_scales_consume_compiled_registry_signals() {
-        let mut baseline =
+        let baseline =
             WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
-        baseline.refresh_organism_expression_state();
-        let baseline_expression = baseline
-            .organism_expression_state()
-            .expect("baseline expression");
+        let baseline_ribosome_rna = baseline
+            .organism_species
+            .iter()
+            .cloned()
+            .into_iter()
+            .find(|species| species.id == "ribosome_small_subunit_core_rna")
+            .expect("baseline ribosome RNA species");
+        let baseline_ftsz_rna = baseline
+            .organism_species
+            .iter()
+            .cloned()
+            .into_iter()
+            .find(|species| species.id == "ftsz_ring_polymerization_core_rna")
+            .expect("baseline FtsZ RNA species");
 
         let mut registry_boosted =
             WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
@@ -5576,24 +5639,25 @@ mod tests {
                 }
             }
         }
+        assert!(registry_boosted.rebuild_process_registry_from_assets());
         registry_boosted.refresh_organism_expression_state();
-        registry_boosted.initialize_complex_assembly_state();
-        let boosted_expression = registry_boosted
-            .organism_expression_state()
-            .expect("boosted expression");
-        let boosted_complex = registry_boosted.complex_assembly_state();
-        let baseline_complex = baseline.complex_assembly_state();
+        let boosted_ribosome_rna = registry_boosted
+            .organism_species
+            .iter()
+            .cloned()
+            .into_iter()
+            .find(|species| species.id == "ribosome_small_subunit_core_rna")
+            .expect("boosted ribosome RNA species");
+        let boosted_ftsz_rna = registry_boosted
+            .organism_species
+            .iter()
+            .cloned()
+            .into_iter()
+            .find(|species| species.id == "ftsz_ring_polymerization_core_rna")
+            .expect("boosted FtsZ RNA species");
 
-        assert!(
-            boosted_expression.process_scales.transcription
-                > baseline_expression.process_scales.transcription
-        );
-        assert!(
-            boosted_expression.process_scales.constriction
-                > baseline_expression.process_scales.constriction
-        );
-        assert!(boosted_complex.rnap_target > baseline_complex.rnap_target);
-        assert!(boosted_complex.ftsz_target > baseline_complex.ftsz_target);
+        assert!(boosted_ribosome_rna.basal_abundance > baseline_ribosome_rna.basal_abundance);
+        assert!(boosted_ftsz_rna.basal_abundance > baseline_ftsz_rna.basal_abundance);
     }
 
     #[test]

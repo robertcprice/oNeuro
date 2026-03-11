@@ -599,6 +599,13 @@ pub fn initialize_runtime_reaction_state(
         .collect()
 }
 
+pub fn parse_genome_process_registry_json(
+    registry_json: &str,
+) -> Result<WholeCellGenomeProcessRegistry, String> {
+    serde_json::from_str(registry_json)
+        .map_err(|error| format!("failed to parse genome process registry: {error}"))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WholeCellGenomeAssetSummary {
     pub organism: String,
@@ -901,6 +908,8 @@ pub struct WholeCellProgramSpec {
     pub organism_data: Option<WholeCellOrganismSpec>,
     #[serde(default)]
     pub organism_assets: Option<WholeCellGenomeAssetPackage>,
+    #[serde(default)]
+    pub organism_process_registry: Option<WholeCellGenomeProcessRegistry>,
     pub config: WholeCellConfig,
     pub initial_lattice: WholeCellInitialLatticeSpec,
     pub initial_state: WholeCellInitialStateSpec,
@@ -1009,6 +1018,8 @@ pub struct WholeCellSavedState {
     pub organism_assets: Option<WholeCellGenomeAssetPackage>,
     #[serde(default)]
     pub organism_expression: WholeCellOrganismExpressionState,
+    #[serde(default)]
+    pub organism_process_registry: Option<WholeCellGenomeProcessRegistry>,
     #[serde(default)]
     pub organism_species: Vec<WholeCellSpeciesRuntimeState>,
     #[serde(default)]
@@ -1123,6 +1134,11 @@ fn populate_program_contract_metadata(spec: &mut WholeCellProgramSpec) -> Result
             spec.provenance.organism_asset_hash = Some(stable_json_checksum(assets)?);
         }
     }
+    if spec.provenance.compiled_ir_hash.is_none() {
+        if let Some(registry) = spec.organism_process_registry.as_ref() {
+            spec.provenance.compiled_ir_hash = Some(stable_json_checksum(registry)?);
+        }
+    }
     if spec.provenance.run_manifest_hash.is_none() {
         let manifest_view = (
             &spec.program_name,
@@ -1141,6 +1157,11 @@ fn populate_saved_state_contract_metadata(state: &mut WholeCellSavedState) -> Re
     if state.provenance.organism_asset_hash.is_none() {
         if let Some(assets) = state.organism_assets.as_ref() {
             state.provenance.organism_asset_hash = Some(stable_json_checksum(assets)?);
+        }
+    }
+    if state.provenance.compiled_ir_hash.is_none() {
+        if let Some(registry) = state.organism_process_registry.as_ref() {
+            state.provenance.compiled_ir_hash = Some(stable_json_checksum(registry)?);
         }
     }
     if state.provenance.run_manifest_hash.is_none() {
@@ -2038,6 +2059,7 @@ fn build_program_spec_from_organism(
     source_dataset: Option<String>,
 ) -> Result<WholeCellProgramSpec, String> {
     let assets = compile_genome_asset_package(&organism);
+    let process_registry = compile_genome_process_registry(&assets);
     let mut spec = WholeCellProgramSpec {
         program_name: Some(format!(
             "{}_bundle_native",
@@ -2056,6 +2078,7 @@ fn build_program_spec_from_organism(
         organism_data_ref: None,
         organism_data: Some(organism.clone()),
         organism_assets: Some(assets),
+        organism_process_registry: Some(process_registry),
         config: WholeCellConfig::default(),
         initial_lattice: WholeCellInitialLatticeSpec {
             atp: pool_concentration(&organism.pools, "ATP", 1.2),
@@ -2248,6 +2271,16 @@ pub fn compile_genome_asset_package_json_from_bundle_manifest_path(
         .map_err(|error| format!("failed to serialize compiled genome asset package: {error}"))
 }
 
+pub fn compile_genome_process_registry_json_from_bundle_manifest_path(
+    manifest_path: &str,
+) -> Result<String, String> {
+    let organism = compile_organism_spec_from_bundle_manifest_path(manifest_path)?;
+    let assets = compile_genome_asset_package(&organism);
+    let registry = compile_genome_process_registry(&assets);
+    serde_json::to_string_pretty(&registry)
+        .map_err(|error| format!("failed to serialize compiled genome process registry: {error}"))
+}
+
 fn hydrate_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
     if spec.organism_data.is_none() {
         if let Some(reference) = spec.organism_data_ref.as_deref() {
@@ -2259,6 +2292,11 @@ fn hydrate_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
             spec.organism_assets = Some(compile_genome_asset_package(organism));
         } else if let Some(reference) = spec.organism_data_ref.as_deref() {
             spec.organism_assets = Some(resolve_bundled_genome_asset_package(reference)?);
+        }
+    }
+    if spec.organism_process_registry.is_none() {
+        if let Some(assets) = spec.organism_assets.as_ref() {
+            spec.organism_process_registry = Some(compile_genome_process_registry(assets));
         }
     }
     populate_program_contract_metadata(spec)?;
@@ -2273,7 +2311,15 @@ pub fn parse_program_spec_json(spec_json: &str) -> Result<WholeCellProgramSpec, 
 }
 
 pub fn bundled_syn3a_program_spec_json() -> &'static str {
-    BUNDLED_SYN3A_PROGRAM_JSON
+    static BUNDLED_SPEC_JSON: OnceLock<String> = OnceLock::new();
+    BUNDLED_SPEC_JSON
+        .get_or_init(|| {
+            let spec = bundled_syn3a_program_spec()
+                .expect("bundled Syn3A program spec should hydrate successfully");
+            serde_json::to_string_pretty(&spec)
+                .expect("bundled Syn3A program spec should serialize successfully")
+        })
+        .as_str()
 }
 
 pub fn parse_organism_spec_json(spec_json: &str) -> Result<WholeCellOrganismSpec, String> {
@@ -2323,6 +2369,31 @@ pub fn bundled_syn3a_genome_asset_package() -> Result<WholeCellGenomeAssetPackag
         .clone()
 }
 
+pub fn bundled_syn3a_process_registry() -> Result<WholeCellGenomeProcessRegistry, String> {
+    static BUNDLED_REGISTRY: OnceLock<Result<WholeCellGenomeProcessRegistry, String>> =
+        OnceLock::new();
+    BUNDLED_REGISTRY
+        .get_or_init(|| {
+            bundled_syn3a_genome_asset_package()
+                .map(|package| compile_genome_process_registry(&package))
+        })
+        .clone()
+}
+
+pub fn bundled_syn3a_process_registry_json() -> Result<&'static str, String> {
+    static BUNDLED_REGISTRY_JSON: OnceLock<Result<String, String>> = OnceLock::new();
+    match BUNDLED_REGISTRY_JSON.get_or_init(|| {
+        bundled_syn3a_process_registry().and_then(|registry| {
+            serde_json::to_string_pretty(&registry).map_err(|error| {
+                format!("failed to serialize bundled genome process registry: {error}")
+            })
+        })
+    }) {
+        Ok(json) => Ok(json.as_str()),
+        Err(error) => Err(error.clone()),
+    }
+}
+
 pub fn resolve_bundled_organism_spec(reference: &str) -> Result<WholeCellOrganismSpec, String> {
     match reference.trim().to_lowercase().as_str() {
         "jcvi_syn3a_reference" | "jcvi-syn3a" | "syn3a" | "syn3a_reference" => {
@@ -2345,6 +2416,19 @@ pub fn resolve_bundled_genome_asset_package(
     }
 }
 
+pub fn resolve_bundled_genome_process_registry(
+    reference: &str,
+) -> Result<WholeCellGenomeProcessRegistry, String> {
+    match reference.trim().to_lowercase().as_str() {
+        "jcvi_syn3a_reference" | "jcvi-syn3a" | "syn3a" | "syn3a_reference" => {
+            bundled_syn3a_process_registry()
+        }
+        _ => Err(format!(
+            "unknown bundled genome process registry reference: {reference}"
+        )),
+    }
+}
+
 pub fn bundled_syn3a_program_spec() -> Result<WholeCellProgramSpec, String> {
     static BUNDLED_SPEC: OnceLock<Result<WholeCellProgramSpec, String>> = OnceLock::new();
     BUNDLED_SPEC
@@ -2355,6 +2439,11 @@ pub fn bundled_syn3a_program_spec() -> Result<WholeCellProgramSpec, String> {
 pub fn parse_saved_state_json(state_json: &str) -> Result<WholeCellSavedState, String> {
     let mut state: WholeCellSavedState = serde_json::from_str(state_json)
         .map_err(|error| format!("failed to parse saved state: {error}"))?;
+    if state.organism_process_registry.is_none() {
+        if let Some(assets) = state.organism_assets.as_ref() {
+            state.organism_process_registry = Some(compile_genome_process_registry(assets));
+        }
+    }
     populate_saved_state_contract_metadata(&mut state)?;
     Ok(state)
 }
@@ -2396,6 +2485,10 @@ mod tests {
             .organism_assets
             .as_ref()
             .expect("bundled organism asset package");
+        let registry = spec
+            .organism_process_registry
+            .as_ref()
+            .expect("bundled organism process registry");
         let profile = derive_organism_profile(organism);
 
         assert_eq!(
@@ -2411,6 +2504,9 @@ mod tests {
         assert_eq!(assets.rnas.len(), organism.genes.len());
         assert_eq!(assets.proteins.len(), organism.genes.len());
         assert!(assets.complexes.len() >= 4);
+        assert!(registry.species.len() > assets.proteins.len());
+        assert!(registry.reactions.len() >= assets.proteins.len());
+        assert!(spec.provenance.compiled_ir_hash.is_some());
     }
 
     #[test]
@@ -2538,6 +2634,7 @@ mod tests {
             organism_data: spec.organism_data.clone(),
             organism_assets: spec.organism_assets.clone(),
             organism_expression: WholeCellOrganismExpressionState::default(),
+            organism_process_registry: spec.organism_process_registry.clone(),
             organism_species: Vec::new(),
             organism_reactions: Vec::new(),
             complex_assembly: WholeCellComplexAssemblyState::default(),
@@ -2595,7 +2692,9 @@ mod tests {
             WHOLE_CELL_CONTRACT_VERSION
         );
         assert!(reparsed.provenance.organism_asset_hash.is_some());
+        assert!(reparsed.provenance.compiled_ir_hash.is_some());
         assert!(reparsed.provenance.run_manifest_hash.is_some());
+        assert!(reparsed.organism_process_registry.is_some());
     }
 
     #[test]
@@ -2626,6 +2725,11 @@ mod tests {
                 .expect("compiled demo assets json");
         let assets =
             parse_genome_asset_package_json(&assets_json).expect("parsed demo assets package");
+        let registry_json =
+            compile_genome_process_registry_json_from_bundle_manifest_path(&manifest_path)
+                .expect("compiled demo process registry json");
+        let registry = parse_genome_process_registry_json(&registry_json)
+            .expect("parsed demo process registry");
 
         assert_eq!(organism.organism, "Mgen-minimal-demo");
         assert_eq!(organism.genes.len(), 4);
@@ -2633,5 +2737,7 @@ mod tests {
         assert!(organism.chromosome_length_bp > 1000);
         assert_eq!(assets.proteins.len(), 4);
         assert!(assets.operons.iter().any(|operon| operon.polycistronic));
+        assert!(registry.species.len() > assets.proteins.len());
+        assert!(registry.reactions.len() >= assets.proteins.len());
     }
 }

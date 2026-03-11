@@ -38,6 +38,7 @@ use crate::types::*;
 use crate::whole_cell::{WholeCellConfig, WholeCellQuantumProfile, WholeCellSimulator};
 use crate::whole_cell_data::{
     compile_genome_asset_package_json_from_bundle_manifest_path,
+    compile_genome_process_registry_json_from_bundle_manifest_path,
     compile_organism_spec_json_from_bundle_manifest_path,
     compile_program_spec_json_from_bundle_manifest_path,
 };
@@ -2934,11 +2935,58 @@ impl PyWholeCellSimulator {
     }
 
     #[staticmethod]
+    fn from_bundled_syn3a_reference() -> PyResult<Self> {
+        Ok(Self {
+            inner: WholeCellSimulator::bundled_syn3a_reference().map_err(PyValueError::new_err)?,
+        })
+    }
+
+    #[staticmethod]
+    fn from_program_spec_json(spec_json: &str) -> PyResult<Self> {
+        Ok(Self {
+            inner: WholeCellSimulator::from_program_spec_json(spec_json)
+                .map_err(PyValueError::new_err)?,
+        })
+    }
+
+    #[staticmethod]
     fn from_bundle_manifest_path(manifest_path: &str) -> PyResult<Self> {
         Ok(Self {
             inner: WholeCellSimulator::from_bundle_manifest_path(manifest_path)
                 .map_err(PyValueError::new_err)?,
         })
+    }
+
+    #[staticmethod]
+    fn from_saved_state_json(state_json: &str) -> PyResult<Self> {
+        Ok(Self {
+            inner: WholeCellSimulator::from_saved_state_json(state_json)
+                .map_err(PyValueError::new_err)?,
+        })
+    }
+
+    #[staticmethod]
+    fn bundled_syn3a_reference_spec_json() -> String {
+        WholeCellSimulator::bundled_syn3a_reference_spec_json().to_string()
+    }
+
+    #[staticmethod]
+    fn bundled_syn3a_organism_spec_json() -> String {
+        WholeCellSimulator::bundled_syn3a_organism_spec_json().to_string()
+    }
+
+    #[staticmethod]
+    fn bundled_syn3a_genome_asset_package_json() -> PyResult<String> {
+        WholeCellSimulator::bundled_syn3a_genome_asset_package_json()
+            .map(|json| json.to_string())
+            .map_err(PyValueError::new_err)
+    }
+
+    #[staticmethod]
+    fn bundled_syn3a_process_registry_json() -> PyResult<String> {
+        WholeCellSimulator::bundled_syn3a_process_registry_json()
+            .map(|json| json.to_string())
+            .map_err(PyValueError::new_err)
     }
 
     #[staticmethod]
@@ -2961,12 +3009,39 @@ impl PyWholeCellSimulator {
             .map_err(PyValueError::new_err)
     }
 
+    #[staticmethod]
+    fn compile_bundle_manifest_process_registry_json(manifest_path: &str) -> PyResult<String> {
+        compile_genome_process_registry_json_from_bundle_manifest_path(manifest_path)
+            .map_err(PyValueError::new_err)
+    }
+
     fn step(&mut self) {
         self.inner.step();
     }
 
     fn run(&mut self, steps: u64) {
         self.inner.run(steps);
+    }
+
+    fn save_state_json(&self) -> PyResult<String> {
+        self.inner.save_state_json().map_err(PyValueError::new_err)
+    }
+
+    fn organism_summary(&self, py: Python<'_>) -> PyResult<Option<Py<PyDict>>> {
+        Ok(self.inner.organism_summary().map(|summary| {
+            let dict = PyDict::new(py);
+            dict.set_item("organism", summary.organism)
+                .expect("organism summary organism");
+            dict.set_item("chromosome_length_bp", summary.chromosome_length_bp)
+                .expect("organism summary chromosome length");
+            dict.set_item("gene_count", summary.gene_count)
+                .expect("organism summary gene count");
+            dict.set_item("transcription_unit_count", summary.transcription_unit_count)
+                .expect("organism summary transcription unit count");
+            dict.set_item("pool_count", summary.pool_count)
+                .expect("organism summary pool count");
+            dict.unbind()
+        }))
     }
 
     fn set_metabolic_load(&mut self, load: f32) {

@@ -57,9 +57,14 @@ def test_rust_bundle_manifest_ingestion_if_available():
     compiled_spec = RustWholeCellSimulator.compile_bundle_manifest_program_spec_json(
         str(manifest_path)
     )
+    compiled_registry = RustWholeCellSimulator.compile_bundle_manifest_process_registry_json(
+        str(manifest_path)
+    )
     sim = RustWholeCellSimulator.from_bundle_manifest_path(str(manifest_path))
     summary = sim.organism_summary()
 
     assert "\"Mgen-minimal-demo\"" in compiled_spec
+    assert "\"compiled_ir_hash\"" in compiled_spec
+    assert "\"complex_maturation\"" in compiled_registry
     assert summary is not None
     assert summary["organism"] == "Mgen-minimal-demo"
