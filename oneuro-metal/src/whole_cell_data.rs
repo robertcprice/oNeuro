@@ -2053,9 +2053,28 @@ fn infer_pool_bulk_field(species_name: &str) -> Option<WholeCellBulkField> {
     }
 }
 
+fn normalize_pool_metadata(pools: &mut [WholeCellMoleculePoolSpec]) {
+    for pool in pools {
+        if pool.bulk_field.is_none() {
+            pool.bulk_field = infer_pool_bulk_field(&pool.species);
+        }
+    }
+}
+
+fn with_normalized_pool_metadata(mut spec: WholeCellOrganismSpec) -> WholeCellOrganismSpec {
+    normalize_pool_metadata(&mut spec.pools);
+    spec
+}
+
+fn with_normalized_asset_pool_metadata(
+    mut package: WholeCellGenomeAssetPackage,
+) -> WholeCellGenomeAssetPackage {
+    normalize_pool_metadata(&mut package.pools);
+    package
+}
+
 fn pool_bulk_field(pool: &WholeCellMoleculePoolSpec) -> Option<WholeCellBulkField> {
     pool.bulk_field
-        .or_else(|| infer_pool_bulk_field(&pool.species))
 }
 
 fn transport_asset_class_for_bulk_field(field: WholeCellBulkField) -> WholeCellAssetClass {
@@ -2680,7 +2699,7 @@ fn push_unique_subsystem_targets(
 }
 
 pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGenomeAssetPackage {
-    let spec = with_compiled_chromosome_domains(spec.clone());
+    let spec = with_compiled_chromosome_domains(with_normalized_pool_metadata(spec.clone()));
     let mut gene_to_operon = HashMap::<String, String>::new();
     let mut operons = Vec::new();
 
@@ -4089,7 +4108,7 @@ fn build_program_spec_from_organism(
     organism: WholeCellOrganismSpec,
     source_dataset: Option<String>,
 ) -> Result<WholeCellProgramSpec, String> {
-    let organism = with_compiled_chromosome_domains(organism);
+    let organism = with_compiled_chromosome_domains(with_normalized_pool_metadata(organism));
     let assets = compile_genome_asset_package(&organism);
     let process_registry = compile_genome_process_registry(&assets);
     let mut spec = WholeCellProgramSpec {
@@ -4258,7 +4277,7 @@ pub fn compile_organism_spec_from_bundle_manifest_path(
 
     let pools = if let Some(pools_json) = manifest.pools_json.as_deref() {
         let pools_path = resolve_manifest_relative_path(&manifest_path, pools_json)?;
-        serde_json::from_str::<Vec<WholeCellMoleculePoolSpec>>(&read_text_file(
+        let mut pools = serde_json::from_str::<Vec<WholeCellMoleculePoolSpec>>(&read_text_file(
             &pools_path,
             "pool JSON",
         )?)
@@ -4267,7 +4286,9 @@ pub fn compile_organism_spec_from_bundle_manifest_path(
                 "failed to parse molecule pools {}: {error}",
                 pools_path.display()
             )
-        })?
+        })?;
+        normalize_pool_metadata(&mut pools);
+        pools
     } else {
         Vec::new()
     };
@@ -4290,21 +4311,23 @@ pub fn compile_organism_spec_from_bundle_manifest_path(
         Vec::new()
     };
 
-    Ok(with_compiled_chromosome_domains(WholeCellOrganismSpec {
-        organism: manifest
-            .organism
-            .clone()
-            .unwrap_or_else(|| metadata.organism.clone()),
-        chromosome_length_bp: chromosome_length_bp.max(1),
-        origin_bp: metadata.origin_bp.min(chromosome_length_bp.max(1)),
-        terminus_bp: metadata.terminus_bp.min(chromosome_length_bp.max(1)),
-        geometry: metadata.geometry,
-        composition: metadata.composition,
-        chromosome_domains,
-        pools,
-        genes,
-        transcription_units,
-    }))
+    Ok(with_compiled_chromosome_domains(
+        with_normalized_pool_metadata(WholeCellOrganismSpec {
+            organism: manifest
+                .organism
+                .clone()
+                .unwrap_or_else(|| metadata.organism.clone()),
+            chromosome_length_bp: chromosome_length_bp.max(1),
+            origin_bp: metadata.origin_bp.min(chromosome_length_bp.max(1)),
+            terminus_bp: metadata.terminus_bp.min(chromosome_length_bp.max(1)),
+            geometry: metadata.geometry,
+            composition: metadata.composition,
+            chromosome_domains,
+            pools,
+            genes,
+            transcription_units,
+        }),
+    ))
 }
 
 pub fn compile_program_spec_from_bundle_manifest_path(
@@ -4426,6 +4449,7 @@ pub fn bundled_syn3a_program_spec_json() -> &'static str {
 
 pub fn parse_organism_spec_json(spec_json: &str) -> Result<WholeCellOrganismSpec, String> {
     serde_json::from_str::<WholeCellOrganismSpec>(spec_json)
+        .map(with_normalized_pool_metadata)
         .map(with_compiled_chromosome_domains)
         .map_err(|error| format!("failed to parse organism spec: {error}"))
 }
@@ -4434,6 +4458,7 @@ pub fn parse_genome_asset_package_json(
     spec_json: &str,
 ) -> Result<WholeCellGenomeAssetPackage, String> {
     serde_json::from_str(spec_json)
+        .map(with_normalized_asset_pool_metadata)
         .map_err(|error| format!("failed to parse genome asset package: {error}"))
 }
 
@@ -5003,6 +5028,26 @@ mod tests {
             species.spatial_scope,
             WholeCellSpatialScope::MembraneAdjacent
         );
+    }
+
+    #[test]
+    fn parse_genome_asset_package_json_backfills_legacy_pool_bulk_field_metadata() {
+        let mut package = bundled_syn3a_genome_asset_package().expect("bundled asset package");
+        let atp_pool = package
+            .pools
+            .iter_mut()
+            .find(|pool| pool.bulk_field == Some(WholeCellBulkField::ATP))
+            .expect("ATP pool");
+        atp_pool.bulk_field = None;
+
+        let json = serde_json::to_string(&package).expect("serialize package");
+        let reparsed = parse_genome_asset_package_json(&json).expect("parse package");
+        let reparsed_atp_pool = reparsed
+            .pools
+            .iter()
+            .find(|pool| pool.species.eq_ignore_ascii_case("atp"))
+            .expect("reparsed ATP pool");
+        assert_eq!(reparsed_atp_pool.bulk_field, Some(WholeCellBulkField::ATP));
     }
 
     #[test]

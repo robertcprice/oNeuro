@@ -234,6 +234,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Remaining blockers:
   - `legacy pool-field inference still exists as a compatibility fallback when bundle metadata is absent; the next slice is removing more of that fallback chain from registry compilation and runtime anchoring`
 
+### 2026-03-11 - Phase 7 / Pool Metadata Ingress Normalization Slice
+
+- Summary:
+  - moved legacy pool-field inference to organism and asset-package ingress so compiler and program-spec construction operate on normalized explicit pool metadata instead of re-inferring fields repeatedly
+  - added a regression proving legacy asset-package JSON without `bulk_field` still reparses into normalized explicit pool metadata at the boundary
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell_data.rs`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `runtime pool seeding and species anchoring still retain a compatibility name-based fallback for legacy callers that construct pool specs without explicit metadata`
+
 ### 2026-03-11 - Phase 5 / Explicit Chromosome Runtime Slice
 
 - Summary:
