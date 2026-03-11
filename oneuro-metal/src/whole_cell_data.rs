@@ -324,10 +324,36 @@ pub struct WholeCellComplexSpec {
     pub components: Vec<WholeCellComplexComponentSpec>,
     pub basal_abundance: f32,
     pub asset_class: WholeCellAssetClass,
+    #[serde(default = "default_assembly_family")]
+    pub family: WholeCellAssemblyFamily,
     #[serde(default)]
     pub process_weights: WholeCellProcessWeights,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub membrane_inserted: bool,
+    #[serde(default)]
+    pub chromosome_coupled: bool,
+    #[serde(default)]
+    pub division_coupled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WholeCellAssemblyFamily {
+    Ribosome,
+    RnaPolymerase,
+    Replisome,
+    AtpSynthase,
+    Transporter,
+    MembraneEnzyme,
+    ChaperoneClient,
+    Divisome,
+    Generic,
+}
+
+fn default_assembly_family() -> WholeCellAssemblyFamily {
+    WholeCellAssemblyFamily::Generic
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -871,6 +897,8 @@ pub struct WholeCellNamedComplexState {
     pub id: String,
     pub operon: String,
     pub asset_class: WholeCellAssetClass,
+    #[serde(default = "default_assembly_family")]
+    pub family: WholeCellAssemblyFamily,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
     #[serde(default)]
@@ -893,6 +921,18 @@ pub struct WholeCellNamedComplexState {
     pub structural_support: f32,
     #[serde(default)]
     pub assembly_progress: f32,
+    #[serde(default)]
+    pub stalled_intermediate: f32,
+    #[serde(default)]
+    pub damaged_abundance: f32,
+    #[serde(default)]
+    pub limiting_component_signal: f32,
+    #[serde(default)]
+    pub shared_component_pressure: f32,
+    #[serde(default)]
+    pub insertion_progress: f32,
+    #[serde(default)]
+    pub failure_count: f32,
 }
 
 impl Default for WholeCellComplexAssemblyState {
@@ -1537,6 +1577,57 @@ fn inferred_asset_class(
         .unwrap_or(WholeCellAssetClass::Generic)
 }
 
+fn inferred_complex_family(
+    asset_class: WholeCellAssetClass,
+    subsystem_targets: &[Syn3ASubsystemPreset],
+    operon_name: &str,
+) -> WholeCellAssemblyFamily {
+    let lowered = operon_name.to_ascii_lowercase();
+    if subsystem_targets.contains(&Syn3ASubsystemPreset::RibosomePolysomeCluster)
+        || lowered.contains("ribosome")
+    {
+        return WholeCellAssemblyFamily::Ribosome;
+    }
+    if subsystem_targets.contains(&Syn3ASubsystemPreset::ReplisomeTrack)
+        || lowered.contains("replisome")
+        || lowered.contains("replication")
+        || lowered.contains("dna")
+    {
+        return WholeCellAssemblyFamily::Replisome;
+    }
+    if subsystem_targets.contains(&Syn3ASubsystemPreset::AtpSynthaseMembraneBand)
+        || lowered.contains("atp_synthase")
+        || lowered.contains("respir")
+    {
+        return WholeCellAssemblyFamily::AtpSynthase;
+    }
+    if subsystem_targets.contains(&Syn3ASubsystemPreset::FtsZSeptumRing)
+        || lowered.contains("ftsz")
+        || lowered.contains("division")
+        || lowered.contains("sept")
+        || lowered.contains("divisome")
+    {
+        return WholeCellAssemblyFamily::Divisome;
+    }
+    if lowered.contains("rnap") || lowered.contains("rna_polymerase") || lowered.contains("sigma")
+    {
+        return WholeCellAssemblyFamily::RnaPolymerase;
+    }
+    if lowered.contains("chaperone") || lowered.contains("fold") || lowered.contains("client") {
+        return WholeCellAssemblyFamily::ChaperoneClient;
+    }
+    if lowered.contains("transport") || lowered.contains("porin") || lowered.contains("pump") {
+        return WholeCellAssemblyFamily::Transporter;
+    }
+    if matches!(
+        asset_class,
+        WholeCellAssetClass::Membrane | WholeCellAssetClass::Constriction
+    ) {
+        return WholeCellAssemblyFamily::MembraneEnzyme;
+    }
+    WholeCellAssemblyFamily::Generic
+}
+
 fn canonical_species_fragment(name: &str) -> String {
     let mut fragment = String::with_capacity(name.len());
     let mut last_was_underscore = false;
@@ -1769,6 +1860,7 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             }
         }
         let asset_class = inferred_asset_class(process_weights, &subsystem_targets, &operon.name);
+        let family = inferred_complex_family(asset_class, &subsystem_targets, &operon.name);
         complexes.push(WholeCellComplexSpec {
             id: format!("{}_complex", operon.name),
             name: format!("{} complex", operon.name),
@@ -1780,8 +1872,21 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
                     * (operon.genes.len().max(1) as f32).sqrt())
             .clamp(0.5, 256.0),
             asset_class,
+            family,
             process_weights: process_weights.clamped(),
             subsystem_targets,
+            membrane_inserted: matches!(
+                family,
+                WholeCellAssemblyFamily::AtpSynthase
+                    | WholeCellAssemblyFamily::Transporter
+                    | WholeCellAssemblyFamily::MembraneEnzyme
+                    | WholeCellAssemblyFamily::Divisome
+            ),
+            chromosome_coupled: matches!(
+                family,
+                WholeCellAssemblyFamily::Replisome | WholeCellAssemblyFamily::RnaPolymerase
+            ),
+            division_coupled: matches!(family, WholeCellAssemblyFamily::Divisome),
         });
     }
 

@@ -197,3 +197,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `expression now carries explicit unit execution state, but assembly, chromosome, and membrane layers still depend on aggregate runtime channels and need the same treatment in later slices`
+
+### 2026-03-11 - Phase 4 / Explicit Assembly Traits Slice
+
+- Summary:
+  - extended compiled complex specs with assembly-family traits and coupling flags so membrane, replication, transport, ribosome, RNAP, and divisome assemblies carry semantic runtime constraints instead of being treated as uniform channels
+  - extended named complex runtime state with stall, damage, limiting-component, shared-component-pressure, insertion-progress, and failure bookkeeping and fed those signals into the native assembly update path
+  - added family-aware assembly gating and shared-subunit competition so aggregate capacity now reflects more local assembly rules before it rolls up into process capacity
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase5-assembly.8470 && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase5-assembly.8470 && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `named assemblies now carry richer local state, but chromosome runtime, membrane mechanics, and explicit solver ownership still need to take over more of the remaining aggregate process channels`

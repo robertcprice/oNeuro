@@ -22,7 +22,7 @@ use crate::whole_cell_data::{
     bundled_syn3a_program_spec_json, compile_genome_asset_package, compile_genome_process_registry,
     compile_program_spec_from_bundle_manifest_path, derive_organism_profile,
     initialize_runtime_reaction_state, initialize_runtime_species_state, parse_program_spec_json,
-    parse_saved_state_json, saved_state_to_json, WholeCellBulkField, WholeCellComplexAssemblyState,
+    parse_saved_state_json, saved_state_to_json, WholeCellAssemblyFamily, WholeCellBulkField, WholeCellComplexAssemblyState,
     WholeCellComplexSpec, WholeCellContractSchema, WholeCellGenomeAssetPackage,
     WholeCellGenomeAssetSummary, WholeCellGenomeFeature, WholeCellGenomeProcessRegistry,
     WholeCellGenomeProcessRegistrySummary, WholeCellLatticeState, WholeCellLocalChemistrySpec,
@@ -3545,6 +3545,158 @@ impl WholeCellSimulator {
         }
     }
 
+    fn named_complex_limiting_component_signal(
+        &self,
+        assets: &WholeCellGenomeAssetPackage,
+        complex: &WholeCellComplexSpec,
+    ) -> f32 {
+        if complex.components.is_empty() {
+            return 1.0;
+        }
+        let mut limiting_signal: f32 = 1.0;
+        let mut counted = 0usize;
+        for component in &complex.components {
+            let Some(protein) = assets
+                .proteins
+                .iter()
+                .find(|protein| protein.id == component.protein_id)
+            else {
+                continue;
+            };
+            let unit_abundance = self
+                .species_runtime_count(&protein.id)
+                .or_else(|| {
+                    self.expression_state_for_operon(&protein.operon)
+                        .map(|state| {
+                            state.mature_protein_abundance
+                                / Self::operon_gene_count(assets, &protein.operon) as f32
+                        })
+                })
+                .unwrap_or(protein.basal_abundance.max(0.0));
+            let per_subunit = unit_abundance / component.stoichiometry.max(1) as f32;
+            let half_saturation = 2.0 + 1.5 * component.stoichiometry.max(1) as f32;
+            limiting_signal =
+                limiting_signal.min(Self::saturating_signal(per_subunit, half_saturation));
+            counted += 1;
+        }
+        if counted == 0 {
+            1.0
+        } else {
+            limiting_signal.clamp(0.0, 1.0)
+        }
+    }
+
+    fn named_complex_component_demand_map(
+        &self,
+        assets: &WholeCellGenomeAssetPackage,
+    ) -> HashMap<String, f32> {
+        let mut demand = HashMap::new();
+        for (state, complex) in self.named_complexes.iter().zip(assets.complexes.iter()) {
+            let assembly_drive =
+                (state.target_abundance.max(state.abundance) + state.stalled_intermediate)
+                    .max(0.0);
+            for component in &complex.components {
+                *demand.entry(component.protein_id.clone()).or_insert(0.0) +=
+                    assembly_drive * component.stoichiometry.max(1) as f32;
+            }
+        }
+        demand
+    }
+
+    fn named_complex_shared_component_pressure(
+        &self,
+        assets: &WholeCellGenomeAssetPackage,
+        complex: &WholeCellComplexSpec,
+        component_demand: &HashMap<String, f32>,
+    ) -> f32 {
+        if complex.components.is_empty() {
+            return 0.0;
+        }
+        let mut mean_pressure = 0.0;
+        let mut counted = 0usize;
+        for component in &complex.components {
+            let Some(protein) = assets
+                .proteins
+                .iter()
+                .find(|protein| protein.id == component.protein_id)
+            else {
+                continue;
+            };
+            let available = self
+                .species_runtime_count(&protein.id)
+                .or_else(|| {
+                    self.expression_state_for_operon(&protein.operon)
+                        .map(|state| state.mature_protein_abundance.max(0.0))
+                })
+                .unwrap_or(protein.basal_abundance.max(0.0))
+                .max(1.0);
+            let demand = component_demand
+                .get(&component.protein_id)
+                .copied()
+                .unwrap_or(0.0)
+                .max(0.0);
+            let pressure = ((demand / available) - 1.0).max(0.0);
+            mean_pressure += pressure;
+            counted += 1;
+        }
+        if counted == 0 {
+            0.0
+        } else {
+            (mean_pressure / counted as f32).clamp(0.0, 4.0)
+        }
+    }
+
+    fn named_complex_family_gate(&self, complex: &WholeCellComplexSpec) -> f32 {
+        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        match complex.family {
+            WholeCellAssemblyFamily::Ribosome => 1.0,
+            WholeCellAssemblyFamily::RnaPolymerase => (0.82 + 0.18 * replicated_fraction).clamp(0.75, 1.15),
+            WholeCellAssemblyFamily::Replisome => (0.70 + 0.50 * (1.0 - replicated_fraction)).clamp(0.55, 1.25),
+            WholeCellAssemblyFamily::AtpSynthase => {
+                Self::finite_scale(
+                    0.55 * self.chemistry_report.atp_support
+                        + 0.25 * self.organism_expression.membrane_support
+                        + 0.20 * self.localized_supply_scale(),
+                    1.0,
+                    0.55,
+                    1.25,
+                )
+            }
+            WholeCellAssemblyFamily::Transporter => {
+                Self::finite_scale(
+                    0.60 * self.localized_supply_scale()
+                        + 0.25 * self.organism_expression.membrane_support
+                        + 0.15 * self.organism_expression.energy_support,
+                    1.0,
+                    0.55,
+                    1.25,
+                )
+            }
+            WholeCellAssemblyFamily::MembraneEnzyme => {
+                Self::finite_scale(
+                    0.55 * self.organism_expression.membrane_support
+                        + 0.20 * self.localized_supply_scale()
+                        + 0.25 * (1.0 - self.division_progress).clamp(0.0, 1.0),
+                    1.0,
+                    0.55,
+                    1.20,
+                )
+            }
+            WholeCellAssemblyFamily::ChaperoneClient => {
+                Self::finite_scale(
+                    0.80 + 0.25 * (self.effective_metabolic_load() - 1.0).max(0.0),
+                    1.0,
+                    0.75,
+                    1.40,
+                )
+            }
+            WholeCellAssemblyFamily::Divisome => {
+                (0.55 + 0.80 * replicated_fraction + 0.25 * self.division_progress).clamp(0.45, 1.45)
+            }
+            WholeCellAssemblyFamily::Generic => 1.0,
+        }
+    }
+
     fn named_complex_structural_support(
         &self,
         assets: &WholeCellGenomeAssetPackage,
@@ -3658,10 +3810,18 @@ impl WholeCellSimulator {
                             2.0 + 0.4 * total_stoichiometry.max(1.0),
                         ))
                 .clamp(0.0, 1.0);
+                let limiting_component_signal =
+                    self.named_complex_limiting_component_signal(&assets, complex);
+                let insertion_progress = if complex.membrane_inserted {
+                    (0.58 * structural_support + 0.42 * component_satisfaction).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
                 WholeCellNamedComplexState {
                     id: complex.id.clone(),
                     operon: complex.operon.clone(),
                     asset_class: complex.asset_class,
+                    family: complex.family,
                     subsystem_targets: complex.subsystem_targets.clone(),
                     subunit_pool,
                     nucleation_intermediate,
@@ -3676,6 +3836,12 @@ impl WholeCellSimulator {
                     component_satisfaction,
                     structural_support,
                     assembly_progress,
+                    stalled_intermediate: 0.0,
+                    damaged_abundance: 0.0,
+                    limiting_component_signal,
+                    shared_component_pressure: 0.0,
+                    insertion_progress,
+                    failure_count: 0.0,
                 }
             })
             .collect();
@@ -3688,12 +3854,25 @@ impl WholeCellSimulator {
     ) -> WholeCellComplexAssemblyState {
         let mut aggregate = WholeCellComplexAssemblyState::default();
         for (state, complex) in self.named_complexes.iter().zip(assets.complexes.iter()) {
-            let effective_abundance = state.abundance
-                + 0.35 * state.elongation_intermediate
-                + 0.15 * state.nucleation_intermediate;
-            let effective_target = state.target_abundance
-                + 0.25 * state.elongation_intermediate
-                + 0.10 * state.nucleation_intermediate;
+            let insertion_gate = if complex.membrane_inserted {
+                (0.65 + 0.35 * state.insertion_progress).clamp(0.40, 1.0)
+            } else {
+                1.0
+            };
+            let damage_penalty = (1.0
+                - 0.45
+                    * Self::saturating_signal(
+                        state.damaged_abundance,
+                        1.0 + 0.2 * state.target_abundance.max(1.0),
+                    ))
+            .clamp(0.35, 1.0);
+            let effective_abundance = (state.abundance * insertion_gate * damage_penalty)
+                + 0.22 * state.elongation_intermediate
+                + 0.08 * state.nucleation_intermediate;
+            let effective_target = (state.target_abundance * insertion_gate)
+                + 0.18 * state.elongation_intermediate
+                + 0.06 * state.nucleation_intermediate
+                + 0.04 * state.stalled_intermediate;
             let effective_assembly_rate = state.assembly_rate
                 + 0.55 * state.maturation_rate
                 + 0.30 * state.elongation_rate
@@ -3790,6 +3969,7 @@ impl WholeCellSimulator {
         let degradation_pressure =
             (0.68 + 0.22 * (effective_load - 1.0).max(0.0) + 0.16 * (1.0 - crowding).max(0.0))
                 .clamp(0.60, 1.80);
+        let component_demand = self.named_complex_component_demand_map(&assets);
 
         let updated_states = self
             .named_complexes
@@ -3798,14 +3978,27 @@ impl WholeCellSimulator {
             .map(|(state, complex)| {
                 let component_satisfaction =
                     self.named_complex_component_satisfaction(&assets, complex);
+                let limiting_component_signal =
+                    self.named_complex_limiting_component_signal(&assets, complex);
                 let component_supply_signal =
                     self.named_complex_component_supply_signal(&assets, complex);
                 let structural_support = self.named_complex_structural_support(&assets, complex);
+                let shared_component_pressure = self.named_complex_shared_component_pressure(
+                    &assets,
+                    complex,
+                    &component_demand,
+                );
                 let subunit_pool_target = self.named_complex_subunit_pool_target(&assets, complex);
                 let total_stoichiometry = Self::named_complex_total_stoichiometry(complex);
                 let complexity_penalty = 1.0 / total_stoichiometry.sqrt().max(1.0);
+                let family_gate = self.named_complex_family_gate(complex);
                 let assembly_support = Self::finite_scale(
-                    0.52 * component_satisfaction + 0.34 * structural_support + 0.14 * crowding,
+                    0.36 * component_satisfaction
+                        + 0.20 * limiting_component_signal
+                        + 0.24 * structural_support
+                        + 0.12 * crowding
+                        + 0.08 * family_gate
+                        - 0.12 * shared_component_pressure,
                     1.0,
                     0.45,
                     1.75,
@@ -3813,35 +4006,81 @@ impl WholeCellSimulator {
                 let target_abundance = (complex.basal_abundance.max(0.1)
                     * component_satisfaction
                     * structural_support
-                    * crowding)
+                    * crowding
+                    * family_gate)
                     .clamp(0.0, 512.0);
                 let subunit_supply_rate = (subunit_pool_target - state.subunit_pool).max(0.0)
-                    * (0.10 + 0.16 * component_supply_signal);
+                    * (0.10 + 0.16 * component_supply_signal)
+                    * (1.0 - 0.18 * shared_component_pressure.clamp(0.0, 1.5));
                 let subunit_turnover_rate = state.subunit_pool
                     * (0.010
                         + 0.012 * (1.0 - component_satisfaction).max(0.0)
                         + 0.008 * (1.0 - crowding).max(0.0));
+                let stall_pressure = (0.30 * (1.0 - limiting_component_signal).max(0.0)
+                    + 0.24 * (1.0 - structural_support).max(0.0)
+                    + 0.22 * shared_component_pressure
+                    + 0.18 * (1.0 - family_gate).max(0.0)
+                    + 0.12 * (degradation_pressure - 1.0).max(0.0))
+                .clamp(0.0, 2.0);
                 let nucleation_rate = state.subunit_pool
                     * (0.012 + 0.020 * component_satisfaction)
                     * complexity_penalty
-                    * assembly_support;
+                    * assembly_support
+                    * (1.0 - 0.35 * stall_pressure.min(1.0));
                 let nucleation_turnover_rate = state.nucleation_intermediate
                     * (0.012
                         + 0.012 * (1.0 - structural_support).max(0.0)
-                        + 0.008 * (1.0 - component_satisfaction).max(0.0));
+                        + 0.008 * (1.0 - component_satisfaction).max(0.0)
+                        + 0.010 * stall_pressure);
                 let elongation_rate = state.nucleation_intermediate
                     * (0.016 + 0.024 * structural_support)
-                    * (0.82 + 0.18 * component_supply_signal);
+                    * (0.82 + 0.18 * component_supply_signal)
+                    * (1.0 - 0.28 * stall_pressure.min(1.0));
                 let elongation_turnover_rate = state.elongation_intermediate
                     * (0.010
                         + 0.010 * (1.0 - structural_support).max(0.0)
-                        + 0.006 * (1.0 - crowding).max(0.0));
+                        + 0.006 * (1.0 - crowding).max(0.0)
+                        + 0.012 * stall_pressure);
+                let insertion_target = if complex.membrane_inserted {
+                    (0.48 * structural_support
+                        + 0.26 * component_satisfaction
+                        + 0.16 * family_gate
+                        + 0.10 * crowding)
+                    .clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
+                let insertion_progress = if complex.membrane_inserted {
+                    (state.insertion_progress
+                        + dt_scale
+                            * ((0.020 + 0.028 * structural_support) * insertion_target
+                                - state.insertion_progress
+                                    * (0.010
+                                        + 0.012 * stall_pressure
+                                        + 0.008 * (1.0 - crowding).max(0.0))))
+                        .clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
                 let maturation_rate = state.elongation_intermediate
                     * (0.020 + 0.032 * assembly_support)
-                    * (0.80 + 0.20 * component_satisfaction);
+                    * (0.80 + 0.20 * component_satisfaction)
+                    * (0.75 + 0.25 * insertion_progress)
+                    * (1.0 - 0.30 * stall_pressure.min(1.0));
+                let stalled_resolution_rate =
+                    state.stalled_intermediate * (0.010 + 0.014 * structural_support);
+                let stalled_intermediate = (state.stalled_intermediate
+                    + dt_scale
+                        * (0.42 * nucleation_turnover_rate
+                            + 0.38 * elongation_turnover_rate
+                            + 0.30 * stall_pressure
+                                * (state.nucleation_intermediate + state.elongation_intermediate)
+                            - stalled_resolution_rate))
+                    .clamp(0.0, 512.0);
                 let channel_degradation_pressure = (degradation_pressure
                     + 0.45 * (1.0 - component_satisfaction).max(0.0)
-                    + 0.20 * (1.0 - structural_support).max(0.0))
+                    + 0.20 * (1.0 - structural_support).max(0.0)
+                    + 0.24 * stall_pressure)
                 .clamp(0.60, 2.10);
                 let (abundance, assembly_rate, degradation_rate) = Self::complex_channel_step(
                     state.abundance,
@@ -3863,6 +4102,13 @@ impl WholeCellSimulator {
                     + dt_scale
                         * (elongation_rate - 0.75 * maturation_rate - elongation_turnover_rate))
                     .clamp(0.0, 512.0);
+                let damaged_abundance = (state.damaged_abundance
+                    + dt_scale
+                        * (abundance
+                            * (0.004 + 0.006 * stall_pressure + 0.004 * shared_component_pressure)
+                            - state.damaged_abundance
+                                * (0.008 + 0.010 * structural_support + 0.006 * family_gate)))
+                    .clamp(0.0, 512.0);
                 let assembly_progress = (0.36 * component_satisfaction
                     + 0.26 * structural_support
                     + 0.18
@@ -3876,10 +4122,14 @@ impl WholeCellSimulator {
                             2.0 + 0.35 * total_stoichiometry.max(1.0),
                         ))
                 .clamp(0.0, 1.0);
+                let failure_count = (state.failure_count
+                    + dt_scale * (0.08 * stall_pressure + 0.04 * shared_component_pressure))
+                    .clamp(0.0, 1.0e6);
                 WholeCellNamedComplexState {
                     id: state.id.clone(),
                     operon: state.operon.clone(),
                     asset_class: state.asset_class,
+                    family: state.family,
                     subsystem_targets: state.subsystem_targets.clone(),
                     subunit_pool,
                     nucleation_intermediate,
@@ -3894,6 +4144,12 @@ impl WholeCellSimulator {
                     component_satisfaction,
                     structural_support,
                     assembly_progress,
+                    stalled_intermediate,
+                    damaged_abundance,
+                    limiting_component_signal,
+                    shared_component_pressure,
+                    insertion_progress,
+                    failure_count,
                 }
             })
             .collect();
@@ -6415,6 +6671,7 @@ mod tests {
             id: "test_complex".to_string(),
             operon: "repair_operon".to_string(),
             asset_class: WholeCellAssetClass::Membrane,
+            family: WholeCellAssemblyFamily::MembraneEnzyme,
             subsystem_targets: Vec::new(),
             subunit_pool: 10.0,
             nucleation_intermediate: 1.0,
@@ -6429,6 +6686,12 @@ mod tests {
             component_satisfaction: 0.8,
             structural_support: 0.8,
             assembly_progress: 0.4,
+            stalled_intermediate: 0.0,
+            damaged_abundance: 0.0,
+            limiting_component_signal: 0.8,
+            shared_component_pressure: 0.0,
+            insertion_progress: 0.6,
+            failure_count: 0.0,
         }];
         sim.organism_species = vec![
             WholeCellSpeciesRuntimeState {
@@ -7363,6 +7626,7 @@ mod tests {
             .iter()
             .find(|state| state.id == "ribosome_biogenesis_operon_complex")
             .expect("ribosome complex state");
+        assert_eq!(start_ribosome.family, WholeCellAssemblyFamily::Ribosome);
         assert!(start_ribosome.subunit_pool > 0.0);
         assert!(start_ribosome.nucleation_intermediate > 0.0);
         assert!(start_ribosome.elongation_intermediate > 0.0);
@@ -7370,6 +7634,8 @@ mod tests {
         assert!(start_ribosome.component_satisfaction > 0.0);
         assert!(start_ribosome.structural_support > 0.0);
         assert!(start_ribosome.assembly_progress > 0.0);
+        assert!(start_ribosome.limiting_component_signal > 0.0);
+        assert!(start_ribosome.insertion_progress >= 0.0);
 
         sim.run(12);
 
@@ -7385,6 +7651,7 @@ mod tests {
         assert!(end_ribosome.maturation_rate > 0.0);
         assert!(end_ribosome.abundance != start_ribosome.abundance);
         assert!(end_ribosome.assembly_progress != start_ribosome.assembly_progress);
+        assert!(end_ribosome.failure_count >= start_ribosome.failure_count);
 
         let saved = sim.save_state_json().expect("serialize saved state");
         let restored =
@@ -7411,6 +7678,59 @@ mod tests {
         assert!(
             (restored_ribosome.target_abundance - end_ribosome.target_abundance).abs() < 1.0e-6
         );
+        assert!(
+            (restored_ribosome.shared_component_pressure - end_ribosome.shared_component_pressure)
+                .abs()
+                < 1.0e-6
+        );
+        assert!(
+            (restored_ribosome.limiting_component_signal - end_ribosome.limiting_component_signal)
+                .abs()
+                < 1.0e-6
+        );
+    }
+
+    #[test]
+    fn test_named_complex_state_tracks_stall_and_damage_under_stress() {
+        let mut baseline =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let mut stressed =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        stressed.metabolic_load = 2.5;
+        stressed.chemistry_report.atp_support = 0.62;
+        stressed.chemistry_report.translation_support = 0.60;
+        stressed.chemistry_report.membrane_support = 0.58;
+        stressed.chemistry_report.crowding_penalty = 0.72;
+
+        baseline.run(16);
+        stressed.run(16);
+
+        let stressed_complex = stressed
+            .named_complexes_state()
+            .into_iter()
+            .find(|state| {
+                matches!(
+                    state.family,
+                    WholeCellAssemblyFamily::AtpSynthase
+                        | WholeCellAssemblyFamily::Transporter
+                        | WholeCellAssemblyFamily::MembraneEnzyme
+                        | WholeCellAssemblyFamily::Divisome
+                )
+            })
+            .expect("stressed membrane-coupled complex");
+        let baseline_complex = baseline
+            .named_complexes_state()
+            .into_iter()
+            .find(|state| state.id == stressed_complex.id)
+            .expect("baseline matching complex");
+
+        assert!(stressed_complex.stalled_intermediate >= baseline_complex.stalled_intermediate);
+        assert!(
+            stressed_complex.shared_component_pressure
+                >= baseline_complex.shared_component_pressure
+        );
+        assert!(stressed_complex.failure_count >= baseline_complex.failure_count);
+        assert!(stressed_complex.insertion_progress <= baseline_complex.insertion_progress + 1.0e-6);
     }
 
     #[test]
