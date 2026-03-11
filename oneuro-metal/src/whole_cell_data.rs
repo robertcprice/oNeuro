@@ -403,6 +403,16 @@ pub enum WholeCellReactionClass {
     ComplexTurnover,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WholeCellSpatialScope {
+    #[default]
+    WellMixed,
+    MembraneAdjacent,
+    SeptumLocal,
+    NucleoidLocal,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellSpeciesSpec {
     pub id: String,
@@ -419,6 +429,8 @@ pub struct WholeCellSpeciesSpec {
     pub parent_complex: Option<String>,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub spatial_scope: WholeCellSpatialScope,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -444,6 +456,8 @@ pub struct WholeCellReactionSpec {
     pub products: Vec<WholeCellReactionParticipantSpec>,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub spatial_scope: WholeCellSpatialScope,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -471,6 +485,8 @@ pub struct WholeCellSpeciesRuntimeState {
     pub parent_complex: Option<String>,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub spatial_scope: WholeCellSpatialScope,
     pub count: f32,
     #[serde(default)]
     pub anchor_count: f32,
@@ -497,6 +513,8 @@ pub struct WholeCellReactionRuntimeState {
     pub products: Vec<WholeCellReactionParticipantSpec>,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub spatial_scope: WholeCellSpatialScope,
     #[serde(default)]
     pub current_flux: f32,
     #[serde(default)]
@@ -653,6 +671,7 @@ pub fn initialize_runtime_species_state(
             operon: species.operon.clone(),
             parent_complex: species.parent_complex.clone(),
             subsystem_targets: species.subsystem_targets.clone(),
+            spatial_scope: species.spatial_scope,
             count: species.basal_abundance.max(0.0),
             anchor_count: species.basal_abundance.max(0.0),
             synthesis_rate: 0.0,
@@ -678,6 +697,7 @@ pub fn initialize_runtime_reaction_state(
             reactants: reaction.reactants.clone(),
             products: reaction.products.clone(),
             subsystem_targets: reaction.subsystem_targets.clone(),
+            spatial_scope: reaction.spatial_scope,
             current_flux: 0.0,
             cumulative_extent: 0.0,
             reactant_satisfaction: 1.0,
@@ -1941,6 +1961,30 @@ fn registry_compartment_for_asset_class(
     }
 }
 
+fn registry_spatial_scope(
+    asset_class: WholeCellAssetClass,
+    compartment: &str,
+    subsystem_targets: &[Syn3ASubsystemPreset],
+) -> WholeCellSpatialScope {
+    if subsystem_targets.contains(&Syn3ASubsystemPreset::ReplisomeTrack)
+        || compartment.eq_ignore_ascii_case("chromosome")
+        || matches!(asset_class, WholeCellAssetClass::Replication)
+    {
+        WholeCellSpatialScope::NucleoidLocal
+    } else if subsystem_targets.contains(&Syn3ASubsystemPreset::FtsZSeptumRing)
+        || matches!(asset_class, WholeCellAssetClass::Constriction)
+    {
+        WholeCellSpatialScope::SeptumLocal
+    } else if subsystem_targets.contains(&Syn3ASubsystemPreset::AtpSynthaseMembraneBand)
+        || compartment.eq_ignore_ascii_case("membrane")
+        || matches!(asset_class, WholeCellAssetClass::Membrane)
+    {
+        WholeCellSpatialScope::MembraneAdjacent
+    } else {
+        WholeCellSpatialScope::WellMixed
+    }
+}
+
 fn find_pool_species_id_by_hint(
     package: &WholeCellGenomeAssetPackage,
     hint: &str,
@@ -2155,6 +2199,7 @@ pub fn compile_genome_process_registry(
         } else {
             "cytosol"
         };
+        let spatial_scope = registry_spatial_scope(asset_class, compartment, &[]);
         species.push(WholeCellSpeciesSpec {
             id: pool_species_id(&pool.species),
             name: species_name,
@@ -2167,6 +2212,7 @@ pub fn compile_genome_process_registry(
             operon: None,
             parent_complex: None,
             subsystem_targets: Vec::new(),
+            spatial_scope,
         });
     }
 
@@ -2175,6 +2221,7 @@ pub fn compile_genome_process_registry(
             rna.asset_class,
             &Vec::<Syn3ASubsystemPreset>::new(),
         );
+        let spatial_scope = registry_spatial_scope(rna.asset_class, compartment, &[]);
         species.push(WholeCellSpeciesSpec {
             id: rna.id.clone(),
             name: rna.id.clone(),
@@ -2186,12 +2233,15 @@ pub fn compile_genome_process_registry(
             operon: Some(rna.operon.clone()),
             parent_complex: None,
             subsystem_targets: Vec::new(),
+            spatial_scope,
         });
     }
 
     for protein in &package.proteins {
         let compartment =
             registry_compartment_for_asset_class(protein.asset_class, &protein.subsystem_targets);
+        let spatial_scope =
+            registry_spatial_scope(protein.asset_class, compartment, &protein.subsystem_targets);
         species.push(WholeCellSpeciesSpec {
             id: protein.id.clone(),
             name: protein.id.clone(),
@@ -2203,12 +2253,15 @@ pub fn compile_genome_process_registry(
             operon: Some(protein.operon.clone()),
             parent_complex: None,
             subsystem_targets: protein.subsystem_targets.clone(),
+            spatial_scope,
         });
     }
 
     for complex in &package.complexes {
         let compartment =
             registry_compartment_for_asset_class(complex.asset_class, &complex.subsystem_targets);
+        let spatial_scope =
+            registry_spatial_scope(complex.asset_class, compartment, &complex.subsystem_targets);
         let total_stoichiometry = total_complex_stoichiometry(complex);
         let subunit_pool_id = complex_stage_species_id(&complex.id, "subunit_pool");
         let nucleation_id = complex_stage_species_id(&complex.id, "nucleation");
@@ -2226,6 +2279,7 @@ pub fn compile_genome_process_registry(
             operon: Some(complex.operon.clone()),
             parent_complex: Some(complex.id.clone()),
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope,
         });
         species.push(WholeCellSpeciesSpec {
             id: nucleation_id.clone(),
@@ -2239,6 +2293,7 @@ pub fn compile_genome_process_registry(
             operon: Some(complex.operon.clone()),
             parent_complex: Some(complex.id.clone()),
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope,
         });
         species.push(WholeCellSpeciesSpec {
             id: elongation_id.clone(),
@@ -2252,6 +2307,7 @@ pub fn compile_genome_process_registry(
             operon: Some(complex.operon.clone()),
             parent_complex: Some(complex.id.clone()),
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope,
         });
         species.push(WholeCellSpeciesSpec {
             id: mature_id.clone(),
@@ -2264,6 +2320,7 @@ pub fn compile_genome_process_registry(
             operon: Some(complex.operon.clone()),
             parent_complex: Some(complex.id.clone()),
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope,
         });
     }
 
@@ -2275,11 +2332,13 @@ pub fn compile_genome_process_registry(
         if !bulk_field_supports_transport(field) {
             continue;
         }
+        let asset_class = transport_asset_class_for_bulk_field(field);
+        let compartment = registry_compartment_for_asset_class(asset_class, &[]);
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_transport", canonical_species_fragment(&pool_id)),
             name: format!("{} transport", pool.species),
             reaction_class: WholeCellReactionClass::PoolTransport,
-            asset_class: transport_asset_class_for_bulk_field(field),
+            asset_class,
             nominal_rate: bulk_field_transport_rate(field),
             catalyst: None,
             operon: None,
@@ -2289,10 +2348,17 @@ pub fn compile_genome_process_registry(
                 stoichiometry: 1.0,
             }],
             subsystem_targets: Vec::new(),
+            spatial_scope: registry_spatial_scope(asset_class, compartment, &[]),
         });
     }
 
     for operon in &package.operons {
+        let operon_asset_class = inferred_asset_class(
+            operon.process_weights,
+            &Vec::<Syn3ASubsystemPreset>::new(),
+            &operon.name,
+        );
+        let operon_compartment = registry_compartment_for_asset_class(operon_asset_class, &[]);
         let mut reactants = Vec::new();
         if let Some(species_id) = nucleotide_pool.as_ref() {
             reactants.push(WholeCellReactionParticipantSpec {
@@ -2314,17 +2380,14 @@ pub fn compile_genome_process_registry(
                 id: format!("{}_transcription", canonical_species_fragment(&operon.name)),
                 name: format!("{} transcription", operon.name),
                 reaction_class: WholeCellReactionClass::Transcription,
-                asset_class: inferred_asset_class(
-                    operon.process_weights,
-                    &Vec::<Syn3ASubsystemPreset>::new(),
-                    &operon.name,
-                ),
+                asset_class: operon_asset_class,
                 nominal_rate: operon.basal_activity.max(0.01),
                 catalyst: None,
                 operon: Some(operon.name.clone()),
                 reactants,
                 products,
                 subsystem_targets: Vec::new(),
+                spatial_scope: registry_spatial_scope(operon_asset_class, operon_compartment, &[]),
             });
         }
 
@@ -2355,11 +2418,7 @@ pub fn compile_genome_process_registry(
             ),
             name: format!("{} stress response", operon.name),
             reaction_class: WholeCellReactionClass::StressResponse,
-            asset_class: inferred_asset_class(
-                operon.process_weights,
-                &Vec::<Syn3ASubsystemPreset>::new(),
-                &operon.name,
-            ),
+            asset_class: operon_asset_class,
             nominal_rate: (0.012 + 0.005 * (operon.genes.len().max(1) as f32).sqrt())
                 .clamp(0.004, 4.0),
             catalyst: None,
@@ -2367,10 +2426,13 @@ pub fn compile_genome_process_registry(
             reactants: stress_reactants,
             products: stress_products,
             subsystem_targets: Vec::new(),
+            spatial_scope: registry_spatial_scope(operon_asset_class, operon_compartment, &[]),
         });
     }
 
     for protein in &package.proteins {
+        let protein_compartment =
+            registry_compartment_for_asset_class(protein.asset_class, &protein.subsystem_targets);
         let mut reactants = vec![WholeCellReactionParticipantSpec {
             species_id: protein.rna_id.clone(),
             stoichiometry: 1.0,
@@ -2395,10 +2457,19 @@ pub fn compile_genome_process_registry(
                 stoichiometry: 1.0,
             }],
             subsystem_targets: protein.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                protein.asset_class,
+                protein_compartment,
+                &protein.subsystem_targets,
+            ),
         });
     }
 
     for rna in &package.rnas {
+        let rna_compartment = registry_compartment_for_asset_class(
+            rna.asset_class,
+            &Vec::<Syn3ASubsystemPreset>::new(),
+        );
         let mut products = Vec::new();
         if let Some(species_id) = nucleotide_pool.as_ref() {
             products.push(WholeCellReactionParticipantSpec {
@@ -2421,10 +2492,13 @@ pub fn compile_genome_process_registry(
             }],
             products,
             subsystem_targets: Vec::new(),
+            spatial_scope: registry_spatial_scope(rna.asset_class, rna_compartment, &[]),
         });
     }
 
     for protein in &package.proteins {
+        let protein_compartment =
+            registry_compartment_for_asset_class(protein.asset_class, &protein.subsystem_targets);
         let mut products = Vec::new();
         if let Some(species_id) = amino_pool.as_ref() {
             products.push(WholeCellReactionParticipantSpec {
@@ -2447,10 +2521,17 @@ pub fn compile_genome_process_registry(
             }],
             products,
             subsystem_targets: protein.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                protein.asset_class,
+                protein_compartment,
+                &protein.subsystem_targets,
+            ),
         });
     }
 
     for complex in &package.complexes {
+        let complex_compartment =
+            registry_compartment_for_asset_class(complex.asset_class, &complex.subsystem_targets);
         let total_stoichiometry = total_complex_stoichiometry(complex);
         let subunit_pool_id = complex_stage_species_id(&complex.id, "subunit_pool");
         let nucleation_id = complex_stage_species_id(&complex.id, "nucleation");
@@ -2480,6 +2561,11 @@ pub fn compile_genome_process_registry(
                 stoichiometry: 1.0,
             }],
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                complex.asset_class,
+                complex_compartment,
+                &complex.subsystem_targets,
+            ),
         });
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_nucleation", canonical_species_fragment(&complex.id)),
@@ -2498,6 +2584,11 @@ pub fn compile_genome_process_registry(
                 stoichiometry: 1.0,
             }],
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                complex.asset_class,
+                complex_compartment,
+                &complex.subsystem_targets,
+            ),
         });
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_elongation", canonical_species_fragment(&complex.id)),
@@ -2522,6 +2613,11 @@ pub fn compile_genome_process_registry(
                 stoichiometry: 1.0,
             }],
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                complex.asset_class,
+                complex_compartment,
+                &complex.subsystem_targets,
+            ),
         });
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_maturation", canonical_species_fragment(&complex.id)),
@@ -2540,6 +2636,11 @@ pub fn compile_genome_process_registry(
                 stoichiometry: 1.0,
             }],
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                complex.asset_class,
+                complex_compartment,
+                &complex.subsystem_targets,
+            ),
         });
         let mut repair_reactants = vec![WholeCellReactionParticipantSpec {
             species_id: subunit_pool_id.clone(),
@@ -2578,6 +2679,11 @@ pub fn compile_genome_process_registry(
             reactants: repair_reactants,
             products: repair_products,
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                complex.asset_class,
+                complex_compartment,
+                &complex.subsystem_targets,
+            ),
         });
         reactions.push(WholeCellReactionSpec {
             id: format!("{}_turnover", canonical_species_fragment(&complex.id)),
@@ -2596,6 +2702,11 @@ pub fn compile_genome_process_registry(
                 stoichiometry: 1.0,
             }],
             subsystem_targets: complex.subsystem_targets.clone(),
+            spatial_scope: registry_spatial_scope(
+                complex.asset_class,
+                complex_compartment,
+                &complex.subsystem_targets,
+            ),
         });
     }
 
@@ -3345,6 +3456,36 @@ mod tests {
             .reactions
             .iter()
             .any(|reaction| reaction.id == "ftsz_ring_polymerization_core_protein_translation"));
+        assert!(registry.species.iter().any(|species| {
+            species.asset_class == WholeCellAssetClass::Replication
+                && species.spatial_scope == WholeCellSpatialScope::NucleoidLocal
+        }));
+        assert!(registry.species.iter().any(|species| {
+            species.compartment == "membrane"
+                && species.spatial_scope == WholeCellSpatialScope::MembraneAdjacent
+        }));
+        assert!(registry.species.iter().any(|species| {
+            species
+                .subsystem_targets
+                .contains(&Syn3ASubsystemPreset::FtsZSeptumRing)
+                && species.spatial_scope == WholeCellSpatialScope::SeptumLocal
+        }));
+        assert!(registry.reactions.iter().any(|reaction| {
+            reaction.reaction_class == WholeCellReactionClass::Transcription
+                && reaction.spatial_scope == WholeCellSpatialScope::NucleoidLocal
+        }));
+        assert!(registry.reactions.iter().any(|reaction| {
+            reaction
+                .subsystem_targets
+                .contains(&Syn3ASubsystemPreset::AtpSynthaseMembraneBand)
+                && reaction.spatial_scope == WholeCellSpatialScope::MembraneAdjacent
+        }));
+        assert!(registry.reactions.iter().any(|reaction| {
+            reaction
+                .subsystem_targets
+                .contains(&Syn3ASubsystemPreset::FtsZSeptumRing)
+                && reaction.spatial_scope == WholeCellSpatialScope::SeptumLocal
+        }));
     }
 
     #[test]

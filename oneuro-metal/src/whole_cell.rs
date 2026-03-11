@@ -34,8 +34,8 @@ use crate::whole_cell_data::{
     WholeCellProcessWeights, WholeCellProgramSpec, WholeCellProvenance, WholeCellReactionClass,
     WholeCellReactionRuntimeState, WholeCellSavedCoreState, WholeCellSavedState,
     WholeCellSchedulerState, WholeCellSolverStage, WholeCellSpatialFieldState,
-    WholeCellSpeciesClass, WholeCellSpeciesRuntimeState, WholeCellStageClockState,
-    WholeCellTranscriptionUnitState,
+    WholeCellSpatialScope, WholeCellSpeciesClass, WholeCellSpeciesRuntimeState,
+    WholeCellStageClockState, WholeCellTranscriptionUnitState,
 };
 use crate::whole_cell_submodels::{
     LocalChemistryReport, LocalChemistrySiteReport, LocalMDProbeReport, LocalMDProbeRequest,
@@ -209,6 +209,12 @@ impl Default for WholeCellOrganismProcessScales {
             nucleotide_cost_scale: 1.0,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WholeCellSpatialCouplingCache {
+    bulk_concentrations: [[f32; 7]; 4],
+    overlap: [[f32; 4]; 4],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3512,52 +3518,40 @@ impl WholeCellSimulator {
         }
     }
 
-    fn pool_species_anchor(
-        bulk_field: Option<WholeCellBulkField>,
-        species_id: &str,
-        basal_abundance: f32,
-        atp_mm: f32,
-        adp_mm: f32,
-        glucose_mm: f32,
-        oxygen_mm: f32,
-        amino_acids_mm: f32,
-        nucleotides_mm: f32,
-        membrane_precursors_mm: f32,
-    ) -> f32 {
-        let anchor = if let Some(field) = bulk_field {
-            Self::bulk_field_species_scale(field)
-                * Self::bulk_field_concentration(
-                    field,
-                    atp_mm,
-                    adp_mm,
-                    glucose_mm,
-                    oxygen_mm,
-                    amino_acids_mm,
-                    nucleotides_mm,
-                    membrane_precursors_mm,
-                )
-                .max(0.0)
-        } else {
-            let lowered = species_id.to_ascii_lowercase();
-            if lowered.contains("atp") {
-                56.0 * atp_mm.max(0.0)
-            } else if lowered.contains("adp") {
-                48.0 * adp_mm.max(0.0)
-            } else if lowered.contains("glucose") {
-                40.0 * glucose_mm.max(0.0)
-            } else if lowered.contains("oxygen") {
-                36.0 * oxygen_mm.max(0.0)
-            } else if lowered.contains("amino") {
-                64.0 * amino_acids_mm.max(0.0)
-            } else if lowered.contains("nucleotide") {
-                64.0 * nucleotides_mm.max(0.0)
-            } else if lowered.contains("membrane") || lowered.contains("lipid") {
-                52.0 * membrane_precursors_mm.max(0.0)
-            } else {
-                basal_abundance.max(0.0)
+    fn spatial_scope_field(scope: WholeCellSpatialScope) -> Option<IntracellularSpatialField> {
+        match scope {
+            WholeCellSpatialScope::WellMixed => None,
+            WholeCellSpatialScope::MembraneAdjacent => {
+                Some(IntracellularSpatialField::MembraneAdjacency)
             }
-        };
-        anchor.clamp(0.0, 4096.0)
+            WholeCellSpatialScope::SeptumLocal => Some(IntracellularSpatialField::SeptumZone),
+            WholeCellSpatialScope::NucleoidLocal => {
+                Some(IntracellularSpatialField::NucleoidOccupancy)
+            }
+        }
+    }
+
+    fn spatial_scope_index(scope: WholeCellSpatialScope) -> usize {
+        match scope {
+            WholeCellSpatialScope::WellMixed => 0,
+            WholeCellSpatialScope::MembraneAdjacent => 1,
+            WholeCellSpatialScope::SeptumLocal => 2,
+            WholeCellSpatialScope::NucleoidLocal => 3,
+        }
+    }
+
+    fn lattice_species_for_bulk_field(field: WholeCellBulkField) -> Option<IntracellularSpecies> {
+        match field {
+            WholeCellBulkField::ATP => Some(IntracellularSpecies::ATP),
+            WholeCellBulkField::AminoAcids => Some(IntracellularSpecies::AminoAcids),
+            WholeCellBulkField::Nucleotides => Some(IntracellularSpecies::Nucleotides),
+            WholeCellBulkField::MembranePrecursors => {
+                Some(IntracellularSpecies::MembranePrecursors)
+            }
+            WholeCellBulkField::ADP | WholeCellBulkField::Glucose | WholeCellBulkField::Oxygen => {
+                None
+            }
+        }
     }
 
     fn bulk_field_species_scale(field: WholeCellBulkField) -> f32 {
@@ -3569,6 +3563,18 @@ impl WholeCellSimulator {
             WholeCellBulkField::AminoAcids => 64.0,
             WholeCellBulkField::Nucleotides => 64.0,
             WholeCellBulkField::MembranePrecursors => 52.0,
+        }
+    }
+
+    fn bulk_field_index(field: WholeCellBulkField) -> usize {
+        match field {
+            WholeCellBulkField::ATP => 0,
+            WholeCellBulkField::ADP => 1,
+            WholeCellBulkField::Glucose => 2,
+            WholeCellBulkField::Oxygen => 3,
+            WholeCellBulkField::AminoAcids => 4,
+            WholeCellBulkField::Nucleotides => 5,
+            WholeCellBulkField::MembranePrecursors => 6,
         }
     }
 
@@ -3593,7 +3599,175 @@ impl WholeCellSimulator {
         }
     }
 
-    fn apply_bulk_field_delta(&mut self, field: WholeCellBulkField, delta_count: f32) -> bool {
+    fn compute_spatial_coupling_cache(&self) -> WholeCellSpatialCouplingCache {
+        let mut bulk_concentrations = [[0.0; 7]; 4];
+        let global_fields = [
+            self.atp_mm,
+            self.adp_mm,
+            self.glucose_mm,
+            self.oxygen_mm,
+            self.amino_acids_mm,
+            self.nucleotides_mm,
+            self.membrane_precursors_mm,
+        ];
+        bulk_concentrations[Self::spatial_scope_index(WholeCellSpatialScope::WellMixed)] =
+            global_fields;
+        for scope in [
+            WholeCellSpatialScope::MembraneAdjacent,
+            WholeCellSpatialScope::SeptumLocal,
+            WholeCellSpatialScope::NucleoidLocal,
+        ] {
+            let scope_index = Self::spatial_scope_index(scope);
+            bulk_concentrations[scope_index] = global_fields;
+            let Some(field) = Self::spatial_scope_field(scope) else {
+                continue;
+            };
+            for bulk_field in [
+                WholeCellBulkField::ATP,
+                WholeCellBulkField::AminoAcids,
+                WholeCellBulkField::Nucleotides,
+                WholeCellBulkField::MembranePrecursors,
+            ] {
+                if let Some(lattice_species) = Self::lattice_species_for_bulk_field(bulk_field) {
+                    bulk_concentrations[scope_index][Self::bulk_field_index(bulk_field)] =
+                        self.spatial_species_mean(lattice_species, field);
+                }
+            }
+        }
+
+        let mut overlap = [[1.0; 4]; 4];
+        for source_scope in [
+            WholeCellSpatialScope::WellMixed,
+            WholeCellSpatialScope::MembraneAdjacent,
+            WholeCellSpatialScope::SeptumLocal,
+            WholeCellSpatialScope::NucleoidLocal,
+        ] {
+            for target_scope in [
+                WholeCellSpatialScope::WellMixed,
+                WholeCellSpatialScope::MembraneAdjacent,
+                WholeCellSpatialScope::SeptumLocal,
+                WholeCellSpatialScope::NucleoidLocal,
+            ] {
+                let source_index = Self::spatial_scope_index(source_scope);
+                let target_index = Self::spatial_scope_index(target_scope);
+                if source_scope == WholeCellSpatialScope::WellMixed
+                    || target_scope == WholeCellSpatialScope::WellMixed
+                    || source_scope == target_scope
+                {
+                    overlap[source_index][target_index] = 1.0;
+                    continue;
+                }
+                let Some(source_field) = Self::spatial_scope_field(source_scope) else {
+                    continue;
+                };
+                let Some(target_field) = Self::spatial_scope_field(target_scope) else {
+                    continue;
+                };
+                let source = self.spatial_fields.field_slice(source_field);
+                let target = self.spatial_fields.field_slice(target_field);
+                let source_total = source.iter().sum::<f32>().max(1.0e-6);
+                let shared = source
+                    .iter()
+                    .zip(target.iter())
+                    .map(|(lhs, rhs)| lhs.min(*rhs))
+                    .sum::<f32>();
+                overlap[source_index][target_index] = (shared / source_total).clamp(0.02, 1.0);
+            }
+        }
+
+        WholeCellSpatialCouplingCache {
+            bulk_concentrations,
+            overlap,
+        }
+    }
+
+    fn bulk_field_concentration_for_scope(
+        cache: &WholeCellSpatialCouplingCache,
+        field: WholeCellBulkField,
+        spatial_scope: WholeCellSpatialScope,
+    ) -> f32 {
+        cache.bulk_concentrations[Self::spatial_scope_index(spatial_scope)]
+            [Self::bulk_field_index(field)]
+    }
+
+    fn pool_species_anchor(
+        bulk_field: Option<WholeCellBulkField>,
+        spatial_scope: WholeCellSpatialScope,
+        species_id: &str,
+        basal_abundance: f32,
+        cache: &WholeCellSpatialCouplingCache,
+    ) -> f32 {
+        let anchor = if let Some(field) = bulk_field {
+            Self::bulk_field_species_scale(field)
+                * Self::bulk_field_concentration_for_scope(cache, field, spatial_scope).max(0.0)
+        } else {
+            let lowered = species_id.to_ascii_lowercase();
+            if lowered.contains("atp") {
+                56.0 * cache.bulk_concentrations[0][Self::bulk_field_index(WholeCellBulkField::ATP)]
+                    .max(0.0)
+            } else if lowered.contains("adp") {
+                48.0 * cache.bulk_concentrations[0][Self::bulk_field_index(WholeCellBulkField::ADP)]
+                    .max(0.0)
+            } else if lowered.contains("glucose") {
+                40.0 * cache.bulk_concentrations[0]
+                    [Self::bulk_field_index(WholeCellBulkField::Glucose)]
+                .max(0.0)
+            } else if lowered.contains("oxygen") {
+                36.0 * cache.bulk_concentrations[0]
+                    [Self::bulk_field_index(WholeCellBulkField::Oxygen)]
+                .max(0.0)
+            } else if lowered.contains("amino") {
+                64.0 * cache.bulk_concentrations[0]
+                    [Self::bulk_field_index(WholeCellBulkField::AminoAcids)]
+                .max(0.0)
+            } else if lowered.contains("nucleotide") {
+                64.0 * cache.bulk_concentrations[0]
+                    [Self::bulk_field_index(WholeCellBulkField::Nucleotides)]
+                .max(0.0)
+            } else if lowered.contains("membrane") || lowered.contains("lipid") {
+                52.0 * cache.bulk_concentrations[0]
+                    [Self::bulk_field_index(WholeCellBulkField::MembranePrecursors)]
+                .max(0.0)
+            } else {
+                basal_abundance.max(0.0)
+            }
+        };
+        anchor.clamp(0.0, 4096.0)
+    }
+
+    fn spatial_scope_overlap(
+        cache: &WholeCellSpatialCouplingCache,
+        source_scope: WholeCellSpatialScope,
+        target_scope: WholeCellSpatialScope,
+    ) -> f32 {
+        cache.overlap[Self::spatial_scope_index(source_scope)]
+            [Self::spatial_scope_index(target_scope)]
+    }
+
+    fn effective_runtime_species_count_for_scope(
+        species: &WholeCellSpeciesRuntimeState,
+        target_scope: WholeCellSpatialScope,
+        cache: &WholeCellSpatialCouplingCache,
+    ) -> f32 {
+        let preferred_scope = if target_scope == WholeCellSpatialScope::WellMixed {
+            species.spatial_scope
+        } else {
+            target_scope
+        };
+        if let Some(field) = species.bulk_field {
+            return Self::bulk_field_species_scale(field)
+                * Self::bulk_field_concentration_for_scope(cache, field, preferred_scope).max(0.0);
+        }
+        species.count.max(0.0)
+            * Self::spatial_scope_overlap(cache, species.spatial_scope, preferred_scope)
+    }
+
+    fn apply_bulk_field_delta(
+        &mut self,
+        field: WholeCellBulkField,
+        spatial_scope: WholeCellSpatialScope,
+        delta_count: f32,
+    ) -> bool {
         if !delta_count.is_finite() || delta_count.abs() <= 1.0e-6 {
             return false;
         }
@@ -3603,26 +3777,59 @@ impl WholeCellSimulator {
         }
         match field {
             WholeCellBulkField::ATP => {
-                self.lattice
-                    .apply_uniform_delta(IntracellularSpecies::ATP, delta_mm);
+                if let Some(spatial_field) = Self::spatial_scope_field(spatial_scope) {
+                    let weights = self.spatial_fields.field_slice(spatial_field);
+                    self.lattice
+                        .apply_weighted_delta(IntracellularSpecies::ATP, delta_mm, weights);
+                } else {
+                    self.lattice
+                        .apply_uniform_delta(IntracellularSpecies::ATP, delta_mm);
+                }
                 self.atp_mm = (self.atp_mm + delta_mm).max(0.0);
                 true
             }
             WholeCellBulkField::AminoAcids => {
-                self.lattice
-                    .apply_uniform_delta(IntracellularSpecies::AminoAcids, delta_mm);
+                if let Some(spatial_field) = Self::spatial_scope_field(spatial_scope) {
+                    let weights = self.spatial_fields.field_slice(spatial_field);
+                    self.lattice.apply_weighted_delta(
+                        IntracellularSpecies::AminoAcids,
+                        delta_mm,
+                        weights,
+                    );
+                } else {
+                    self.lattice
+                        .apply_uniform_delta(IntracellularSpecies::AminoAcids, delta_mm);
+                }
                 self.amino_acids_mm = (self.amino_acids_mm + delta_mm).max(0.0);
                 true
             }
             WholeCellBulkField::Nucleotides => {
-                self.lattice
-                    .apply_uniform_delta(IntracellularSpecies::Nucleotides, delta_mm);
+                if let Some(spatial_field) = Self::spatial_scope_field(spatial_scope) {
+                    let weights = self.spatial_fields.field_slice(spatial_field);
+                    self.lattice.apply_weighted_delta(
+                        IntracellularSpecies::Nucleotides,
+                        delta_mm,
+                        weights,
+                    );
+                } else {
+                    self.lattice
+                        .apply_uniform_delta(IntracellularSpecies::Nucleotides, delta_mm);
+                }
                 self.nucleotides_mm = (self.nucleotides_mm + delta_mm).max(0.0);
                 true
             }
             WholeCellBulkField::MembranePrecursors => {
-                self.lattice
-                    .apply_uniform_delta(IntracellularSpecies::MembranePrecursors, delta_mm);
+                if let Some(spatial_field) = Self::spatial_scope_field(spatial_scope) {
+                    let weights = self.spatial_fields.field_slice(spatial_field);
+                    self.lattice.apply_weighted_delta(
+                        IntracellularSpecies::MembranePrecursors,
+                        delta_mm,
+                        weights,
+                    );
+                } else {
+                    self.lattice
+                        .apply_uniform_delta(IntracellularSpecies::MembranePrecursors, delta_mm);
+                }
                 self.membrane_precursors_mm = (self.membrane_precursors_mm + delta_mm).max(0.0);
                 true
             }
@@ -3805,27 +4012,16 @@ impl WholeCellSimulator {
             .iter()
             .map(|state| (state.id.clone(), state.clone()))
             .collect::<HashMap<_, _>>();
-        let atp_mm = self.atp_mm;
-        let adp_mm = self.adp_mm;
-        let glucose_mm = self.glucose_mm;
-        let oxygen_mm = self.oxygen_mm;
-        let amino_acids_mm = self.amino_acids_mm;
-        let nucleotides_mm = self.nucleotides_mm;
-        let membrane_precursors_mm = self.membrane_precursors_mm;
+        let spatial_cache = self.compute_spatial_coupling_cache();
 
         for species in &mut self.organism_species {
             let anchor = match species.species_class {
                 WholeCellSpeciesClass::Pool => Self::pool_species_anchor(
                     species.bulk_field,
+                    species.spatial_scope,
                     &species.id,
                     species.basal_abundance,
-                    atp_mm,
-                    adp_mm,
-                    glucose_mm,
-                    oxygen_mm,
-                    amino_acids_mm,
-                    nucleotides_mm,
-                    membrane_precursors_mm,
+                    &spatial_cache,
                 ),
                 WholeCellSpeciesClass::Rna => {
                     if let Some(operon) = species.operon.as_ref() {
@@ -3933,6 +4129,11 @@ impl WholeCellSimulator {
             .iter()
             .map(|species| (species.id.clone(), species.count))
             .collect::<HashMap<_, _>>();
+        let species_state = self
+            .organism_species
+            .iter()
+            .map(|species| (species.id.clone(), species.clone()))
+            .collect::<HashMap<_, _>>();
         let species_anchors = self
             .organism_species
             .iter()
@@ -3972,11 +4173,15 @@ impl WholeCellSimulator {
             .iter()
             .map(|unit| (unit.name.clone(), (unit.support_level, unit.stress_penalty)))
             .collect::<HashMap<_, _>>();
+        let spatial_cache = self.compute_spatial_coupling_cache();
         let mut species_deltas: HashMap<String, f32> = HashMap::new();
+        let mut bulk_field_deltas: HashMap<(WholeCellBulkField, WholeCellSpatialScope), f32> =
+            HashMap::new();
         let mut stress_relief: HashMap<String, f32> = HashMap::new();
         let mut metabolic_load_relief = 0.0f32;
 
         for reaction in &mut self.organism_reactions {
+            let reaction_scope = reaction.spatial_scope;
             let reactant_satisfaction = if reaction.reactants.is_empty() {
                 1.0
             } else {
@@ -3984,9 +4189,16 @@ impl WholeCellSimulator {
                     .reactants
                     .iter()
                     .map(|participant| {
-                        let count = species_counts
+                        let count = species_state
                             .get(&participant.species_id)
-                            .copied()
+                            .map(|species| {
+                                Self::effective_runtime_species_count_for_scope(
+                                    species,
+                                    reaction_scope,
+                                    &spatial_cache,
+                                )
+                            })
+                            .or_else(|| species_counts.get(&participant.species_id).copied())
                             .unwrap_or(0.0);
                         Self::saturating_signal(
                             count,
@@ -3999,10 +4211,18 @@ impl WholeCellSimulator {
                 .catalyst
                 .as_ref()
                 .map(|species_id| {
-                    Self::saturating_signal(
-                        species_counts.get(species_id).copied().unwrap_or(0.0),
-                        4.0,
-                    )
+                    let count = species_state
+                        .get(species_id)
+                        .map(|species| {
+                            Self::effective_runtime_species_count_for_scope(
+                                species,
+                                reaction_scope,
+                                &spatial_cache,
+                            )
+                        })
+                        .or_else(|| species_counts.get(species_id).copied())
+                        .unwrap_or(0.0);
+                    Self::saturating_signal(count, 4.0)
                 })
                 .unwrap_or(1.0);
             let asset_support =
@@ -4137,17 +4357,38 @@ impl WholeCellSimulator {
                     *species_deltas
                         .entry(participant.species_id.clone())
                         .or_insert(0.0) -= extent * participant.stoichiometry.max(0.0);
+                    if let Some(species) = species_state.get(&participant.species_id) {
+                        if let Some(field) = species.bulk_field {
+                            let scope = if reaction_scope == WholeCellSpatialScope::WellMixed {
+                                species.spatial_scope
+                            } else {
+                                reaction_scope
+                            };
+                            *bulk_field_deltas.entry((field, scope)).or_insert(0.0) -=
+                                extent * participant.stoichiometry.max(0.0);
+                        }
+                    }
                 }
                 for participant in &reaction.products {
                     *species_deltas
                         .entry(participant.species_id.clone())
                         .or_insert(0.0) += extent * participant.stoichiometry.max(0.0);
+                    if let Some(species) = species_state.get(&participant.species_id) {
+                        if let Some(field) = species.bulk_field {
+                            let scope = if reaction_scope == WholeCellSpatialScope::WellMixed {
+                                species.spatial_scope
+                            } else {
+                                reaction_scope
+                            };
+                            *bulk_field_deltas.entry((field, scope)).or_insert(0.0) +=
+                                extent * participant.stoichiometry.max(0.0);
+                        }
+                    }
                 }
             }
         }
 
         if dt_scale > 0.0 {
-            let mut bulk_field_deltas: HashMap<WholeCellBulkField, f32> = HashMap::new();
             let mut transcript_delta_sum: HashMap<String, f32> = HashMap::new();
             let mut transcript_delta_count: HashMap<String, f32> = HashMap::new();
             let mut protein_delta_sum: HashMap<String, f32> = HashMap::new();
@@ -4167,9 +4408,7 @@ impl WholeCellSimulator {
                     } else {
                         species.turnover_rate += (-delta) / dt_scale;
                     }
-                    if let Some(field) = species.bulk_field {
-                        *bulk_field_deltas.entry(field).or_insert(0.0) += delta;
-                    } else {
+                    if species.bulk_field.is_none() {
                         match species.species_class {
                             WholeCellSpeciesClass::Rna => {
                                 if let Some(operon) = species.operon.as_ref() {
@@ -4233,8 +4472,8 @@ impl WholeCellSimulator {
                 }
             }
             let mut lattice_bulk_changed = false;
-            for (field, delta) in bulk_field_deltas {
-                lattice_bulk_changed |= self.apply_bulk_field_delta(field, delta);
+            for ((field, scope), delta) in bulk_field_deltas {
+                lattice_bulk_changed |= self.apply_bulk_field_delta(field, scope, delta);
             }
             let mut expression_changed = false;
             for (operon, sum) in transcript_delta_sum {
@@ -7564,6 +7803,7 @@ mod tests {
             asset_class: WholeCellAssetClass::Energy,
             basal_abundance: 24.0,
             bulk_field: Some(WholeCellBulkField::Glucose),
+            spatial_scope: WholeCellSpatialScope::WellMixed,
             operon: None,
             parent_complex: None,
             subsystem_targets: Vec::new(),
@@ -7586,6 +7826,7 @@ mod tests {
                 stoichiometry: 1.0,
             }],
             subsystem_targets: Vec::new(),
+            spatial_scope: WholeCellSpatialScope::WellMixed,
             current_flux: 0.0,
             cumulative_extent: 0.0,
             reactant_satisfaction: 1.0,
@@ -7647,6 +7888,7 @@ mod tests {
                 asset_class: WholeCellAssetClass::Replication,
                 basal_abundance: 32.0,
                 bulk_field: Some(WholeCellBulkField::Nucleotides),
+                spatial_scope: WholeCellSpatialScope::NucleoidLocal,
                 operon: None,
                 parent_complex: None,
                 subsystem_targets: Vec::new(),
@@ -7663,6 +7905,7 @@ mod tests {
                 asset_class: WholeCellAssetClass::Homeostasis,
                 basal_abundance: 4.0,
                 bulk_field: None,
+                spatial_scope: WholeCellSpatialScope::WellMixed,
                 operon: Some("test_operon".to_string()),
                 parent_complex: None,
                 subsystem_targets: Vec::new(),
@@ -7689,6 +7932,7 @@ mod tests {
                 stoichiometry: 2.5,
             }],
             subsystem_targets: Vec::new(),
+            spatial_scope: WholeCellSpatialScope::NucleoidLocal,
             current_flux: 0.0,
             cumulative_extent: 0.0,
             reactant_satisfaction: 1.0,
@@ -7763,6 +8007,7 @@ mod tests {
             asset_class: WholeCellAssetClass::Energy,
             basal_abundance: 28.0,
             bulk_field: Some(WholeCellBulkField::ATP),
+            spatial_scope: WholeCellSpatialScope::WellMixed,
             operon: None,
             parent_complex: None,
             subsystem_targets: Vec::new(),
@@ -7785,6 +8030,7 @@ mod tests {
             }],
             products: Vec::new(),
             subsystem_targets: Vec::new(),
+            spatial_scope: WholeCellSpatialScope::WellMixed,
             current_flux: 0.0,
             cumulative_extent: 0.0,
             reactant_satisfaction: 1.0,
@@ -7851,6 +8097,7 @@ mod tests {
                 asset_class: WholeCellAssetClass::Membrane,
                 basal_abundance: 10.0,
                 bulk_field: None,
+                spatial_scope: WholeCellSpatialScope::MembraneAdjacent,
                 operon: Some("repair_operon".to_string()),
                 parent_complex: Some("test_complex".to_string()),
                 subsystem_targets: Vec::new(),
@@ -7867,6 +8114,7 @@ mod tests {
                 asset_class: WholeCellAssetClass::Membrane,
                 basal_abundance: 8.0,
                 bulk_field: None,
+                spatial_scope: WholeCellSpatialScope::MembraneAdjacent,
                 operon: Some("repair_operon".to_string()),
                 parent_complex: Some("test_complex".to_string()),
                 subsystem_targets: Vec::new(),
@@ -7883,6 +8131,7 @@ mod tests {
                 asset_class: WholeCellAssetClass::Translation,
                 basal_abundance: 32.0,
                 bulk_field: Some(WholeCellBulkField::AminoAcids),
+                spatial_scope: WholeCellSpatialScope::WellMixed,
                 operon: None,
                 parent_complex: None,
                 subsystem_targets: Vec::new(),
@@ -7915,6 +8164,7 @@ mod tests {
                 stoichiometry: 1.0,
             }],
             subsystem_targets: Vec::new(),
+            spatial_scope: WholeCellSpatialScope::MembraneAdjacent,
             current_flux: 0.0,
             cumulative_extent: 0.0,
             reactant_satisfaction: 1.0,

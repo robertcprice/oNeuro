@@ -284,3 +284,25 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `spatial chemistry now carries authoritative local fields for the current lattice species, but membrane patch reactions, richer compartment scopes, and chromosome-local execution still need broader compiled-species coverage in later Phase 7 slices`
+
+### 2026-03-11 - Phase 7 / Compiled Spatial Scope Registry Slice
+
+- Summary:
+  - added explicit `spatial_scope` metadata to compiled whole-cell species and reactions so locality is now declared by organism assets and carried through registry, runtime-state, and restart payloads
+  - replaced late bulk-anchor and reaction-locality branching with generic spatial-scope caches, overlap coefficients, and weighted lattice deltas so runtime localization comes from compiled scope plus spatial fields instead of stage-specific special cases
+  - extended registry validation so nucleoid-local, membrane-adjacent, and septum-local entities are asserted directly in the compiled Syn3A process registry
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/gpu/whole_cell_rdme.rs`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q gpu::whole_cell_rdme --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `compiled locality now flows through registry and runtime reaction ownership, but membrane patch reactions, richer compartment scopes, and broader chromosome-local chemistry still need to be pushed onto the same primitive-driven path`

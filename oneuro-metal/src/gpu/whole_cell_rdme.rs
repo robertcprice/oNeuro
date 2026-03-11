@@ -202,6 +202,35 @@ impl IntracellularLattice {
         self.next[range].copy_from_slice(&source);
     }
 
+    pub fn apply_weighted_delta(
+        &mut self,
+        species: IntracellularSpecies,
+        delta: f32,
+        weights: &[f32],
+    ) {
+        let expected = self.total_voxels();
+        if weights.len() != expected {
+            self.apply_uniform_delta(species, delta);
+            return;
+        }
+        let weight_sum = weights
+            .iter()
+            .map(|weight| weight.max(0.0))
+            .sum::<f32>()
+            .max(1.0e-6);
+        let mean_scale = expected as f32 / weight_sum;
+        let range = self.channel_range(species);
+        self.current[range.clone()]
+            .par_iter_mut()
+            .zip(weights.par_iter())
+            .for_each(|(value, weight)| {
+                let local_delta = delta * weight.max(0.0) * mean_scale;
+                *value = (*value + local_delta).max(0.0);
+            });
+        let source = self.current[range.clone()].to_vec();
+        self.next[range].copy_from_slice(&source);
+    }
+
     /// Return a copy of a channel for callers that need direct inspection.
     pub fn clone_species(&self, species: IntracellularSpecies) -> Vec<f32> {
         self.current[self.channel_range(species)].to_vec()
@@ -264,6 +293,10 @@ impl IntracellularSpatialState {
 
     pub fn clone_field(&self, field: IntracellularSpatialField) -> Vec<f32> {
         self.fields[self.field_range(field)].to_vec()
+    }
+
+    pub fn field_slice(&self, field: IntracellularSpatialField) -> &[f32] {
+        &self.fields[self.field_range(field)]
     }
 
     pub fn set_field(
