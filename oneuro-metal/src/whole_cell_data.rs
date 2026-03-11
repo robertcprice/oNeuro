@@ -4057,10 +4057,14 @@ fn merge_gene_product_annotations(
     }
 }
 
-fn pool_concentration(pools: &[WholeCellMoleculePoolSpec], name: &str, fallback: f32) -> f32 {
+fn pool_concentration_for_field(
+    pools: &[WholeCellMoleculePoolSpec],
+    field: WholeCellBulkField,
+    fallback: f32,
+) -> f32 {
     pools
         .iter()
-        .find(|pool| pool.species.eq_ignore_ascii_case(name))
+        .find(|pool| pool_bulk_field(pool) == Some(field))
         .map(|pool| pool.concentration_mm.max(0.0))
         .unwrap_or(fallback)
 }
@@ -4095,15 +4099,35 @@ fn build_program_spec_from_organism(
         membrane_division_state: None,
         config: WholeCellConfig::default(),
         initial_lattice: WholeCellInitialLatticeSpec {
-            atp: pool_concentration(&organism.pools, "ATP", 1.2),
-            amino_acids: pool_concentration(&organism.pools, "amino_acids", 0.95),
-            nucleotides: pool_concentration(&organism.pools, "nucleotides", 0.80),
-            membrane_precursors: pool_concentration(&organism.pools, "membrane_precursors", 0.35),
+            atp: pool_concentration_for_field(&organism.pools, WholeCellBulkField::ATP, 1.2),
+            amino_acids: pool_concentration_for_field(
+                &organism.pools,
+                WholeCellBulkField::AminoAcids,
+                0.95,
+            ),
+            nucleotides: pool_concentration_for_field(
+                &organism.pools,
+                WholeCellBulkField::Nucleotides,
+                0.80,
+            ),
+            membrane_precursors: pool_concentration_for_field(
+                &organism.pools,
+                WholeCellBulkField::MembranePrecursors,
+                0.35,
+            ),
         },
         initial_state: WholeCellInitialStateSpec {
-            adp_mm: pool_concentration(&organism.pools, "ADP", 0.2),
-            glucose_mm: pool_concentration(&organism.pools, "glucose", 1.0),
-            oxygen_mm: pool_concentration(&organism.pools, "oxygen", 0.85),
+            adp_mm: pool_concentration_for_field(&organism.pools, WholeCellBulkField::ADP, 0.2),
+            glucose_mm: pool_concentration_for_field(
+                &organism.pools,
+                WholeCellBulkField::Glucose,
+                1.0,
+            ),
+            oxygen_mm: pool_concentration_for_field(
+                &organism.pools,
+                WholeCellBulkField::Oxygen,
+                0.85,
+            ),
             genome_bp: organism.chromosome_length_bp.max(1),
             replicated_bp: 0,
             chromosome_separation_nm: (organism.geometry.radius_nm

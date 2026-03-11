@@ -2740,28 +2740,60 @@ impl WholeCellSimulator {
         }
     }
 
+    fn infer_bulk_field_for_pool(pool: &WholeCellMoleculePoolSpec) -> Option<WholeCellBulkField> {
+        pool.bulk_field.or_else(|| {
+            let name = pool.species.trim().to_lowercase();
+            if name.contains("amino") {
+                Some(WholeCellBulkField::AminoAcids)
+            } else if name.contains("nucleotide") {
+                Some(WholeCellBulkField::Nucleotides)
+            } else if name.contains("membrane") {
+                Some(WholeCellBulkField::MembranePrecursors)
+            } else if name == "atp" {
+                Some(WholeCellBulkField::ATP)
+            } else if name == "adp" {
+                Some(WholeCellBulkField::ADP)
+            } else if name.contains("glucose") {
+                Some(WholeCellBulkField::Glucose)
+            } else if name.contains("oxygen") {
+                Some(WholeCellBulkField::Oxygen)
+            } else {
+                None
+            }
+        })
+    }
+
     fn apply_pool_seed(&mut self, pool: &WholeCellMoleculePoolSpec) {
         let name = pool.species.trim().to_lowercase();
         if pool.concentration_mm.is_finite() && pool.concentration_mm > 0.0 {
             let concentration = pool.concentration_mm.max(0.0);
-            if name.contains("amino") {
-                self.lattice
-                    .fill_species(IntracellularSpecies::AminoAcids, concentration);
-            } else if name.contains("nucleotide") {
-                self.lattice
-                    .fill_species(IntracellularSpecies::Nucleotides, concentration);
-            } else if name.contains("membrane") {
-                self.lattice
-                    .fill_species(IntracellularSpecies::MembranePrecursors, concentration);
-            } else if name == "atp" {
-                self.lattice
-                    .fill_species(IntracellularSpecies::ATP, concentration);
-            } else if name == "adp" {
-                self.adp_mm = concentration;
-            } else if name.contains("glucose") {
-                self.glucose_mm = concentration;
-            } else if name.contains("oxygen") {
-                self.oxygen_mm = concentration;
+            match Self::infer_bulk_field_for_pool(pool) {
+                Some(WholeCellBulkField::AminoAcids) => {
+                    self.lattice
+                        .fill_species(IntracellularSpecies::AminoAcids, concentration);
+                }
+                Some(WholeCellBulkField::Nucleotides) => {
+                    self.lattice
+                        .fill_species(IntracellularSpecies::Nucleotides, concentration);
+                }
+                Some(WholeCellBulkField::MembranePrecursors) => {
+                    self.lattice
+                        .fill_species(IntracellularSpecies::MembranePrecursors, concentration);
+                }
+                Some(WholeCellBulkField::ATP) => {
+                    self.lattice
+                        .fill_species(IntracellularSpecies::ATP, concentration);
+                }
+                Some(WholeCellBulkField::ADP) => {
+                    self.adp_mm = concentration;
+                }
+                Some(WholeCellBulkField::Glucose) => {
+                    self.glucose_mm = concentration;
+                }
+                Some(WholeCellBulkField::Oxygen) => {
+                    self.oxygen_mm = concentration;
+                }
+                None => {}
             }
         }
 
@@ -11187,6 +11219,44 @@ mod tests {
         assert!(expression.transcription_units.len() >= 4);
         assert!(expression.total_transcript_abundance > 0.0);
         assert!(expression.total_protein_abundance > 0.0);
+    }
+
+    #[test]
+    fn test_apply_pool_seed_prefers_explicit_bulk_field_metadata() {
+        let mut sim = WholeCellSimulator::new(WholeCellConfig::default());
+        let baseline_atp = sim.lattice.mean_species(IntracellularSpecies::ATP);
+        let baseline_glucose = sim.glucose_mm;
+        let baseline_oxygen = sim.oxygen_mm;
+        let baseline_adp = sim.adp_mm;
+        sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
+            species: "custom_energy_buffer".to_string(),
+            bulk_field: Some(WholeCellBulkField::ATP),
+            concentration_mm: 1.75,
+            count: 0.0,
+        });
+        sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
+            species: "fallback_carrier".to_string(),
+            bulk_field: Some(WholeCellBulkField::Glucose),
+            concentration_mm: 1.45,
+            count: 0.0,
+        });
+        sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
+            species: "respiratory_buffer".to_string(),
+            bulk_field: Some(WholeCellBulkField::Oxygen),
+            concentration_mm: 1.05,
+            count: 0.0,
+        });
+        sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
+            species: "spent_energy_buffer".to_string(),
+            bulk_field: Some(WholeCellBulkField::ADP),
+            concentration_mm: 0.42,
+            count: 0.0,
+        });
+
+        assert!(sim.lattice.mean_species(IntracellularSpecies::ATP) > baseline_atp);
+        assert!(sim.glucose_mm > baseline_glucose);
+        assert!(sim.oxygen_mm > baseline_oxygen);
+        assert!(sim.adp_mm > baseline_adp);
     }
 
     #[test]

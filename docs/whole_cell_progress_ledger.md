@@ -648,3 +648,22 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `pool identity is now explicit, but the bundle chemistry still lacks many declared counterpools, redox pairs, and reversible-state relationships, so several metabolite classes still depend on partial rather than fully enumerated chemical state datasets`
+
+### 2026-03-11 - Phase 7 / Metadata-First Pool Seeding Slice
+
+- Summary:
+  - switched program-spec initialization and runtime pool seeding to prefer explicit `bulk_field` metadata over raw pool-name parsing, so the initial lattice and scalar metabolite state now come from declared chemistry identity whenever the bundle provides it
+  - kept the old name-based matching only as a compatibility fallback behind the explicit metadata path, reducing one more class of hardcoded name heuristics without breaking older bundle payloads
+  - added a direct runtime regression that seeds ATP, ADP, glucose, and oxygen from non-informative pool names carrying explicit `bulk_field` metadata and verifies that the simulator updates the correct chemistry channels
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell.rs oneuro-metal/src/whole_cell_data.rs`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `runtime seeding now honors explicit pool identity, but several later execution paths still infer chemistry from pool/species names when compiled field metadata is absent or not yet threaded all the way through the runtime`
