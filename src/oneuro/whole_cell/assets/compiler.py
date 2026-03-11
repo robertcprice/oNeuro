@@ -196,6 +196,8 @@ def _merge_gene_annotation(
         "nucleotide_cost": float(gene_product.get("nucleotide_cost", 1.0)),
         "process_weights": gene_product.get("process_weights", {}),
         "subsystem_targets": gene_product.get("subsystem_targets", []),
+        "asset_class": gene_product.get("asset_class"),
+        "complex_family": gene_product.get("complex_family"),
     }
     return merged
 
@@ -254,7 +256,7 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
         if gene["gene"] in gene_to_operon:
             continue
         gene_to_operon[gene["gene"]] = gene["gene"]
-        asset_class = _infer_asset_class(
+        asset_class = gene.get("asset_class") or _infer_asset_class(
             gene.get("process_weights", {}),
             gene.get("subsystem_targets", []),
             gene["gene"],
@@ -270,7 +272,8 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
                 "process_weights": _clamp_process_weights(gene.get("process_weights", {})),
                 "subsystem_targets": list(gene.get("subsystem_targets", [])),
                 "asset_class": asset_class,
-                "complex_family": _infer_complex_family(
+                "complex_family": gene.get("complex_family")
+                or _infer_complex_family(
                     asset_class,
                     gene.get("subsystem_targets", []),
                     gene["gene"],
@@ -283,7 +286,7 @@ def _compile_genome_asset_package(spec: Dict[str, Any]) -> Dict[str, Any]:
     for gene in genes:
         length_nt = max(1, _gene_length_bp(gene))
         operon_name = gene_to_operon.get(gene["gene"], gene["gene"])
-        asset_class = _infer_asset_class(
+        asset_class = gene.get("asset_class") or _infer_asset_class(
             gene.get("process_weights", {}),
             gene.get("subsystem_targets", []),
             gene["gene"],

@@ -342,7 +342,9 @@
         "membrane": 0.06,
         "constriction": 0.06
       },
-      "subsystem_targets": []
+      "subsystem_targets": [],
+      "asset_class": "quality_control",
+      "complex_family": "chaperone_client"
     }
   ],
   "transcription_units": [

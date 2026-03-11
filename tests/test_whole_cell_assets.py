@@ -20,6 +20,7 @@ def test_compile_syn3a_bundle_matches_current_runtime_shape():
     summary = bundle.summary()
     bulk_fields = {pool.get("bulk_field") for pool in bundle.organism_spec["pools"]}
     transcription_units = bundle.organism_spec["transcription_units"]
+    genes = bundle.organism_spec["genes"]
 
     assert bundle.organism == "JCVI-syn3A"
     assert summary["gene_count"] >= 10
@@ -34,6 +35,8 @@ def test_compile_syn3a_bundle_matches_current_runtime_shape():
     assert {"a_t_p", "amino_acids", "nucleotides", "membrane_precursors"} <= bulk_fields
     assert any(unit.get("asset_class") for unit in transcription_units)
     assert any(unit.get("complex_family") for unit in transcription_units)
+    assert any(gene.get("asset_class") for gene in genes)
+    assert any(gene.get("complex_family") for gene in genes)
     assert "organism_spec_json" in bundle.source_hashes
 
 
@@ -43,6 +46,7 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     written = write_compiled_bundle(bundle, tmp_path)
     bulk_fields = {pool.get("bulk_field") for pool in bundle.organism_spec["pools"]}
     transcription_units = bundle.organism_spec["transcription_units"]
+    genes = bundle.organism_spec["genes"]
 
     assert bundle.organism == "Mgen-minimal-demo"
     assert bundle.organism_spec["chromosome_length_bp"] > 1000
@@ -55,6 +59,8 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     assert {"a_t_p", "amino_acids", "nucleotides", "membrane_precursors"} <= bulk_fields
     assert all(unit.get("asset_class") for unit in transcription_units)
     assert all(unit.get("complex_family") for unit in transcription_units)
+    assert all(gene.get("asset_class") for gene in genes)
+    assert all(gene.get("complex_family") for gene in genes)
     assert "genome_fasta" in bundle.source_hashes
     assert "gene_features_gff" in bundle.source_hashes
     assert Path(written["organism_spec"]).exists()

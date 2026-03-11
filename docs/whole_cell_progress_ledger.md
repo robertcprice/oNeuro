@@ -308,6 +308,29 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Remaining blockers:
   - `gene-level asset and family inference still falls back to names when source annotations do not carry explicit semantic metadata`
 
+### 2026-03-11 - Phase 7 / Explicit Gene Product Metadata Slice
+
+- Summary:
+  - added explicit gene-product asset-class and complex-family metadata so protein compilation and singleton operons can inherit semantics directly from annotations instead of recovering them from names
+  - extended the bundled Syn3A quality-control gene and the demo gene-product annotations to carry that metadata, and aligned the Python bundle compiler and Rust registry compiler with the same explicit gene path
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/specs/whole_cell_syn3a_organism.json`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/gene_products.json`
+  - `src/oneuro/whole_cell/assets/compiler.py`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell_data.rs`
+  - `python3 -m py_compile src/oneuro/whole_cell/assets/compiler.py tests/test_whole_cell_assets.py`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `some fallback family and asset inference still remains for completely unannotated legacy genes and bundles; the next slice is either explicit source coverage expansion or replacing those last heuristics with compiled semantic maps`
+
 ### 2026-03-11 - Phase 5 / Explicit Chromosome Runtime Slice
 
 - Summary:

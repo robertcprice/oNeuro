@@ -216,6 +216,10 @@ pub struct WholeCellGenomeFeature {
     pub process_weights: WholeCellProcessWeights,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub asset_class: Option<WholeCellAssetClass>,
+    #[serde(default)]
+    pub complex_family: Option<WholeCellAssemblyFamily>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1423,6 +1427,10 @@ pub struct WholeCellGeneProductAnnotation {
     pub process_weights: WholeCellProcessWeights,
     #[serde(default)]
     pub subsystem_targets: Vec<Syn3ASubsystemPreset>,
+    #[serde(default)]
+    pub asset_class: Option<WholeCellAssetClass>,
+    #[serde(default)]
+    pub complex_family: Option<WholeCellAssemblyFamily>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2721,6 +2729,7 @@ fn with_compiled_chromosome_domains(mut spec: WholeCellOrganismSpec) -> WholeCel
         {
             continue;
         }
+        let asset_class = gene_asset_class(gene);
         operons.push(WholeCellOperonSpec {
             name: gene.gene.clone(),
             genes: vec![gene.gene.clone()],
@@ -2730,16 +2739,8 @@ fn with_compiled_chromosome_domains(mut spec: WholeCellOrganismSpec) -> WholeCel
             polycistronic: false,
             process_weights: gene.process_weights.clamped(),
             subsystem_targets: gene.subsystem_targets.clone(),
-            asset_class: Some(inferred_asset_class(
-                gene.process_weights,
-                &gene.subsystem_targets,
-                &gene.gene,
-            )),
-            complex_family: Some(inferred_complex_family(
-                inferred_asset_class(gene.process_weights, &gene.subsystem_targets, &gene.gene),
-                &gene.subsystem_targets,
-                &gene.gene,
-            )),
+            asset_class: Some(asset_class),
+            complex_family: Some(gene_complex_family(gene, asset_class)),
         });
     }
     spec.chromosome_domains = compile_chromosome_domains(&spec, &operons);
@@ -2793,6 +2794,21 @@ fn transcription_unit_complex_family(
     })
 }
 
+fn gene_asset_class(gene: &WholeCellGenomeFeature) -> WholeCellAssetClass {
+    gene.asset_class.unwrap_or_else(|| {
+        inferred_asset_class(gene.process_weights, &gene.subsystem_targets, &gene.gene)
+    })
+}
+
+fn gene_complex_family(
+    gene: &WholeCellGenomeFeature,
+    asset_class: WholeCellAssetClass,
+) -> WholeCellAssemblyFamily {
+    gene.complex_family.unwrap_or_else(|| {
+        inferred_complex_family(asset_class, &gene.subsystem_targets, &gene.gene)
+    })
+}
+
 pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGenomeAssetPackage {
     let spec = with_compiled_chromosome_domains(with_normalized_pool_metadata(spec.clone()));
     let mut gene_to_operon = HashMap::<String, String>::new();
@@ -2826,8 +2842,7 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             continue;
         }
         gene_to_operon.insert(gene.gene.clone(), gene.gene.clone());
-        let asset_class =
-            inferred_asset_class(gene.process_weights, &gene.subsystem_targets, &gene.gene);
+        let asset_class = gene_asset_class(gene);
         operons.push(WholeCellOperonSpec {
             name: gene.gene.clone(),
             genes: vec![gene.gene.clone()],
@@ -2838,11 +2853,7 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             process_weights: gene.process_weights.clamped(),
             subsystem_targets: gene.subsystem_targets.clone(),
             asset_class: Some(asset_class),
-            complex_family: Some(inferred_complex_family(
-                asset_class,
-                &gene.subsystem_targets,
-                &gene.gene,
-            )),
+            complex_family: Some(gene_complex_family(gene, asset_class)),
         });
     }
 
@@ -2854,8 +2865,7 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             .get(&gene.gene)
             .cloned()
             .unwrap_or_else(|| gene.gene.clone());
-        let asset_class =
-            inferred_asset_class(gene.process_weights, &gene.subsystem_targets, &gene.gene);
+        let asset_class = gene_asset_class(gene);
         let rna_id = format!("{}_rna", gene.gene);
         let protein_id = format!("{}_protein", gene.gene);
         rnas.push(WholeCellRnaProductSpec {
@@ -3218,16 +3228,26 @@ pub fn compile_genome_process_registry(
 
     for operon in &package.operons {
         let operon_chromosome_domain = operon_domain(&operon.name);
-        let operon_asset_class = inferred_asset_class(
-            operon.process_weights,
-            &Vec::<Syn3ASubsystemPreset>::new(),
+        let operon_asset_class = operon.asset_class.unwrap_or_else(|| {
+            inferred_asset_class(
+                operon.process_weights,
+                &operon.subsystem_targets,
+                &operon.name,
+            )
+        });
+        let operon_compartment =
+            registry_compartment_for_asset_class(operon_asset_class, &operon.subsystem_targets);
+        let operon_spatial_scope = registry_spatial_scope(
+            operon_asset_class,
+            operon_compartment,
+            &operon.subsystem_targets,
+        );
+        let operon_patch_domain = registry_patch_domain(
+            operon_asset_class,
+            operon_compartment,
+            &operon.subsystem_targets,
             &operon.name,
         );
-        let operon_compartment = registry_compartment_for_asset_class(operon_asset_class, &[]);
-        let operon_spatial_scope =
-            registry_spatial_scope(operon_asset_class, operon_compartment, &[]);
-        let operon_patch_domain =
-            registry_patch_domain(operon_asset_class, operon_compartment, &[], &operon.name);
         let operon_signal_seed =
             operon.basal_activity.max(0.01) * (operon.genes.len().max(1) as f32).sqrt().max(1.0);
         let mut reactants = Vec::new();
@@ -4182,6 +4202,8 @@ fn parse_gff_gene_features(path: &Path) -> Result<Vec<WholeCellGenomeFeature>, S
             nucleotide_cost: default_nucleotide_cost(),
             process_weights: WholeCellProcessWeights::default(),
             subsystem_targets: Vec::new(),
+            asset_class: None,
+            complex_family: None,
         });
     }
     Ok(genes)
@@ -4203,6 +4225,8 @@ fn merge_gene_product_annotations(
             gene.nucleotide_cost = annotation.nucleotide_cost;
             gene.process_weights = annotation.process_weights.clamped();
             gene.subsystem_targets = annotation.subsystem_targets.clone();
+            gene.asset_class = annotation.asset_class;
+            gene.complex_family = annotation.complex_family;
         }
     }
 }
@@ -4898,6 +4922,8 @@ mod tests {
                 ..WholeCellProcessWeights::default()
             },
             subsystem_targets: Vec::new(),
+            asset_class: None,
+            complex_family: None,
         });
         organism
             .transcription_units
@@ -4944,6 +4970,57 @@ mod tests {
             complex.subsystem_targets,
             vec![Syn3ASubsystemPreset::FtsZSeptumRing]
         );
+    }
+
+    #[test]
+    fn explicit_gene_metadata_overrides_name_heuristics_for_singletons() {
+        let mut organism = bundled_syn3a_organism_spec().expect("bundled organism");
+        organism.genes.push(WholeCellGenomeFeature {
+            gene: "opaque_singleton_gene".to_string(),
+            start_bp: 201_100,
+            end_bp: 201_360,
+            strand: 1,
+            essential: false,
+            basal_expression: 0.55,
+            translation_cost: 1.0,
+            nucleotide_cost: 1.0,
+            process_weights: WholeCellProcessWeights {
+                translation: 1.0,
+                ..WholeCellProcessWeights::default()
+            },
+            subsystem_targets: Vec::new(),
+            asset_class: Some(WholeCellAssetClass::QualityControl),
+            complex_family: Some(WholeCellAssemblyFamily::ChaperoneClient),
+        });
+
+        let package = compile_genome_asset_package(&organism);
+        let operon = package
+            .operons
+            .iter()
+            .find(|operon| operon.name == "opaque_singleton_gene")
+            .expect("singleton operon");
+        let protein = package
+            .proteins
+            .iter()
+            .find(|protein| protein.gene == "opaque_singleton_gene")
+            .expect("singleton protein");
+        let complex = package
+            .complexes
+            .iter()
+            .find(|complex| complex.operon == "opaque_singleton_gene")
+            .expect("singleton complex");
+
+        assert_eq!(
+            operon.asset_class,
+            Some(WholeCellAssetClass::QualityControl)
+        );
+        assert_eq!(
+            operon.complex_family,
+            Some(WholeCellAssemblyFamily::ChaperoneClient)
+        );
+        assert_eq!(protein.asset_class, WholeCellAssetClass::QualityControl);
+        assert_eq!(complex.asset_class, WholeCellAssetClass::QualityControl);
+        assert_eq!(complex.family, WholeCellAssemblyFamily::ChaperoneClient);
     }
 
     #[test]
