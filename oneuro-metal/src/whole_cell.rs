@@ -2761,9 +2761,12 @@ impl WholeCellSimulator {
         }
     }
 
-    fn infer_bulk_field_for_pool(pool: &WholeCellMoleculePoolSpec) -> Option<WholeCellBulkField> {
-        pool.bulk_field
-            .or_else(|| Self::infer_bulk_field_from_name(&pool.species))
+    fn backfill_legacy_pool_bulk_fields(pools: &mut [WholeCellMoleculePoolSpec]) {
+        for pool in pools {
+            if pool.bulk_field.is_none() {
+                pool.bulk_field = Self::infer_bulk_field_from_name(&pool.species);
+            }
+        }
     }
 
     fn normalize_runtime_species_bulk_fields(&mut self) {
@@ -2786,11 +2789,19 @@ impl WholeCellSimulator {
             {
                 continue;
             }
-            if let Some(bulk_field) = registry_bulk_fields
-                .get(&species.id)
-                .copied()
-                .flatten()
-                .or_else(|| Self::infer_bulk_field_from_name(&species.id))
+            if let Some(bulk_field) = registry_bulk_fields.get(&species.id).copied().flatten() {
+                species.bulk_field = Some(bulk_field);
+            }
+        }
+    }
+
+    fn backfill_legacy_runtime_species_bulk_fields(&mut self) {
+        for species in &mut self.organism_species {
+            if species.bulk_field.is_some() || species.species_class != WholeCellSpeciesClass::Pool
+            {
+                continue;
+            }
+            if let Some(bulk_field) = Self::infer_bulk_field_from_name(&species.id)
                 .or_else(|| Self::infer_bulk_field_from_name(&species.name))
             {
                 species.bulk_field = Some(bulk_field);
@@ -2802,7 +2813,7 @@ impl WholeCellSimulator {
         let name = pool.species.trim().to_lowercase();
         if pool.concentration_mm.is_finite() && pool.concentration_mm > 0.0 {
             let concentration = pool.concentration_mm.max(0.0);
-            match Self::infer_bulk_field_for_pool(pool) {
+            match pool.bulk_field {
                 Some(WholeCellBulkField::AminoAcids) => {
                     self.lattice
                         .fill_species(IntracellularSpecies::AminoAcids, concentration);
@@ -3233,9 +3244,11 @@ impl WholeCellSimulator {
     }
 
     fn apply_organism_data_initialization(&mut self) {
-        let Some(organism) = self.organism_data.clone() else {
+        let Some(mut organism) = self.organism_data.clone() else {
             return;
         };
+        Self::backfill_legacy_pool_bulk_fields(&mut organism.pools);
+        self.organism_data = Some(organism.clone());
 
         self.genome_bp = organism.chromosome_length_bp.max(1);
         self.replicated_bp = self.replicated_bp.min(self.genome_bp);
@@ -7973,6 +7986,9 @@ impl WholeCellSimulator {
         self.provenance = saved.provenance.clone();
         self.organism_data_ref = saved.organism_data_ref.clone();
         self.organism_data = saved.organism_data.clone();
+        if let Some(organism) = self.organism_data.as_mut() {
+            Self::backfill_legacy_pool_bulk_fields(&mut organism.pools);
+        }
         self.organism_assets = saved.organism_assets.clone();
         self.organism_process_registry = saved.organism_process_registry.clone();
         self.organism_expression = saved.organism_expression.clone();
@@ -7980,6 +7996,7 @@ impl WholeCellSimulator {
         self.membrane_division_state = saved.membrane_division_state.clone();
         self.organism_species = saved.organism_species.clone();
         self.normalize_runtime_species_bulk_fields();
+        self.backfill_legacy_runtime_species_bulk_fields();
         self.organism_reactions = saved.organism_reactions.clone();
         self.complex_assembly = saved.complex_assembly;
         self.named_complexes = saved.named_complexes.clone();
@@ -11315,6 +11332,66 @@ mod tests {
             sim.organism_species[0].bulk_field,
             Some(WholeCellBulkField::ATP)
         );
+    }
+
+    #[test]
+    fn test_legacy_runtime_pool_bulk_field_backfill_uses_names_only_at_boundary() {
+        let mut sim = WholeCellSimulator::new(WholeCellConfig::default());
+        sim.organism_species = vec![WholeCellSpeciesRuntimeState {
+            id: "pool_atp_shadow".to_string(),
+            name: "opaque ATP reserve".to_string(),
+            species_class: WholeCellSpeciesClass::Pool,
+            compartment: "cytosol".to_string(),
+            asset_class: WholeCellAssetClass::Energy,
+            basal_abundance: 8.0,
+            bulk_field: None,
+            operon: None,
+            parent_complex: None,
+            subsystem_targets: Vec::new(),
+            spatial_scope: WholeCellSpatialScope::WellMixed,
+            patch_domain: WholeCellPatchDomain::Distributed,
+            chromosome_domain: None,
+            count: 8.0,
+            anchor_count: 8.0,
+            synthesis_rate: 0.0,
+            turnover_rate: 0.0,
+        }];
+
+        sim.backfill_legacy_runtime_species_bulk_fields();
+
+        assert_eq!(
+            sim.organism_species[0].bulk_field,
+            Some(WholeCellBulkField::ATP)
+        );
+    }
+
+    #[test]
+    fn test_apply_organism_data_initialization_backfills_legacy_pool_bulk_fields() {
+        let mut sim = WholeCellSimulator::new(WholeCellConfig::default());
+        let mut organism =
+            crate::whole_cell_data::bundled_syn3a_organism_spec().expect("bundled organism");
+        let atp_pool = organism
+            .pools
+            .iter_mut()
+            .find(|pool| pool.bulk_field == Some(WholeCellBulkField::ATP))
+            .expect("ATP pool");
+        atp_pool.bulk_field = None;
+        atp_pool.concentration_mm = 1.65;
+
+        let baseline_atp = sim.lattice.mean_species(IntracellularSpecies::ATP);
+        sim.organism_data = Some(organism);
+        sim.apply_organism_data_initialization();
+
+        assert!(sim.lattice.mean_species(IntracellularSpecies::ATP) > baseline_atp);
+        let stored_pool = sim
+            .organism_data
+            .as_ref()
+            .expect("stored organism")
+            .pools
+            .iter()
+            .find(|pool| pool.species.eq_ignore_ascii_case("atp"))
+            .expect("stored ATP pool");
+        assert_eq!(stored_pool.bulk_field, Some(WholeCellBulkField::ATP));
     }
 
     #[test]

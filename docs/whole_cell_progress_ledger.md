@@ -251,6 +251,22 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Remaining blockers:
   - `runtime pool seeding and species anchoring still retain a compatibility name-based fallback for legacy callers that construct pool specs without explicit metadata`
 
+### 2026-03-11 - Phase 7 / Runtime Pool Metadata Boundary Slice
+
+- Summary:
+  - removed opportunistic pool-field name inference from normal runtime seeding and runtime-species synchronization, so execution now follows explicit `bulk_field` metadata in the hot path
+  - kept legacy compatibility only in one-time boundary backfills for organism pool initialization and old runtime species payloads
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell.rs`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `diagnostic and subsystem inventory seeding still uses legacy name checks for ribosome/RNAP/DnaA/FtsZ pools because those pools do not yet carry compiled role metadata`
+
 ### 2026-03-11 - Phase 5 / Explicit Chromosome Runtime Slice
 
 - Summary:
