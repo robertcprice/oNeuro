@@ -217,3 +217,25 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `named assemblies now carry richer local state, but chromosome runtime, membrane mechanics, and explicit solver ownership still need to take over more of the remaining aggregate process channels`
+
+### 2026-03-11 - Phase 5 / Explicit Chromosome Runtime Slice
+
+- Summary:
+  - added explicit restartable chromosome state with live fork, locus, initiation, pause, collision, torsional-stress, compaction, and segregation bookkeeping in the native Rust whole-cell contract
+  - moved whole-cell replication progress and gene copy/accessibility control onto that chromosome subsystem so expression now reads explicit chromosome state instead of only the old replicated-fraction heuristic
+  - added chromosome restart and collision tests and propagated chromosome state through native snapshots, saved-state JSON, and bundled calibration fixtures
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/lib.rs`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `oneuro-metal/src/whole_cell_submodels.rs`
+- Tests run:
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase6-chromosome.18395 && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase6-chromosome.18395 && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `membrane/division runtime and deeper native solver ownership still need to replace the remaining aggregate geometry and atomistic orchestration channels`

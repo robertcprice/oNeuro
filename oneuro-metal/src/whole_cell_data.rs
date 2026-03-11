@@ -796,6 +796,106 @@ impl Default for WholeCellOrganismProfile {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WholeCellChromosomeForkDirection {
+    Clockwise,
+    CounterClockwise,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellChromosomeForkState {
+    pub id: String,
+    pub direction: WholeCellChromosomeForkDirection,
+    pub position_bp: u32,
+    #[serde(default)]
+    pub traveled_bp: u32,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub paused: bool,
+    #[serde(default)]
+    pub pause_pressure: f32,
+    #[serde(default)]
+    pub collision_pressure: f32,
+    #[serde(default)]
+    pub pause_events: u32,
+    #[serde(default)]
+    pub completion_fraction: f32,
+    #[serde(default)]
+    pub completed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellChromosomeLocusState {
+    pub id: String,
+    pub midpoint_bp: u32,
+    #[serde(default)]
+    pub strand: i8,
+    #[serde(default = "default_copy_number")]
+    pub copy_number: f32,
+    #[serde(default = "default_accessibility")]
+    pub accessibility: f32,
+    #[serde(default)]
+    pub torsional_stress: f32,
+    #[serde(default)]
+    pub replicated: bool,
+    #[serde(default)]
+    pub segregating: bool,
+    #[serde(default)]
+    pub domain_index: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WholeCellChromosomeState {
+    pub chromosome_length_bp: u32,
+    pub origin_bp: u32,
+    pub terminus_bp: u32,
+    #[serde(default)]
+    pub initiation_potential: f32,
+    #[serde(default)]
+    pub initiation_events: u32,
+    #[serde(default)]
+    pub completion_events: u32,
+    #[serde(default)]
+    pub replicated_bp: u32,
+    #[serde(default)]
+    pub replicated_fraction: f32,
+    #[serde(default)]
+    pub segregation_progress: f32,
+    #[serde(default = "default_compaction_fraction")]
+    pub compaction_fraction: f32,
+    #[serde(default)]
+    pub torsional_stress: f32,
+    #[serde(default = "default_accessibility")]
+    pub mean_locus_accessibility: f32,
+    #[serde(default)]
+    pub forks: Vec<WholeCellChromosomeForkState>,
+    #[serde(default)]
+    pub loci: Vec<WholeCellChromosomeLocusState>,
+}
+
+impl Default for WholeCellChromosomeState {
+    fn default() -> Self {
+        Self {
+            chromosome_length_bp: 1,
+            origin_bp: 0,
+            terminus_bp: 0,
+            initiation_potential: 0.0,
+            initiation_events: 0,
+            completion_events: 0,
+            replicated_bp: 0,
+            replicated_fraction: 0.0,
+            segregation_progress: 0.0,
+            compaction_fraction: default_compaction_fraction(),
+            torsional_stress: 0.0,
+            mean_locus_accessibility: default_accessibility(),
+            forks: Vec::new(),
+            loci: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellTranscriptionUnitState {
     pub name: String,
@@ -1045,6 +1145,8 @@ pub struct WholeCellProgramSpec {
     pub organism_assets: Option<WholeCellGenomeAssetPackage>,
     #[serde(default)]
     pub organism_process_registry: Option<WholeCellGenomeProcessRegistry>,
+    #[serde(default)]
+    pub chromosome_state: Option<WholeCellChromosomeState>,
     pub config: WholeCellConfig,
     pub initial_lattice: WholeCellInitialLatticeSpec,
     pub initial_state: WholeCellInitialStateSpec,
@@ -1154,6 +1256,18 @@ fn default_stage_interval_steps() -> u64 {
     1
 }
 
+fn default_copy_number() -> f32 {
+    1.0
+}
+
+fn default_accessibility() -> f32 {
+    1.0
+}
+
+fn default_compaction_fraction() -> f32 {
+    0.35
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellSavedCoreState {
     pub time_ms: f32,
@@ -1201,6 +1315,8 @@ pub struct WholeCellSavedState {
     pub organism_expression: WholeCellOrganismExpressionState,
     #[serde(default)]
     pub organism_process_registry: Option<WholeCellGenomeProcessRegistry>,
+    #[serde(default)]
+    pub chromosome_state: WholeCellChromosomeState,
     #[serde(default)]
     pub organism_species: Vec<WholeCellSpeciesRuntimeState>,
     #[serde(default)]
@@ -1609,8 +1725,7 @@ fn inferred_complex_family(
     {
         return WholeCellAssemblyFamily::Divisome;
     }
-    if lowered.contains("rnap") || lowered.contains("rna_polymerase") || lowered.contains("sigma")
-    {
+    if lowered.contains("rnap") || lowered.contains("rna_polymerase") || lowered.contains("sigma") {
         return WholeCellAssemblyFamily::RnaPolymerase;
     }
     if lowered.contains("chaperone") || lowered.contains("fold") || lowered.contains("client") {
@@ -2555,6 +2670,7 @@ fn build_program_spec_from_organism(
         organism_data: Some(organism.clone()),
         organism_assets: Some(assets),
         organism_process_registry: Some(process_registry),
+        chromosome_state: None,
         config: WholeCellConfig::default(),
         initial_lattice: WholeCellInitialLatticeSpec {
             atp: pool_concentration(&organism.pools, "ATP", 1.2),
@@ -3141,6 +3257,7 @@ mod tests {
             organism_assets: spec.organism_assets.clone(),
             organism_expression: WholeCellOrganismExpressionState::default(),
             organism_process_registry: spec.organism_process_registry.clone(),
+            chromosome_state: WholeCellChromosomeState::default(),
             organism_species: Vec::new(),
             organism_reactions: Vec::new(),
             complex_assembly: WholeCellComplexAssemblyState::default(),

@@ -22,16 +22,18 @@ use crate::whole_cell_data::{
     bundled_syn3a_program_spec_json, compile_genome_asset_package, compile_genome_process_registry,
     compile_program_spec_from_bundle_manifest_path, derive_organism_profile,
     initialize_runtime_reaction_state, initialize_runtime_species_state, parse_program_spec_json,
-    parse_saved_state_json, saved_state_to_json, WholeCellAssemblyFamily, WholeCellBulkField, WholeCellComplexAssemblyState,
-    WholeCellComplexSpec, WholeCellContractSchema, WholeCellGenomeAssetPackage,
-    WholeCellGenomeAssetSummary, WholeCellGenomeFeature, WholeCellGenomeProcessRegistry,
-    WholeCellGenomeProcessRegistrySummary, WholeCellLatticeState, WholeCellLocalChemistrySpec,
-    WholeCellMoleculePoolSpec, WholeCellNamedComplexState, WholeCellOrganismExpressionState,
-    WholeCellOrganismProfile, WholeCellOrganismSpec, WholeCellOrganismSummary,
-    WholeCellProcessWeights, WholeCellProgramSpec, WholeCellProvenance, WholeCellReactionClass,
-    WholeCellReactionRuntimeState, WholeCellSavedCoreState, WholeCellSavedState,
-    WholeCellSchedulerState, WholeCellSolverStage, WholeCellStageClockState,
-    WholeCellSpeciesClass, WholeCellSpeciesRuntimeState, WholeCellTranscriptionUnitState,
+    parse_saved_state_json, saved_state_to_json, WholeCellAssemblyFamily, WholeCellBulkField,
+    WholeCellChromosomeForkDirection, WholeCellChromosomeForkState, WholeCellChromosomeLocusState,
+    WholeCellChromosomeState, WholeCellComplexAssemblyState, WholeCellComplexSpec,
+    WholeCellContractSchema, WholeCellGenomeAssetPackage, WholeCellGenomeAssetSummary,
+    WholeCellGenomeFeature, WholeCellGenomeProcessRegistry, WholeCellGenomeProcessRegistrySummary,
+    WholeCellLatticeState, WholeCellLocalChemistrySpec, WholeCellMoleculePoolSpec,
+    WholeCellNamedComplexState, WholeCellOrganismExpressionState, WholeCellOrganismProfile,
+    WholeCellOrganismSpec, WholeCellOrganismSummary, WholeCellProcessWeights, WholeCellProgramSpec,
+    WholeCellProvenance, WholeCellReactionClass, WholeCellReactionRuntimeState,
+    WholeCellSavedCoreState, WholeCellSavedState, WholeCellSchedulerState, WholeCellSolverStage,
+    WholeCellSpeciesClass, WholeCellSpeciesRuntimeState, WholeCellStageClockState,
+    WholeCellTranscriptionUnitState,
 };
 use crate::whole_cell_submodels::{
     LocalChemistryReport, LocalChemistrySiteReport, LocalMDProbeReport, LocalMDProbeRequest,
@@ -151,6 +153,7 @@ pub struct WholeCellSnapshot {
     pub genome_bp: u32,
     pub replicated_bp: u32,
     pub chromosome_separation_nm: f32,
+    pub chromosome_state: WholeCellChromosomeState,
     pub radius_nm: f32,
     pub surface_area_nm2: f32,
     pub volume_nm3: f32,
@@ -1317,6 +1320,7 @@ pub struct WholeCellSimulator {
     genome_bp: u32,
     replicated_bp: u32,
     chromosome_separation_nm: f32,
+    chromosome_state: WholeCellChromosomeState,
     radius_nm: f32,
     surface_area_nm2: f32,
     volume_nm3: f32,
@@ -1480,7 +1484,7 @@ impl WholeCellSimulator {
                         + 0.25 * stress
                         + 0.18 * self.division_progress
                         + 0.12 * (1.0 - self.chemistry_report.crowding_penalty).max(0.0))
-                        .clamp(0.6, 2.6);
+                    .clamp(0.6, 2.6);
                     Self::scaled_interval(base.max(1), drive, 3).min(probe_floor)
                 }
             }
@@ -1501,7 +1505,7 @@ impl WholeCellSimulator {
                     + 0.34 * energy_stress.max(0.0)
                     + 0.28 * load
                     + 0.16 * (1.0 - expression.energy_support).max(0.0))
-                    .clamp(0.55, 3.0);
+                .clamp(0.55, 3.0);
                 Self::scaled_interval(base, drive, 3)
             }
             WholeCellSolverStage::ChromosomeBd => {
@@ -1589,17 +1593,554 @@ impl WholeCellSimulator {
         delta.min((genome_bp - delta).abs())
     }
 
-    fn gene_copy_gain(
-        organism: &WholeCellOrganismSpec,
-        midpoint_bp: f32,
-        replicated_fraction: f32,
+    fn circular_position_bp(position_bp: i64, genome_bp: u32) -> u32 {
+        let genome_bp = genome_bp.max(1) as i64;
+        position_bp.rem_euclid(genome_bp) as u32
+    }
+
+    fn clockwise_distance_bp(origin_bp: u32, target_bp: u32, genome_bp: u32) -> u32 {
+        let genome_bp = genome_bp.max(1);
+        if target_bp >= origin_bp {
+            target_bp - origin_bp
+        } else {
+            genome_bp - (origin_bp - target_bp)
+        }
+    }
+
+    fn counter_clockwise_distance_bp(origin_bp: u32, target_bp: u32, genome_bp: u32) -> u32 {
+        Self::clockwise_distance_bp(target_bp, origin_bp, genome_bp)
+    }
+
+    fn chromosome_position_from_origin(
+        origin_bp: u32,
+        traveled_bp: u32,
+        direction: WholeCellChromosomeForkDirection,
+        genome_bp: u32,
+    ) -> u32 {
+        let traveled_bp = traveled_bp.min(genome_bp.max(1));
+        match direction {
+            WholeCellChromosomeForkDirection::Clockwise => {
+                Self::circular_position_bp(origin_bp as i64 + traveled_bp as i64, genome_bp)
+            }
+            WholeCellChromosomeForkDirection::CounterClockwise => {
+                Self::circular_position_bp(origin_bp as i64 - traveled_bp as i64, genome_bp)
+            }
+        }
+    }
+
+    fn chromosome_arm_length(
+        origin_bp: u32,
+        terminus_bp: u32,
+        direction: WholeCellChromosomeForkDirection,
+        genome_bp: u32,
+    ) -> u32 {
+        match direction {
+            WholeCellChromosomeForkDirection::Clockwise => {
+                Self::clockwise_distance_bp(origin_bp, terminus_bp, genome_bp).max(1)
+            }
+            WholeCellChromosomeForkDirection::CounterClockwise => {
+                Self::counter_clockwise_distance_bp(origin_bp, terminus_bp, genome_bp).max(1)
+            }
+        }
+    }
+
+    fn chromosome_domain_index(midpoint_bp: u32, genome_bp: u32) -> u32 {
+        let genome_bp = genome_bp.max(1);
+        ((4 * midpoint_bp.min(genome_bp.saturating_sub(1))) / genome_bp).min(3)
+    }
+
+    fn chromosome_locus_records(&self, organism: &WholeCellOrganismSpec) -> Vec<(String, u32, i8)> {
+        let mut loci: Vec<(String, u32, i8)> = organism
+            .genes
+            .iter()
+            .map(|feature| {
+                (
+                    feature.gene.clone(),
+                    ((feature.start_bp as u64 + feature.end_bp as u64) / 2) as u32,
+                    feature.strand,
+                )
+            })
+            .collect();
+        if loci.is_empty() {
+            loci = organism
+                .transcription_units
+                .iter()
+                .enumerate()
+                .map(|(index, unit)| {
+                    let midpoint = ((index + 1) as f32
+                        * organism.chromosome_length_bp.max(1) as f32
+                        / (organism.transcription_units.len().max(1) + 1) as f32)
+                        .round() as u32;
+                    (unit.name.clone(), midpoint, 1)
+                })
+                .collect();
+        }
+        loci.sort_by_key(|(_, midpoint, _)| *midpoint);
+        loci
+    }
+
+    fn chromosome_forks_from_progress(
+        genome_bp: u32,
+        origin_bp: u32,
+        terminus_bp: u32,
+        replicated_bp: u32,
+    ) -> Vec<WholeCellChromosomeForkState> {
+        if replicated_bp == 0 {
+            return Vec::new();
+        }
+        let genome_bp = genome_bp.max(1);
+        let replicated_bp = replicated_bp.min(genome_bp);
+        let arm_cw = Self::chromosome_arm_length(
+            origin_bp,
+            terminus_bp,
+            WholeCellChromosomeForkDirection::Clockwise,
+            genome_bp,
+        );
+        let arm_ccw = Self::chromosome_arm_length(
+            origin_bp,
+            terminus_bp,
+            WholeCellChromosomeForkDirection::CounterClockwise,
+            genome_bp,
+        );
+        let cw_traveled = (replicated_bp as f32 * 0.5).round() as u32;
+        let ccw_traveled = replicated_bp.saturating_sub(cw_traveled);
+        [
+            (
+                "fork_clockwise",
+                WholeCellChromosomeForkDirection::Clockwise,
+                cw_traveled.min(arm_cw),
+                arm_cw,
+            ),
+            (
+                "fork_counter_clockwise",
+                WholeCellChromosomeForkDirection::CounterClockwise,
+                ccw_traveled.min(arm_ccw),
+                arm_ccw,
+            ),
+        ]
+        .into_iter()
+        .map(|(id, direction, traveled_bp, arm_length)| {
+            let completed = traveled_bp >= arm_length;
+            WholeCellChromosomeForkState {
+                id: id.to_string(),
+                direction,
+                position_bp: Self::chromosome_position_from_origin(
+                    origin_bp,
+                    traveled_bp,
+                    direction,
+                    genome_bp,
+                ),
+                traveled_bp,
+                active: !completed,
+                paused: false,
+                pause_pressure: 0.0,
+                collision_pressure: 0.0,
+                pause_events: 0,
+                completion_fraction: traveled_bp as f32 / arm_length.max(1) as f32,
+                completed,
+            }
+        })
+        .collect()
+    }
+
+    fn seeded_chromosome_state(&self) -> WholeCellChromosomeState {
+        let (genome_bp, origin_bp, terminus_bp, loci) =
+            if let Some(organism) = self.organism_data.as_ref() {
+                (
+                    organism.chromosome_length_bp.max(1),
+                    organism.origin_bp.min(organism.chromosome_length_bp.max(1)),
+                    organism
+                        .terminus_bp
+                        .min(organism.chromosome_length_bp.max(1)),
+                    self.chromosome_locus_records(organism),
+                )
+            } else {
+                (
+                    self.genome_bp.max(1),
+                    0,
+                    (self.genome_bp.max(1) / 2).max(1),
+                    Vec::new(),
+                )
+            };
+        let replicated_bp = self.replicated_bp.min(genome_bp);
+        let replicated_fraction = replicated_bp as f32 / genome_bp.max(1) as f32;
+        let segregation_progress =
+            (self.chromosome_separation_nm / (self.radius_nm * 1.8).max(1.0)).clamp(0.0, 1.0);
+        let loci = loci
+            .into_iter()
+            .map(|(id, midpoint_bp, strand)| WholeCellChromosomeLocusState {
+                id,
+                midpoint_bp,
+                strand,
+                copy_number: 1.0,
+                accessibility: (0.82 + 0.16 * (1.0 - replicated_fraction)).clamp(0.55, 1.25),
+                torsional_stress: 0.0,
+                replicated: false,
+                segregating: segregation_progress > 0.45,
+                domain_index: Self::chromosome_domain_index(midpoint_bp, genome_bp),
+            })
+            .collect();
+        WholeCellChromosomeState {
+            chromosome_length_bp: genome_bp,
+            origin_bp,
+            terminus_bp,
+            initiation_potential: 0.35,
+            initiation_events: u32::from(replicated_bp > 0),
+            completion_events: u32::from(replicated_bp >= genome_bp),
+            replicated_bp,
+            replicated_fraction,
+            segregation_progress,
+            compaction_fraction: (0.32 + 0.20 * replicated_fraction).clamp(0.20, 0.90),
+            torsional_stress: 0.0,
+            mean_locus_accessibility: (0.82 + 0.16 * (1.0 - replicated_fraction)).clamp(0.55, 1.25),
+            forks: Self::chromosome_forks_from_progress(
+                genome_bp,
+                origin_bp,
+                terminus_bp,
+                replicated_bp,
+            ),
+            loci,
+        }
+    }
+
+    fn normalize_chromosome_state(
+        &self,
+        mut state: WholeCellChromosomeState,
+    ) -> WholeCellChromosomeState {
+        let seeded = self.seeded_chromosome_state();
+        state.chromosome_length_bp = state.chromosome_length_bp.max(seeded.chromosome_length_bp);
+        state.origin_bp = state.origin_bp.min(state.chromosome_length_bp.max(1));
+        state.terminus_bp = state.terminus_bp.min(state.chromosome_length_bp.max(1));
+        if state.origin_bp == state.terminus_bp {
+            state.origin_bp = seeded.origin_bp;
+            state.terminus_bp = seeded.terminus_bp;
+        }
+        state.replicated_bp = state.replicated_bp.min(state.chromosome_length_bp.max(1));
+        state.replicated_fraction =
+            state.replicated_bp as f32 / state.chromosome_length_bp.max(1) as f32;
+        state.compaction_fraction = state.compaction_fraction.clamp(0.0, 1.0);
+        state.segregation_progress = state.segregation_progress.clamp(0.0, 1.0);
+        state.torsional_stress = state.torsional_stress.clamp(0.0, 2.0);
+        state.mean_locus_accessibility = state.mean_locus_accessibility.clamp(0.25, 1.50);
+        if state.loci.is_empty() {
+            state.loci = seeded.loci;
+        }
+        if state.forks.is_empty()
+            && state.replicated_bp > 0
+            && state.replicated_bp < state.chromosome_length_bp
+        {
+            state.forks = Self::chromosome_forks_from_progress(
+                state.chromosome_length_bp,
+                state.origin_bp,
+                state.terminus_bp,
+                state.replicated_bp,
+            );
+        }
+        for locus in &mut state.loci {
+            locus.copy_number = locus.copy_number.clamp(1.0, 2.0);
+            locus.accessibility = locus.accessibility.clamp(0.25, 1.50);
+            locus.torsional_stress = locus.torsional_stress.clamp(0.0, 2.0);
+            locus.domain_index =
+                Self::chromosome_domain_index(locus.midpoint_bp, state.chromosome_length_bp);
+        }
+        for fork in &mut state.forks {
+            let arm_length = Self::chromosome_arm_length(
+                state.origin_bp,
+                state.terminus_bp,
+                fork.direction,
+                state.chromosome_length_bp,
+            );
+            fork.traveled_bp = fork.traveled_bp.min(arm_length);
+            fork.position_bp = Self::chromosome_position_from_origin(
+                state.origin_bp,
+                fork.traveled_bp,
+                fork.direction,
+                state.chromosome_length_bp,
+            );
+            fork.pause_pressure = fork.pause_pressure.clamp(0.0, 1.5);
+            fork.collision_pressure = fork.collision_pressure.clamp(0.0, 1.5);
+            fork.completion_fraction = fork.traveled_bp as f32 / arm_length.max(1) as f32;
+            fork.completed = fork.completed || fork.traveled_bp >= arm_length;
+            fork.active = fork.active && !fork.completed;
+        }
+        state
+    }
+
+    fn synchronize_chromosome_summary(&mut self) {
+        let genome_bp = self.chromosome_state.chromosome_length_bp.max(1);
+        self.genome_bp = genome_bp;
+        self.replicated_bp = self.chromosome_state.replicated_bp.min(genome_bp);
+        let radius_scale = self
+            .organism_data
+            .as_ref()
+            .map(|organism| organism.geometry.chromosome_radius_fraction.max(0.1))
+            .unwrap_or(0.55);
+        let target_separation = self.radius_nm
+            * radius_scale
+            * (0.35 + 1.45 * self.chromosome_state.segregation_progress);
+        self.chromosome_separation_nm = target_separation.max(10.0);
+    }
+
+    fn chromosome_copy_number_for_state(state: &WholeCellChromosomeState, midpoint_bp: u32) -> f32 {
+        let genome_bp = state.chromosome_length_bp.max(1);
+        if state.replicated_bp >= genome_bp {
+            return 2.0;
+        }
+        let mut copy_number: f32 = 1.0;
+        for fork in &state.forks {
+            let distance = match fork.direction {
+                WholeCellChromosomeForkDirection::Clockwise => {
+                    Self::clockwise_distance_bp(state.origin_bp, midpoint_bp, genome_bp)
+                }
+                WholeCellChromosomeForkDirection::CounterClockwise => {
+                    Self::counter_clockwise_distance_bp(state.origin_bp, midpoint_bp, genome_bp)
+                }
+            };
+            if fork.traveled_bp >= distance {
+                copy_number += 1.0;
+            }
+        }
+        copy_number.clamp(1.0, 2.0)
+    }
+
+    fn chromosome_copy_number_at(&self, midpoint_bp: u32) -> f32 {
+        Self::chromosome_copy_number_for_state(&self.chromosome_state, midpoint_bp)
+    }
+
+    fn chromosome_locus_accessibility_at(&self, midpoint_bp: u32) -> f32 {
+        self.chromosome_state
+            .loci
+            .iter()
+            .min_by_key(|locus| {
+                Self::circular_distance_bp(
+                    locus.midpoint_bp as f32,
+                    midpoint_bp as f32,
+                    self.chromosome_state.chromosome_length_bp.max(1) as f32,
+                ) as u32
+            })
+            .map(|locus| locus.accessibility)
+            .unwrap_or(
+                self.chromosome_state
+                    .mean_locus_accessibility
+                    .clamp(0.25, 1.50),
+            )
+    }
+
+    fn chromosome_locus_torsional_stress_at(&self, midpoint_bp: u32) -> f32 {
+        self.chromosome_state
+            .loci
+            .iter()
+            .min_by_key(|locus| {
+                Self::circular_distance_bp(
+                    locus.midpoint_bp as f32,
+                    midpoint_bp as f32,
+                    self.chromosome_state.chromosome_length_bp.max(1) as f32,
+                ) as u32
+            })
+            .map(|locus| locus.torsional_stress)
+            .unwrap_or(self.chromosome_state.torsional_stress.clamp(0.0, 2.0))
+    }
+
+    fn chromosome_collision_pressure(
+        &self,
+        direction: WholeCellChromosomeForkDirection,
+        fork_position_bp: u32,
+        genome_bp: u32,
     ) -> f32 {
-        let genome_bp = organism.chromosome_length_bp.max(1) as f32;
-        let origin_bp = organism.origin_bp.min(organism.chromosome_length_bp) as f32;
-        let origin_distance = Self::circular_distance_bp(midpoint_bp, origin_bp, genome_bp);
-        let normalized_distance = (origin_distance / (0.5 * genome_bp).max(1.0)).clamp(0.0, 1.0);
-        (1.0 + 0.45 * (1.0 - normalized_distance) * replicated_fraction.clamp(0.0, 1.0))
-            .clamp(1.0, 1.45)
+        let Some(organism) = self.organism_data.as_ref() else {
+            return 0.0;
+        };
+        let window_bp = (0.12 * genome_bp as f32).round() as u32;
+        let mut pressure = 0.0;
+        for feature in &organism.genes {
+            let midpoint_bp = ((feature.start_bp as u64 + feature.end_bp as u64) / 2) as u32;
+            let ahead_distance = match direction {
+                WholeCellChromosomeForkDirection::Clockwise => {
+                    Self::clockwise_distance_bp(fork_position_bp, midpoint_bp, genome_bp)
+                }
+                WholeCellChromosomeForkDirection::CounterClockwise => {
+                    Self::counter_clockwise_distance_bp(fork_position_bp, midpoint_bp, genome_bp)
+                }
+            };
+            if ahead_distance > window_bp {
+                continue;
+            }
+            let head_on = match direction {
+                WholeCellChromosomeForkDirection::Clockwise => feature.strand < 0,
+                WholeCellChromosomeForkDirection::CounterClockwise => feature.strand > 0,
+            };
+            if !head_on {
+                continue;
+            }
+            let local_weight = 1.0 - ahead_distance as f32 / window_bp.max(1) as f32;
+            pressure += feature.basal_expression.max(0.0) * (0.35 + 0.65 * local_weight);
+        }
+        Self::saturating_signal(pressure, 6.0).clamp(0.0, 1.5)
+    }
+
+    fn advance_chromosome_state(
+        &mut self,
+        dt: f32,
+        replication_drive: f32,
+        segregation_drive: f32,
+    ) {
+        let mut state = self.normalize_chromosome_state(self.chromosome_state.clone());
+        let genome_bp = state.chromosome_length_bp.max(1);
+        let dt_scale = (dt / self.config.dt_ms.max(0.05)).clamp(0.5, 6.0);
+        let crowding = self.organism_expression.crowding_penalty.clamp(0.65, 1.10);
+        let initiation_support = Self::finite_scale(
+            0.40 * Self::saturating_signal(self.dnaa, 64.0)
+                + 0.24 * self.organism_expression.nucleotide_support
+                + 0.18 * crowding
+                + 0.18 * Self::saturating_signal(self.complex_assembly.replisome_complexes, 16.0),
+            1.0,
+            0.40,
+            1.60,
+        );
+        state.initiation_potential = (0.72 * state.initiation_potential
+            + 0.20 * initiation_support
+            + 0.08 * Self::saturating_signal(replication_drive.max(0.0), 12.0))
+        .clamp(0.0, 1.5);
+
+        if state.forks.is_empty()
+            && state.replicated_bp < genome_bp
+            && (state.initiation_potential > 0.42 || replication_drive > 4.0)
+        {
+            state.initiation_events = state.initiation_events.saturating_add(1);
+            state.forks = Self::chromosome_forks_from_progress(
+                genome_bp,
+                state.origin_bp,
+                state.terminus_bp,
+                2,
+            );
+        }
+
+        let mut total_replicated_bp = 0u32;
+        let mut total_collision = 0.0;
+        let mut active_fork_count = 0.0;
+        let mut completion_increment = 0u32;
+        for fork in &mut state.forks {
+            let arm_length = Self::chromosome_arm_length(
+                state.origin_bp,
+                state.terminus_bp,
+                fork.direction,
+                genome_bp,
+            );
+            if fork.completed {
+                total_replicated_bp = total_replicated_bp.saturating_add(arm_length);
+                continue;
+            }
+            let collision_pressure =
+                self.chromosome_collision_pressure(fork.direction, fork.position_bp, genome_bp);
+            let pause_pressure = (0.52 * collision_pressure
+                + 0.22 * (1.0 - crowding).max(0.0)
+                + 0.26 * (1.0 - self.organism_expression.nucleotide_support).max(0.0))
+            .clamp(0.0, 1.5);
+            let paused = pause_pressure > 0.85;
+            let progress_scale = if paused {
+                0.18
+            } else {
+                (1.0 - 0.70 * pause_pressure).clamp(0.12, 1.0)
+            };
+            let raw_delta = (0.5
+                * replication_drive.max(0.0)
+                * self.organism_expression.process_scales.replication.max(0.1)
+                * progress_scale
+                * dt_scale)
+                .round();
+            let delta_bp = if raw_delta <= 0.0 {
+                u32::from(replication_drive > 0.0)
+            } else {
+                raw_delta as u32
+            };
+            let next_traveled_bp = (fork.traveled_bp.saturating_add(delta_bp)).min(arm_length);
+            if paused && !fork.paused {
+                fork.pause_events = fork.pause_events.saturating_add(1);
+            }
+            fork.traveled_bp = next_traveled_bp;
+            fork.position_bp = Self::chromosome_position_from_origin(
+                state.origin_bp,
+                fork.traveled_bp,
+                fork.direction,
+                genome_bp,
+            );
+            fork.pause_pressure = pause_pressure;
+            fork.collision_pressure = collision_pressure;
+            fork.paused = paused;
+            fork.completion_fraction = fork.traveled_bp as f32 / arm_length.max(1) as f32;
+            fork.completed = fork.traveled_bp >= arm_length;
+            fork.active = !fork.completed;
+            if fork.completed {
+                completion_increment = completion_increment.saturating_add(1);
+            }
+            total_replicated_bp =
+                total_replicated_bp.saturating_add(fork.traveled_bp.min(arm_length));
+            total_collision += collision_pressure;
+            if fork.active {
+                active_fork_count += 1.0;
+            }
+        }
+        if completion_increment > 0 && state.forks.iter().all(|fork| fork.completed) {
+            state.completion_events = state.completion_events.saturating_add(1);
+        }
+        state.replicated_bp = total_replicated_bp.min(genome_bp);
+        state.replicated_fraction = state.replicated_bp as f32 / genome_bp.max(1) as f32;
+        let mean_collision = if active_fork_count > 0.0 {
+            total_collision / active_fork_count
+        } else {
+            0.0
+        };
+        state.torsional_stress = (0.58 * state.torsional_stress
+            + 0.42 * (0.55 * mean_collision + 0.20 * state.replicated_fraction))
+            .clamp(0.0, 2.0);
+        state.compaction_fraction = (0.32
+            + 0.18 * state.replicated_fraction
+            + 0.12 * mean_collision
+            + 0.10 * (1.0 - crowding).max(0.0))
+        .clamp(0.20, 0.95);
+        state.segregation_progress = (state.segregation_progress
+            + 0.004 * segregation_drive.max(0.0) * dt_scale
+            + 0.020 * state.replicated_fraction)
+            .clamp(0.0, 1.0);
+
+        let state_for_copy = state.clone();
+        let mut accessibility_total = 0.0;
+        for locus in &mut state.loci {
+            let copy_number =
+                Self::chromosome_copy_number_for_state(&state_for_copy, locus.midpoint_bp);
+            let local_collision = state
+                .forks
+                .iter()
+                .map(|fork| {
+                    let distance = Self::circular_distance_bp(
+                        locus.midpoint_bp as f32,
+                        fork.position_bp as f32,
+                        genome_bp as f32,
+                    );
+                    let proximity =
+                        1.0 - (distance / (0.18 * genome_bp as f32).max(1.0)).clamp(0.0, 1.0);
+                    fork.collision_pressure * proximity
+                })
+                .fold(0.0, f32::max);
+            let accessibility = (0.74 + 0.18 * copy_number
+                - 0.20 * state.compaction_fraction
+                - 0.18 * state.torsional_stress
+                - 0.14 * local_collision)
+                .clamp(0.25, 1.50);
+            locus.copy_number = copy_number;
+            locus.accessibility = accessibility;
+            locus.torsional_stress =
+                (0.55 * state.torsional_stress + 0.45 * local_collision).clamp(0.0, 2.0);
+            locus.replicated = copy_number > 1.05;
+            locus.segregating = locus.replicated && state.segregation_progress > 0.45;
+            locus.domain_index = Self::chromosome_domain_index(locus.midpoint_bp, genome_bp);
+            accessibility_total += accessibility;
+        }
+        if !state.loci.is_empty() {
+            state.mean_locus_accessibility = accessibility_total / state.loci.len() as f32;
+        }
+        self.chromosome_state = self.normalize_chromosome_state(state);
+        self.synchronize_chromosome_summary();
     }
 
     fn molecule_pool_count(spec: &WholeCellMoleculePoolSpec) -> f32 {
@@ -2103,7 +2644,11 @@ impl WholeCellSimulator {
         let mut total_nt = 0.0;
         let mut gene_count = 0usize;
         for gene_name in genes {
-            if let Some(feature) = organism.genes.iter().find(|feature| feature.gene == *gene_name) {
+            if let Some(feature) = organism
+                .genes
+                .iter()
+                .find(|feature| feature.gene == *gene_name)
+            {
                 let gene_nt = feature
                     .end_bp
                     .saturating_sub(feature.start_bp)
@@ -2148,10 +2693,12 @@ impl WholeCellSimulator {
             unit.mature_protein_abundance = unit.protein_abundance.max(0.0);
         }
 
-        unit.transcription_progress_nt =
-            unit.transcription_progress_nt.clamp(0.0, unit.transcription_length_nt.max(1.0));
-        unit.translation_progress_aa =
-            unit.translation_progress_aa.clamp(0.0, unit.translation_length_aa.max(1.0));
+        unit.transcription_progress_nt = unit
+            .transcription_progress_nt
+            .clamp(0.0, unit.transcription_length_nt.max(1.0));
+        unit.translation_progress_aa = unit
+            .translation_progress_aa
+            .clamp(0.0, unit.translation_length_aa.max(1.0));
         unit.promoter_open_fraction = unit.promoter_open_fraction.clamp(0.0, 1.0);
         unit.active_rnap_occupancy = unit.active_rnap_occupancy.max(0.0);
         unit.active_ribosome_occupancy = unit.active_ribosome_occupancy.max(0.0);
@@ -3593,8 +4140,7 @@ impl WholeCellSimulator {
         let mut demand = HashMap::new();
         for (state, complex) in self.named_complexes.iter().zip(assets.complexes.iter()) {
             let assembly_drive =
-                (state.target_abundance.max(state.abundance) + state.stalled_intermediate)
-                    .max(0.0);
+                (state.target_abundance.max(state.abundance) + state.stalled_intermediate).max(0.0);
             for component in &complex.components {
                 *demand.entry(component.protein_id.clone()).or_insert(0.0) +=
                     assembly_drive * component.stoichiometry.max(1) as f32;
@@ -3650,48 +4196,45 @@ impl WholeCellSimulator {
         let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
         match complex.family {
             WholeCellAssemblyFamily::Ribosome => 1.0,
-            WholeCellAssemblyFamily::RnaPolymerase => (0.82 + 0.18 * replicated_fraction).clamp(0.75, 1.15),
-            WholeCellAssemblyFamily::Replisome => (0.70 + 0.50 * (1.0 - replicated_fraction)).clamp(0.55, 1.25),
-            WholeCellAssemblyFamily::AtpSynthase => {
-                Self::finite_scale(
-                    0.55 * self.chemistry_report.atp_support
-                        + 0.25 * self.organism_expression.membrane_support
-                        + 0.20 * self.localized_supply_scale(),
-                    1.0,
-                    0.55,
-                    1.25,
-                )
+            WholeCellAssemblyFamily::RnaPolymerase => {
+                (0.82 + 0.18 * replicated_fraction).clamp(0.75, 1.15)
             }
-            WholeCellAssemblyFamily::Transporter => {
-                Self::finite_scale(
-                    0.60 * self.localized_supply_scale()
-                        + 0.25 * self.organism_expression.membrane_support
-                        + 0.15 * self.organism_expression.energy_support,
-                    1.0,
-                    0.55,
-                    1.25,
-                )
+            WholeCellAssemblyFamily::Replisome => {
+                (0.70 + 0.50 * (1.0 - replicated_fraction)).clamp(0.55, 1.25)
             }
-            WholeCellAssemblyFamily::MembraneEnzyme => {
-                Self::finite_scale(
-                    0.55 * self.organism_expression.membrane_support
-                        + 0.20 * self.localized_supply_scale()
-                        + 0.25 * (1.0 - self.division_progress).clamp(0.0, 1.0),
-                    1.0,
-                    0.55,
-                    1.20,
-                )
-            }
-            WholeCellAssemblyFamily::ChaperoneClient => {
-                Self::finite_scale(
-                    0.80 + 0.25 * (self.effective_metabolic_load() - 1.0).max(0.0),
-                    1.0,
-                    0.75,
-                    1.40,
-                )
-            }
+            WholeCellAssemblyFamily::AtpSynthase => Self::finite_scale(
+                0.55 * self.chemistry_report.atp_support
+                    + 0.25 * self.organism_expression.membrane_support
+                    + 0.20 * self.localized_supply_scale(),
+                1.0,
+                0.55,
+                1.25,
+            ),
+            WholeCellAssemblyFamily::Transporter => Self::finite_scale(
+                0.60 * self.localized_supply_scale()
+                    + 0.25 * self.organism_expression.membrane_support
+                    + 0.15 * self.organism_expression.energy_support,
+                1.0,
+                0.55,
+                1.25,
+            ),
+            WholeCellAssemblyFamily::MembraneEnzyme => Self::finite_scale(
+                0.55 * self.organism_expression.membrane_support
+                    + 0.20 * self.localized_supply_scale()
+                    + 0.25 * (1.0 - self.division_progress).clamp(0.0, 1.0),
+                1.0,
+                0.55,
+                1.20,
+            ),
+            WholeCellAssemblyFamily::ChaperoneClient => Self::finite_scale(
+                0.80 + 0.25 * (self.effective_metabolic_load() - 1.0).max(0.0),
+                1.0,
+                0.75,
+                1.40,
+            ),
             WholeCellAssemblyFamily::Divisome => {
-                (0.55 + 0.80 * replicated_fraction + 0.25 * self.division_progress).clamp(0.45, 1.45)
+                (0.55 + 0.80 * replicated_fraction + 0.25 * self.division_progress)
+                    .clamp(0.45, 1.45)
             }
             WholeCellAssemblyFamily::Generic => 1.0,
         }
@@ -4046,7 +4589,7 @@ impl WholeCellSimulator {
                         + 0.26 * component_satisfaction
                         + 0.16 * family_gate
                         + 0.10 * crowding)
-                    .clamp(0.0, 1.0)
+                        .clamp(0.0, 1.0)
                 } else {
                     1.0
                 };
@@ -4058,7 +4601,7 @@ impl WholeCellSimulator {
                                     * (0.010
                                         + 0.012 * stall_pressure
                                         + 0.008 * (1.0 - crowding).max(0.0))))
-                        .clamp(0.0, 1.0)
+                    .clamp(0.0, 1.0)
                 } else {
                     1.0
                 };
@@ -4073,7 +4616,8 @@ impl WholeCellSimulator {
                     + dt_scale
                         * (0.42 * nucleation_turnover_rate
                             + 0.38 * elongation_turnover_rate
-                            + 0.30 * stall_pressure
+                            + 0.30
+                                * stall_pressure
                                 * (state.nucleation_intermediate + state.elongation_intermediate)
                             - stalled_resolution_rate))
                     .clamp(0.0, 512.0);
@@ -4081,7 +4625,7 @@ impl WholeCellSimulator {
                     + 0.45 * (1.0 - component_satisfaction).max(0.0)
                     + 0.20 * (1.0 - structural_support).max(0.0)
                     + 0.24 * stall_pressure)
-                .clamp(0.60, 2.10);
+                    .clamp(0.60, 2.10);
                 let (abundance, assembly_rate, degradation_rate) = Self::complex_channel_step(
                     state.abundance,
                     target_abundance,
@@ -4105,7 +4649,9 @@ impl WholeCellSimulator {
                 let damaged_abundance = (state.damaged_abundance
                     + dt_scale
                         * (abundance
-                            * (0.004 + 0.006 * stall_pressure + 0.004 * shared_component_pressure)
+                            * (0.004
+                                + 0.006 * stall_pressure
+                                + 0.004 * shared_component_pressure)
                             - state.damaged_abundance
                                 * (0.008 + 0.010 * structural_support + 0.006 * family_gate)))
                     .clamp(0.0, 512.0);
@@ -4552,8 +5098,6 @@ impl WholeCellSimulator {
         };
         let previous_units = self.organism_expression.transcription_units.clone();
         let profile = derive_organism_profile(&organism);
-        let replicated_fraction =
-            self.replicated_bp as f32 / organism.chromosome_length_bp.max(1) as f32;
         let localized_supply = self.localized_supply_scale();
         let crowding_penalty =
             Self::finite_scale(self.chemistry_report.crowding_penalty, 1.0, 0.65, 1.10);
@@ -4597,8 +5141,8 @@ impl WholeCellSimulator {
 
         for unit in &organism.transcription_units {
             let mut unit_weights = unit.process_weights.clamped();
-            let mut copy_gain_sum = 0.0;
-            let mut copy_gain_count = 0usize;
+            let mut midpoint_sum = 0.0;
+            let mut midpoint_count = 0usize;
             let mut mean_translation_cost = 1.0;
             let mut mean_nucleotide_cost = 1.0;
             let mut cost_count = 0.0;
@@ -4610,9 +5154,8 @@ impl WholeCellSimulator {
                     .find(|feature| feature.gene == *gene_name)
                 {
                     let midpoint_bp = 0.5 * (feature.start_bp as f32 + feature.end_bp as f32);
-                    copy_gain_sum +=
-                        Self::gene_copy_gain(&organism, midpoint_bp, replicated_fraction);
-                    copy_gain_count += 1;
+                    midpoint_sum += midpoint_bp;
+                    midpoint_count += 1;
                     unit_weights.add_weighted(
                         feature.process_weights,
                         0.35 * feature.basal_expression.max(0.1),
@@ -4628,11 +5171,14 @@ impl WholeCellSimulator {
                 mean_nucleotide_cost /= 1.0 + cost_count;
             }
 
-            let copy_gain = if copy_gain_count > 0 {
-                copy_gain_sum / copy_gain_count as f32
+            let midpoint_bp = if midpoint_count > 0 {
+                (midpoint_sum / midpoint_count as f32).round() as u32
             } else {
-                1.0
+                organism.origin_bp.min(organism.chromosome_length_bp.max(1))
             };
+            let copy_gain = self.chromosome_copy_number_at(midpoint_bp);
+            let chromosome_accessibility = self.chromosome_locus_accessibility_at(midpoint_bp);
+            let chromosome_torsion = self.chromosome_locus_torsional_stress_at(midpoint_bp);
             let (transcription_length_nt, translation_length_aa) =
                 Self::expression_lengths_for_operon(&organism, &unit.genes);
             let previous_state = previous_units
@@ -4662,8 +5208,11 @@ impl WholeCellSimulator {
                 + 0.22 * (1.0 - crowding_penalty).max(0.0)
                 + 0.18 * (1.0 - support_level).max(0.0))
             .clamp(0.80, 1.60);
-            let effective_activity = (unit.basal_activity.max(0.05) * copy_gain * support_level
-                / stress_penalty)
+            let effective_activity = (unit.basal_activity.max(0.05)
+                * copy_gain
+                * support_level
+                * chromosome_accessibility
+                / (stress_penalty * (1.0 + 0.18 * chromosome_torsion)))
                 .clamp(0.05, 2.50);
             let inventory_scale = Self::unit_inventory_scale(
                 transcript_abundance,
@@ -4745,7 +5294,10 @@ impl WholeCellSimulator {
         if transcription_units.is_empty() && !organism.genes.is_empty() {
             for feature in &organism.genes {
                 let midpoint_bp = 0.5 * (feature.start_bp as f32 + feature.end_bp as f32);
-                let copy_gain = Self::gene_copy_gain(&organism, midpoint_bp, replicated_fraction);
+                let midpoint_bp = midpoint_bp.round() as u32;
+                let copy_gain = self.chromosome_copy_number_at(midpoint_bp);
+                let chromosome_accessibility = self.chromosome_locus_accessibility_at(midpoint_bp);
+                let chromosome_torsion = self.chromosome_locus_torsional_stress_at(midpoint_bp);
                 let (transcription_length_nt, translation_length_aa) =
                     Self::expression_lengths_for_gene(feature);
                 let previous_state = previous_units
@@ -4769,9 +5321,10 @@ impl WholeCellSimulator {
                     + 0.22 * (1.0 - crowding_penalty).max(0.0)
                     + 0.18 * (1.0 - support_level).max(0.0))
                 .clamp(0.80, 1.60);
-                let effective_activity = (feature.basal_expression.max(0.05) * copy_gain
-                    / stress_penalty)
-                    .clamp(0.05, 2.50);
+                let effective_activity =
+                    (feature.basal_expression.max(0.05) * copy_gain * chromosome_accessibility
+                        / (stress_penalty * (1.0 + 0.18 * chromosome_torsion)))
+                        .clamp(0.05, 2.50);
                 let inventory_scale =
                     Self::unit_inventory_scale(transcript_abundance, protein_abundance, 1);
                 process_signal.add_weighted(
@@ -4964,8 +5517,8 @@ impl WholeCellSimulator {
         let crowding = self.organism_expression.crowding_penalty.clamp(0.65, 1.10);
         let transcription_flux = transcription_flux.max(0.0);
         let translation_flux = translation_flux.max(0.0);
-        let engaged_rnap_capacity = self.active_rnap.clamp(8.0, 256.0)
-            * (0.08 + 0.04 * transcription_flux.clamp(0.0, 2.5));
+        let engaged_rnap_capacity =
+            self.active_rnap.clamp(8.0, 256.0) * (0.08 + 0.04 * transcription_flux.clamp(0.0, 2.5));
         let engaged_ribosome_capacity = self.active_ribosomes.clamp(12.0, 320.0)
             * (0.10 + 0.05 * translation_flux.clamp(0.0, 2.5));
 
@@ -4980,10 +5533,7 @@ impl WholeCellSimulator {
             let support = unit.support_level.clamp(0.55, 1.55);
             let stress = unit.stress_penalty.clamp(0.80, 1.60);
             unit.promoter_open_fraction = Self::finite_scale(
-                0.34
-                    + 0.30 * support
-                    + 0.16 * unit.copy_gain.clamp(0.8, 1.5)
-                    + 0.12 * crowding
+                0.34 + 0.30 * support + 0.16 * unit.copy_gain.clamp(0.8, 1.5) + 0.12 * crowding
                     - 0.18 * (stress - 1.0).max(0.0),
                 0.5,
                 0.05,
@@ -5012,11 +5562,7 @@ impl WholeCellSimulator {
             .copied()
             .sum::<f32>()
             .max(1.0e-6);
-        let total_translation_demand = translation_demands
-            .iter()
-            .copied()
-            .sum::<f32>()
-            .max(1.0e-6);
+        let total_translation_demand = translation_demands.iter().copied().sum::<f32>().max(1.0e-6);
 
         for ((unit, transcription_demand), translation_demand) in self
             .organism_expression
@@ -5034,22 +5580,19 @@ impl WholeCellSimulator {
                 * (0.60 + 0.40 * unit.promoter_open_fraction);
             let ribosome_target = engaged_ribosome_capacity
                 * (translation_demand / total_translation_demand)
-                * (0.55
-                    + 0.45 * Self::saturating_signal(unit.mature_transcript_abundance, 6.0));
+                * (0.55 + 0.45 * Self::saturating_signal(unit.mature_transcript_abundance, 6.0));
             let rnap_ceiling = (3.0 + 2.5 * gene_scale * unit.copy_gain.clamp(0.8, 1.8)).max(1.0);
             let ribosome_ceiling =
                 (4.0 + 3.5 * gene_scale * unit.copy_gain.clamp(0.8, 1.8)).max(1.0);
-            unit.active_rnap_occupancy = (0.58 * unit.active_rnap_occupancy + 0.42 * rnap_target)
-                .clamp(0.0, rnap_ceiling);
-            unit.active_ribosome_occupancy =
-                (0.56 * unit.active_ribosome_occupancy + 0.44 * ribosome_target)
-                    .clamp(0.0, ribosome_ceiling);
+            unit.active_rnap_occupancy =
+                (0.58 * unit.active_rnap_occupancy + 0.42 * rnap_target).clamp(0.0, rnap_ceiling);
+            unit.active_ribosome_occupancy = (0.56 * unit.active_ribosome_occupancy
+                + 0.44 * ribosome_target)
+                .clamp(0.0, ribosome_ceiling);
 
-            let transcription_elongation_rate = (18.0
-                + 14.0 * support
-                + 5.0 * transcription_flux
+            let transcription_elongation_rate = (18.0 + 14.0 * support + 5.0 * transcription_flux
                 - 3.0 * (stress - 1.0).max(0.0))
-                .max(6.0);
+            .max(6.0);
             unit.transcription_progress_nt +=
                 unit.active_rnap_occupancy * transcription_elongation_rate * dt_scale * crowding;
             let completed_transcripts =
@@ -5058,18 +5601,17 @@ impl WholeCellSimulator {
 
             let nascent_transcript_target =
                 unit.active_rnap_occupancy * (0.35 + 0.10 * support + 0.08 * gene_scale);
-            unit.nascent_transcript_abundance =
-                (0.62 * unit.nascent_transcript_abundance + 0.38 * nascent_transcript_target)
-                    .clamp(0.0, 512.0);
+            unit.nascent_transcript_abundance = (0.62 * unit.nascent_transcript_abundance
+                + 0.38 * nascent_transcript_target)
+                .clamp(0.0, 512.0);
             let transcript_damage = unit.mature_transcript_abundance
                 * (0.0015 + 0.008 * (stress - 1.0).max(0.0) + 0.003 * (1.0 - support).max(0.0))
                 * dt_scale;
             let transcript_turnover = unit.mature_transcript_abundance
                 * (0.008 + 0.010 * (stress - 1.0).max(0.0) + 0.004 * (1.0 - support).max(0.0))
                 * dt_scale;
-            let transcript_damage_clearance = unit.damaged_transcript_abundance
-                * (0.012 + 0.010 * support)
-                * dt_scale;
+            let transcript_damage_clearance =
+                unit.damaged_transcript_abundance * (0.012 + 0.010 * support) * dt_scale;
             let matured_transcripts = completed_transcripts
                 * (0.68 + 0.22 * support + 0.10 * crowding)
                 * transcription_flux.max(0.25);
@@ -5083,11 +5625,9 @@ impl WholeCellSimulator {
                 - transcript_damage_clearance)
                 .clamp(0.0, 512.0);
 
-            let translation_elongation_rate = (9.0
-                + 8.0 * support
-                + 4.0 * translation_flux
+            let translation_elongation_rate = (9.0 + 8.0 * support + 4.0 * translation_flux
                 - 2.0 * (stress - 1.0).max(0.0))
-                .max(3.0);
+            .max(3.0);
             unit.translation_progress_aa +=
                 unit.active_ribosome_occupancy * translation_elongation_rate * dt_scale * crowding;
             let completed_proteins =
@@ -5096,36 +5636,33 @@ impl WholeCellSimulator {
 
             let nascent_protein_target =
                 unit.active_ribosome_occupancy * (0.28 + 0.08 * support + 0.06 * gene_scale);
-            unit.nascent_protein_abundance =
-                (0.64 * unit.nascent_protein_abundance + 0.36 * nascent_protein_target)
-                    .clamp(0.0, 768.0);
+            unit.nascent_protein_abundance = (0.64 * unit.nascent_protein_abundance
+                + 0.36 * nascent_protein_target)
+                .clamp(0.0, 768.0);
             let protein_damage = unit.mature_protein_abundance
                 * (0.0008 + 0.005 * (stress - 1.0).max(0.0) + 0.002 * (1.0 - support).max(0.0))
                 * dt_scale;
             let protein_turnover = unit.mature_protein_abundance
                 * (0.003 + 0.005 * (stress - 1.0).max(0.0) + 0.002 * (1.0 - support).max(0.0))
                 * dt_scale;
-            let protein_damage_clearance = unit.damaged_protein_abundance
-                * (0.007 + 0.008 * support)
-                * dt_scale;
+            let protein_damage_clearance =
+                unit.damaged_protein_abundance * (0.007 + 0.008 * support) * dt_scale;
             let matured_proteins = completed_proteins
                 * (0.70 + 0.20 * support + 0.10 * crowding)
                 * translation_flux.max(0.25);
-            unit.mature_protein_abundance = (unit.mature_protein_abundance
-                + matured_proteins
+            unit.mature_protein_abundance = (unit.mature_protein_abundance + matured_proteins
                 - protein_turnover
                 - protein_damage)
                 .clamp(0.0, 2048.0);
-            unit.damaged_protein_abundance = (unit.damaged_protein_abundance
-                + protein_damage
+            unit.damaged_protein_abundance = (unit.damaged_protein_abundance + protein_damage
                 - protein_damage_clearance)
                 .clamp(0.0, 1024.0);
 
             unit.transcript_synthesis_rate = (matured_transcripts / dt_scale.max(1.0e-6)).max(0.0);
             unit.protein_synthesis_rate = (matured_proteins / dt_scale.max(1.0e-6)).max(0.0);
-            unit.transcript_turnover_rate =
-                ((transcript_turnover + transcript_damage_clearance) / dt_scale.max(1.0e-6))
-                    .max(0.0);
+            unit.transcript_turnover_rate = ((transcript_turnover + transcript_damage_clearance)
+                / dt_scale.max(1.0e-6))
+            .max(0.0);
             unit.protein_turnover_rate =
                 ((protein_turnover + protein_damage_clearance) / dt_scale.max(1.0e-6)).max(0.0);
             Self::normalize_expression_execution_state(unit);
@@ -5195,6 +5732,10 @@ impl WholeCellSimulator {
         }
     }
 
+    pub fn chromosome_state(&self) -> WholeCellChromosomeState {
+        self.chromosome_state.clone()
+    }
+
     pub fn named_complexes_state(&self) -> Vec<WholeCellNamedComplexState> {
         self.named_complexes.clone()
     }
@@ -5221,6 +5762,7 @@ impl WholeCellSimulator {
         self.organism_assets = saved.organism_assets.clone();
         self.organism_process_registry = saved.organism_process_registry.clone();
         self.organism_expression = saved.organism_expression.clone();
+        self.chromosome_state = saved.chromosome_state.clone();
         self.organism_species = saved.organism_species.clone();
         self.organism_reactions = saved.organism_reactions.clone();
         self.complex_assembly = saved.complex_assembly;
@@ -5285,6 +5827,14 @@ impl WholeCellSimulator {
             if self.named_complexes.is_empty() {
                 self.initialize_named_complexes_state();
             }
+            self.chromosome_state = if self.chromosome_state.chromosome_length_bp > 1
+                || !self.chromosome_state.loci.is_empty()
+            {
+                self.normalize_chromosome_state(self.chromosome_state.clone())
+            } else {
+                self.seeded_chromosome_state()
+            };
+            self.synchronize_chromosome_summary();
             if !self.named_complexes.is_empty() {
                 if let Some(assets) = self.organism_assets.as_ref() {
                     self.complex_assembly = self.aggregate_named_complex_assembly_state(assets);
@@ -5298,6 +5848,8 @@ impl WholeCellSimulator {
             self.organism_species.clear();
             self.organism_reactions.clear();
             self.named_complexes.clear();
+            self.chromosome_state = self.seeded_chromosome_state();
+            self.synchronize_chromosome_summary();
             if self.complex_assembly.total_complexes() <= 1.0e-6 {
                 self.initialize_complex_assembly_state();
             }
@@ -5338,8 +5890,14 @@ impl WholeCellSimulator {
         };
         self.md_translation_scale = Self::finite_scale(saved.md_translation_scale, 1.0, 0.70, 1.45);
         self.md_membrane_scale = Self::finite_scale(saved.md_membrane_scale, 1.0, 0.70, 1.45);
-        self.scheduler_state = Self::normalized_scheduler_state(&self.config, saved_scheduler_state);
-        if self.scheduler_state.stage_clocks.iter().all(|clock| clock.run_count == 0) {
+        self.scheduler_state =
+            Self::normalized_scheduler_state(&self.config, saved_scheduler_state);
+        if self
+            .scheduler_state
+            .stage_clocks
+            .iter()
+            .all(|clock| clock.run_count == 0)
+        {
             self.refresh_multirate_scheduler();
         }
         self.initialize_surrogate_pool_diagnostics();
@@ -5426,6 +5984,7 @@ impl WholeCellSimulator {
             genome_bp: 543_000,
             replicated_bp: 0,
             chromosome_separation_nm: 40.0,
+            chromosome_state: WholeCellChromosomeState::default(),
             radius_nm,
             surface_area_nm2,
             volume_nm3,
@@ -5447,6 +6006,8 @@ impl WholeCellSimulator {
             md_membrane_scale: 1.0,
         };
         simulator.sync_from_lattice();
+        simulator.chromosome_state = simulator.seeded_chromosome_state();
+        simulator.synchronize_chromosome_summary();
         simulator.refresh_organism_expression_state();
         simulator.initialize_complex_assembly_state();
         simulator.initialize_runtime_process_state();
@@ -5509,6 +6070,12 @@ impl WholeCellSimulator {
         simulator.metabolic_load = spec.initial_state.metabolic_load.max(0.1);
         simulator.quantum_profile = spec.quantum_profile.normalized();
         simulator.apply_organism_data_initialization();
+        simulator.chromosome_state = spec
+            .chromosome_state
+            .clone()
+            .map(|state| simulator.normalize_chromosome_state(state))
+            .unwrap_or_else(|| simulator.seeded_chromosome_state());
+        simulator.synchronize_chromosome_summary();
 
         simulator.disable_local_chemistry();
         if let Some(local) = local_chemistry {
@@ -5591,6 +6158,7 @@ impl WholeCellSimulator {
             organism_assets: self.organism_assets.clone(),
             organism_process_registry: self.organism_process_registry.clone(),
             organism_expression: self.organism_expression.clone(),
+            chromosome_state: self.chromosome_state.clone(),
             organism_species: self.organism_species.clone(),
             organism_reactions: self.organism_reactions.clone(),
             complex_assembly: self.complex_assembly,
@@ -5961,6 +6529,7 @@ impl WholeCellSimulator {
             genome_bp: self.genome_bp,
             replicated_bp: self.replicated_bp,
             chromosome_separation_nm: self.chromosome_separation_nm,
+            chromosome_state: self.chromosome_state.clone(),
             radius_nm: self.radius_nm,
             surface_area_nm2: self.surface_area_nm2,
             volume_nm3: self.volume_nm3,
@@ -6235,17 +6804,9 @@ impl WholeCellSimulator {
             -0.00016 * transcription_flux * organism_scales.nucleotide_cost_scale,
         );
         self.sync_from_lattice();
-        self.update_organism_inventory_dynamics(
-            dt,
-            transcription_flux,
-            translation_flux,
-        );
+        self.update_organism_inventory_dynamics(dt, transcription_flux, translation_flux);
         self.update_complex_assembly_state(dt);
-        self.update_runtime_process_reactions(
-            dt,
-            transcription_flux,
-            translation_flux,
-        );
+        self.update_runtime_process_reactions(dt, transcription_flux, translation_flux);
         let inventory = self.assembly_inventory();
         self.refresh_surrogate_pool_diagnostics(
             inventory,
@@ -6300,13 +6861,6 @@ impl WholeCellSimulator {
         let replication_drive =
             REPLICATION_DRIVE_RULE.evaluate(scalar) * organism_scales.replication_scale;
         let replication_flux = replication_drive / 18.0;
-        let next_bp = self.replicated_bp as f32 + replication_drive;
-        let next_bp = if next_bp.is_finite() {
-            next_bp.min(self.genome_bp as f32)
-        } else {
-            self.replicated_bp as f32
-        };
-        self.replicated_bp = next_bp as u32;
 
         let mut segregation_ctx = ctx;
         let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
@@ -6315,10 +6869,9 @@ impl WholeCellSimulator {
             WholeCellRuleSignal::InverseReplicatedFraction,
             (1.0 - replicated_fraction).clamp(0.0, 1.0),
         );
-        self.chromosome_separation_nm = (self.chromosome_separation_nm
-            + SEGREGATION_STEP_RULE.evaluate(segregation_ctx.scalar())
-                * organism_scales.segregation_scale)
-            .min(self.radius_nm * 1.8);
+        let segregation_drive = SEGREGATION_STEP_RULE.evaluate(segregation_ctx.scalar())
+            * organism_scales.segregation_scale;
+        self.advance_chromosome_state(dt, replication_drive, segregation_drive);
         self.refresh_surrogate_pool_diagnostics(inventory, 0.0, 0.0, replication_flux, 0.0, 0.0);
     }
 
@@ -7331,13 +7884,11 @@ mod tests {
         let reloaded = restored.snapshot();
 
         assert_eq!(reloaded.scheduler_state, original.scheduler_state);
-        assert!(
-            reloaded
-                .scheduler_state
-                .stage_clocks
-                .iter()
-                .any(|clock| clock.run_count > 0)
-        );
+        assert!(reloaded
+            .scheduler_state
+            .stage_clocks
+            .iter()
+            .any(|clock| clock.run_count > 0));
         assert!(
             reloaded
                 .scheduler_state
@@ -7390,7 +7941,9 @@ mod tests {
         assert_eq!(initial_cme_runs, 1);
         assert_eq!(initial_ode_runs, 1);
 
-        let followup_steps = cme_clock.dynamic_interval_steps.max(ode_clock.dynamic_interval_steps);
+        let followup_steps = cme_clock
+            .dynamic_interval_steps
+            .max(ode_clock.dynamic_interval_steps);
         sim.run(followup_steps);
 
         let cme_after = sim
@@ -7586,13 +8139,159 @@ mod tests {
             .find(|unit| unit.name == "ribosome_biogenesis_operon")
             .expect("reloaded ribosome unit");
 
-        assert!((reloaded_unit.promoter_open_fraction - original_unit.promoter_open_fraction).abs() < 1.0e-6);
-        assert!((reloaded_unit.active_rnap_occupancy - original_unit.active_rnap_occupancy).abs() < 1.0e-6);
-        assert!((reloaded_unit.transcription_progress_nt - original_unit.transcription_progress_nt).abs() < 1.0e-6);
-        assert!((reloaded_unit.mature_transcript_abundance - original_unit.mature_transcript_abundance).abs() < 1.0e-6);
-        assert!((reloaded_unit.active_ribosome_occupancy - original_unit.active_ribosome_occupancy).abs() < 1.0e-6);
-        assert!((reloaded_unit.translation_progress_aa - original_unit.translation_progress_aa).abs() < 1.0e-6);
-        assert!((reloaded_unit.mature_protein_abundance - original_unit.mature_protein_abundance).abs() < 1.0e-6);
+        assert!(
+            (reloaded_unit.promoter_open_fraction - original_unit.promoter_open_fraction).abs()
+                < 1.0e-6
+        );
+        assert!(
+            (reloaded_unit.active_rnap_occupancy - original_unit.active_rnap_occupancy).abs()
+                < 1.0e-6
+        );
+        assert!(
+            (reloaded_unit.transcription_progress_nt - original_unit.transcription_progress_nt)
+                .abs()
+                < 1.0e-6
+        );
+        assert!(
+            (reloaded_unit.mature_transcript_abundance - original_unit.mature_transcript_abundance)
+                .abs()
+                < 1.0e-6
+        );
+        assert!(
+            (reloaded_unit.active_ribosome_occupancy - original_unit.active_ribosome_occupancy)
+                .abs()
+                < 1.0e-6
+        );
+        assert!(
+            (reloaded_unit.translation_progress_aa - original_unit.translation_progress_aa).abs()
+                < 1.0e-6
+        );
+        assert!(
+            (reloaded_unit.mature_protein_abundance - original_unit.mature_protein_abundance).abs()
+                < 1.0e-6
+        );
+    }
+
+    #[test]
+    fn test_chromosome_state_tracks_forks_loci_and_restart() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        sim.dnaa = 128.0;
+        sim.complex_assembly.replisome_complexes = 24.0;
+        sim.chromosome_state.replicated_bp = 2;
+        sim.chromosome_state.forks = WholeCellSimulator::chromosome_forks_from_progress(
+            sim.chromosome_state.chromosome_length_bp,
+            sim.chromosome_state.origin_bp,
+            sim.chromosome_state.terminus_bp,
+            2,
+        );
+        sim.synchronize_chromosome_summary();
+        let start = sim.chromosome_state();
+
+        assert_eq!(start.chromosome_length_bp, sim.genome_bp);
+        assert!(!start.loci.is_empty());
+
+        sim.run(24);
+
+        let end = sim.chromosome_state();
+        assert!(end.initiation_events >= start.initiation_events);
+        assert!(!end.forks.is_empty());
+        assert!(end.replicated_bp > 0);
+        assert!(end.mean_locus_accessibility > 0.0);
+        assert!(end
+            .loci
+            .iter()
+            .zip(start.loci.iter())
+            .any(|(end_locus, start_locus)| {
+                (end_locus.accessibility - start_locus.accessibility).abs() > 1.0e-6
+                    || (end_locus.torsional_stress - start_locus.torsional_stress).abs() > 1.0e-6
+            }));
+
+        let saved = sim.save_state_json().expect("serialize saved state");
+        let restored =
+            WholeCellSimulator::from_saved_state_json(&saved).expect("restore saved state");
+        let restored_state = restored.chromosome_state();
+
+        assert_eq!(restored_state.loci.len(), end.loci.len());
+        assert_eq!(restored_state.forks.len(), end.forks.len());
+        assert_eq!(restored_state.initiation_events, end.initiation_events);
+        assert_eq!(restored_state.completion_events, end.completion_events);
+        assert_eq!(restored_state.replicated_bp, end.replicated_bp);
+        assert!(
+            (restored_state.mean_locus_accessibility - end.mean_locus_accessibility).abs() < 1.0e-6
+        );
+        if let (Some(restored_fork), Some(end_fork)) =
+            (restored_state.forks.first(), end.forks.first())
+        {
+            assert_eq!(restored_fork.pause_events, end_fork.pause_events);
+            assert_eq!(restored_fork.traveled_bp, end_fork.traveled_bp);
+            assert!(
+                (restored_fork.collision_pressure - end_fork.collision_pressure).abs() < 1.0e-6
+            );
+        }
+    }
+
+    #[test]
+    fn test_head_on_transcription_increases_chromosome_collision_pressure() {
+        let mut baseline =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        baseline.dnaa = 128.0;
+        baseline.complex_assembly.replisome_complexes = 24.0;
+        baseline.chromosome_state.replicated_bp = 2;
+        baseline.chromosome_state.forks = WholeCellSimulator::chromosome_forks_from_progress(
+            baseline.chromosome_state.chromosome_length_bp,
+            baseline.chromosome_state.origin_bp,
+            baseline.chromosome_state.terminus_bp,
+            2,
+        );
+        baseline.synchronize_chromosome_summary();
+        baseline.run(24);
+        let baseline_state = baseline.chromosome_state();
+        let baseline_collision = baseline_state
+            .forks
+            .iter()
+            .map(|fork| fork.collision_pressure)
+            .sum::<f32>();
+        let baseline_pauses = baseline_state
+            .forks
+            .iter()
+            .map(|fork| fork.pause_events)
+            .sum::<u32>();
+
+        let mut stressed =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        stressed.dnaa = 128.0;
+        stressed.complex_assembly.replisome_complexes = 24.0;
+        stressed.chromosome_state.replicated_bp = 2;
+        stressed.chromosome_state.forks = WholeCellSimulator::chromosome_forks_from_progress(
+            stressed.chromosome_state.chromosome_length_bp,
+            stressed.chromosome_state.origin_bp,
+            stressed.chromosome_state.terminus_bp,
+            2,
+        );
+        stressed.synchronize_chromosome_summary();
+        if let Some(organism) = stressed.organism_data.as_mut() {
+            for feature in &mut organism.genes {
+                feature.strand = -1;
+                feature.basal_expression *= 18.0;
+            }
+        }
+        stressed.run(24);
+        let stressed_state = stressed.chromosome_state();
+        let stressed_collision = stressed_state
+            .forks
+            .iter()
+            .map(|fork| fork.collision_pressure)
+            .sum::<f32>();
+        let stressed_pauses = stressed_state
+            .forks
+            .iter()
+            .map(|fork| fork.pause_events)
+            .sum::<u32>();
+
+        assert!(stressed_collision >= baseline_collision);
+        assert!(stressed_pauses >= baseline_pauses);
+        assert!(stressed_state.torsional_stress >= baseline_state.torsional_stress);
     }
 
     #[test]
@@ -7730,7 +8429,9 @@ mod tests {
                 >= baseline_complex.shared_component_pressure
         );
         assert!(stressed_complex.failure_count >= baseline_complex.failure_count);
-        assert!(stressed_complex.insertion_progress <= baseline_complex.insertion_progress + 1.0e-6);
+        assert!(
+            stressed_complex.insertion_progress <= baseline_complex.insertion_progress + 1.0e-6
+        );
     }
 
     #[test]
