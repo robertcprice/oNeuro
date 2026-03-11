@@ -1385,6 +1385,16 @@ pub struct WholeCellLatticeState {
     pub membrane_precursors: Vec<f32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct WholeCellSpatialFieldState {
+    #[serde(default)]
+    pub membrane_adjacency: Vec<f32>,
+    #[serde(default)]
+    pub septum_zone: Vec<f32>,
+    #[serde(default)]
+    pub nucleoid_occupancy: Vec<f32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WholeCellSavedState {
     pub program_name: Option<String>,
@@ -1419,6 +1429,8 @@ pub struct WholeCellSavedState {
     pub config: WholeCellConfig,
     pub core: WholeCellSavedCoreState,
     pub lattice: WholeCellLatticeState,
+    #[serde(default)]
+    pub spatial_fields: Option<WholeCellSpatialFieldState>,
     #[serde(default)]
     pub local_chemistry: Option<WholeCellLocalChemistrySpec>,
     #[serde(default)]
@@ -3384,6 +3396,7 @@ mod tests {
                     spec.config.x_dim * spec.config.y_dim * spec.config.z_dim
                 ],
             },
+            spatial_fields: None,
             local_chemistry: None,
             chemistry_report: LocalChemistryReport::default(),
             chemistry_site_reports: Vec::new(),

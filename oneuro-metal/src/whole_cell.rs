@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::gpu;
 use crate::gpu::whole_cell_rdme::{
-    cpu_whole_cell_rdme, dispatch_whole_cell_rdme, IntracellularLattice, IntracellularSpecies,
+    cpu_whole_cell_rdme, dispatch_whole_cell_rdme, IntracellularLattice, IntracellularSpatialField,
+    IntracellularSpatialState, IntracellularSpecies, WholeCellRdmeContext,
 };
 use crate::substrate_ir::{
     ScalarBranch, ScalarContext, ScalarFactor, ScalarRule, EMPTY_SCALAR_BRANCH, EMPTY_SCALAR_FACTOR,
@@ -32,8 +33,9 @@ use crate::whole_cell_data::{
     WholeCellOrganismProfile, WholeCellOrganismSpec, WholeCellOrganismSummary,
     WholeCellProcessWeights, WholeCellProgramSpec, WholeCellProvenance, WholeCellReactionClass,
     WholeCellReactionRuntimeState, WholeCellSavedCoreState, WholeCellSavedState,
-    WholeCellSchedulerState, WholeCellSolverStage, WholeCellSpeciesClass,
-    WholeCellSpeciesRuntimeState, WholeCellStageClockState, WholeCellTranscriptionUnitState,
+    WholeCellSchedulerState, WholeCellSolverStage, WholeCellSpatialFieldState,
+    WholeCellSpeciesClass, WholeCellSpeciesRuntimeState, WholeCellStageClockState,
+    WholeCellTranscriptionUnitState,
 };
 use crate::whole_cell_submodels::{
     LocalChemistryReport, LocalChemistrySiteReport, LocalMDProbeReport, LocalMDProbeRequest,
@@ -1305,6 +1307,7 @@ pub struct WholeCellSimulator {
     #[cfg(target_os = "macos")]
     gpu: Option<GpuContext>,
     lattice: IntracellularLattice,
+    spatial_fields: IntracellularSpatialState,
     time_ms: f32,
     step_count: u64,
     atp_mm: f32,
@@ -2014,6 +2017,10 @@ impl WholeCellSimulator {
         );
         let crowding = self.organism_expression.crowding_penalty.clamp(0.65, 1.10);
         let cardiolipin_share = self.membrane_cardiolipin_share();
+        let local_membrane_precursors =
+            Self::saturating_signal(self.localized_membrane_precursor_pool_mm(), 0.6);
+        let local_membrane_atp =
+            Self::saturating_signal(self.localized_membrane_atp_pool_mm(), 1.0);
         let membrane_complex_signal = Self::saturating_signal(
             inventory.membrane_complexes + 0.35 * inventory.atp_band_complexes,
             inventory.membrane_target.max(8.0),
@@ -2028,6 +2035,8 @@ impl WholeCellSimulator {
             0.42 * membrane_support
                 + 0.20 * membrane_process_scale
                 + 0.28 * membrane_complex_signal
+                + 0.10 * local_membrane_precursors
+                + 0.08 * local_membrane_atp
                 + 0.10 * self.md_membrane_scale.max(0.0)
                 + 0.10 * self.quantum_profile.membrane_synthesis_efficiency,
             1.0,
@@ -2037,8 +2046,9 @@ impl WholeCellSimulator {
         let membrane_growth_efficiency = Self::finite_scale(
             0.46 * membrane_support
                 + 0.24 * protein_insertion_support
+                + 0.10 * local_membrane_precursors
                 + 0.15 * crowding
-                + 0.15 * self.quantum_profile.membrane_synthesis_efficiency,
+                + 0.10 * self.quantum_profile.membrane_synthesis_efficiency,
             1.0,
             0.25,
             1.90,
@@ -2204,6 +2214,7 @@ impl WholeCellSimulator {
         self.membrane_division_state = self.normalize_membrane_division_state(state);
         self.synchronize_membrane_division_summary();
         self.synchronize_chromosome_summary();
+        self.refresh_spatial_fields();
     }
 
     fn chromosome_copy_number_for_state(state: &WholeCellChromosomeState, midpoint_bp: u32) -> f32 {
@@ -2466,6 +2477,7 @@ impl WholeCellSimulator {
         }
         self.chromosome_state = self.normalize_chromosome_state(state);
         self.synchronize_chromosome_summary();
+        self.refresh_spatial_fields();
     }
 
     fn molecule_pool_count(spec: &WholeCellMoleculePoolSpec) -> f32 {
@@ -2578,6 +2590,9 @@ impl WholeCellSimulator {
         let ribosome_signal = Self::subsystem_inventory_signal(ribosome, translation_support);
         let replisome_signal = Self::subsystem_inventory_signal(replisome, nucleotide_support);
         let septum_signal = Self::subsystem_inventory_signal(septum, membrane_support);
+        let localized_nucleotide_pool = self.localized_nucleotide_pool_mm();
+        let localized_membrane_pool = self.localized_membrane_precursor_pool_mm();
+        let localized_membrane_atp = self.localized_membrane_atp_pool_mm();
 
         let localized_supply_scale = self.localized_supply_scale();
         let localized_resource_pressure =
@@ -2605,21 +2620,21 @@ impl WholeCellSimulator {
         );
         let nucleotide_signal = Self::evaluate_resource_signal(
             NUCLEOTIDE_SIGNAL_RULE,
-            self.nucleotides_mm,
+            0.55 * self.nucleotides_mm + 0.45 * localized_nucleotide_pool,
             0.5 * self.chemistry_report.mean_atp_flux,
             0.60 * nucleotide_support + 0.40 * localized_supply_scale,
             localized_resource_pressure,
         );
         let membrane_signal = Self::evaluate_resource_signal(
             MEMBRANE_SIGNAL_RULE,
-            self.membrane_precursors_mm,
+            0.45 * self.membrane_precursors_mm + 0.55 * localized_membrane_pool,
             0.5 * self.chemistry_report.mean_oxygen,
             0.60 * membrane_support + 0.40 * localized_supply_scale,
             localized_resource_pressure,
         );
         let energy_signal = Self::evaluate_resource_signal(
             ENERGY_SIGNAL_RULE,
-            self.atp_mm,
+            0.60 * self.atp_mm + 0.40 * localized_membrane_atp,
             self.chemistry_report.mean_atp_flux,
             0.55 * atp_support + 0.45 * localized_supply_scale,
             localized_resource_pressure,
@@ -2720,7 +2735,7 @@ impl WholeCellSimulator {
         );
         ctx.set(
             WholeCellRuleSignal::MembranePrecursorFloor,
-            self.membrane_precursors_mm.max(0.1),
+            (0.45 * self.membrane_precursors_mm + 0.55 * localized_membrane_pool).max(0.1),
         );
         ctx
     }
@@ -6081,6 +6096,151 @@ impl WholeCellSimulator {
         4.0 / 3.0 * PI * radius_nm.powi(3)
     }
 
+    fn refresh_spatial_fields(&mut self) {
+        let total_voxels = self.lattice.total_voxels();
+        if total_voxels == 0 {
+            return;
+        }
+        let x_dim = self.lattice.x_dim.max(1);
+        let y_dim = self.lattice.y_dim.max(1);
+        let z_dim = self.lattice.z_dim.max(1);
+        let center_x = (x_dim as f32 - 1.0) * 0.5;
+        let center_y = (y_dim as f32 - 1.0) * 0.5;
+        let center_z = (z_dim as f32 - 1.0) * 0.5;
+        let axial_scale = center_x.max(1.0);
+        let radial_y_scale = center_y.max(1.0);
+        let radial_z_scale = center_z.max(1.0);
+        let membrane_depth = (0.18
+            + self
+                .organism_data
+                .as_ref()
+                .map(|organism| organism.geometry.membrane_fraction.clamp(0.08, 0.32))
+                .unwrap_or(0.16))
+        .clamp(0.10, 0.35);
+        let septum_width =
+            (0.10 + 0.18 * self.membrane_division_state.septum_radius_fraction).clamp(0.06, 0.32);
+        let septum_gain =
+            (0.35 + 0.65 * self.membrane_division_state.septum_localization).clamp(0.20, 1.25);
+        let chromosome_radius_fraction = self
+            .organism_data
+            .as_ref()
+            .map(|organism| {
+                organism
+                    .geometry
+                    .chromosome_radius_fraction
+                    .clamp(0.18, 0.70)
+            })
+            .unwrap_or(0.40);
+        let axial_spread = (0.12
+            + 0.22 * (1.0 - self.chromosome_state.compaction_fraction.clamp(0.0, 1.0))
+            + 0.08 * self.chromosome_state.replicated_fraction.clamp(0.0, 1.0))
+        .clamp(0.08, 0.45);
+        let radial_spread = (0.10
+            + 0.30 * chromosome_radius_fraction
+            + 0.12 * (1.0 - self.chromosome_state.compaction_fraction.clamp(0.0, 1.0)))
+        .clamp(0.10, 0.42);
+        let separation_fraction = (self.chromosome_separation_nm
+            / (self.radius_nm * 2.2).max(self.lattice.voxel_size_nm))
+        .clamp(0.0, 0.45);
+        let left_center = 0.5 - 0.5 * separation_fraction;
+        let right_center = 0.5 + 0.5 * separation_fraction;
+        let occupancy_gain = (0.45
+            + 0.55 * self.chromosome_state.compaction_fraction.clamp(0.0, 1.0)
+            + 0.20 * self.chromosome_state.replicated_fraction.clamp(0.0, 1.0))
+        .clamp(0.20, 1.35);
+
+        let mut membrane = vec![0.0; total_voxels];
+        let mut septum = vec![0.0; total_voxels];
+        let mut nucleoid = vec![0.0; total_voxels];
+
+        for gid in 0..total_voxels {
+            let z = gid / (y_dim * x_dim);
+            let rem = gid - z * y_dim * x_dim;
+            let y = rem / x_dim;
+            let x = rem - y * x_dim;
+
+            let x_norm = (x as f32 - center_x) / axial_scale;
+            let y_norm = (y as f32 - center_y) / radial_y_scale;
+            let z_norm = (z as f32 - center_z) / radial_z_scale;
+
+            let boundary_distance = x_norm
+                .abs()
+                .max(y_norm.abs())
+                .max(z_norm.abs())
+                .clamp(0.0, 1.0);
+            let membrane_adjacency =
+                ((boundary_distance - (1.0 - membrane_depth)) / membrane_depth).clamp(0.0, 1.0);
+            let septum_axis = (-0.5 * (x_norm / septum_width).powi(2)).exp();
+            let radial_centering = (1.0 - 0.45 * (y_norm.abs().max(z_norm.abs()))).clamp(0.15, 1.0);
+            let septum_zone =
+                (septum_gain * septum_axis * membrane_adjacency * radial_centering).clamp(0.0, 1.0);
+
+            let y_frac = (y as f32 + 0.5) / y_dim as f32 - 0.5;
+            let z_frac = (z as f32 + 0.5) / z_dim as f32 - 0.5;
+            let radial_distance = (y_frac.powi(2) + z_frac.powi(2)).sqrt();
+            let radial_term = (radial_distance / radial_spread.max(1.0e-3)).powi(2);
+            let x_frac = (x as f32 + 0.5) / x_dim as f32;
+            let left_term = ((x_frac - left_center) / axial_spread.max(1.0e-3)).powi(2);
+            let right_term = ((x_frac - right_center) / axial_spread.max(1.0e-3)).powi(2);
+            let nucleoid_occupancy = (occupancy_gain
+                * ((-0.5 * (left_term + radial_term)).exp()
+                    + (-0.5 * (right_term + radial_term)).exp()))
+            .clamp(0.0, 1.0);
+
+            membrane[gid] = membrane_adjacency;
+            septum[gid] = septum_zone;
+            nucleoid[gid] = nucleoid_occupancy;
+        }
+
+        let _ = self
+            .spatial_fields
+            .set_field(IntracellularSpatialField::MembraneAdjacency, &membrane);
+        let _ = self
+            .spatial_fields
+            .set_field(IntracellularSpatialField::SeptumZone, &septum);
+        let _ = self
+            .spatial_fields
+            .set_field(IntracellularSpatialField::NucleoidOccupancy, &nucleoid);
+    }
+
+    fn spatial_species_mean(
+        &self,
+        species: IntracellularSpecies,
+        field: IntracellularSpatialField,
+    ) -> f32 {
+        self.spatial_fields
+            .weighted_mean_species(&self.lattice, species, field)
+    }
+
+    fn localized_nucleotide_pool_mm(&self) -> f32 {
+        self.spatial_species_mean(
+            IntracellularSpecies::Nucleotides,
+            IntracellularSpatialField::NucleoidOccupancy,
+        )
+    }
+
+    fn localized_membrane_precursor_pool_mm(&self) -> f32 {
+        0.55 * self.spatial_species_mean(
+            IntracellularSpecies::MembranePrecursors,
+            IntracellularSpatialField::MembraneAdjacency,
+        ) + 0.45
+            * self.spatial_species_mean(
+                IntracellularSpecies::MembranePrecursors,
+                IntracellularSpatialField::SeptumZone,
+            )
+    }
+
+    fn localized_membrane_atp_pool_mm(&self) -> f32 {
+        0.65 * self.spatial_species_mean(
+            IntracellularSpecies::ATP,
+            IntracellularSpatialField::MembraneAdjacency,
+        ) + 0.35
+            * self.spatial_species_mean(
+                IntracellularSpecies::ATP,
+                IntracellularSpatialField::SeptumZone,
+            )
+    }
+
     fn restore_saved_state(&mut self, saved: WholeCellSavedState) -> Result<(), String> {
         let saved_scheduler_state = saved.scheduler_state.clone();
         self.program_name = saved.program_name.clone();
@@ -6109,6 +6269,19 @@ impl WholeCellSimulator {
             IntracellularSpecies::MembranePrecursors,
             &saved.lattice.membrane_precursors,
         )?;
+        if let Some(spatial) = saved.spatial_fields {
+            let _ = self.spatial_fields.set_field(
+                IntracellularSpatialField::MembraneAdjacency,
+                &spatial.membrane_adjacency,
+            );
+            let _ = self
+                .spatial_fields
+                .set_field(IntracellularSpatialField::SeptumZone, &spatial.septum_zone);
+            let _ = self.spatial_fields.set_field(
+                IntracellularSpatialField::NucleoidOccupancy,
+                &spatial.nucleoid_occupancy,
+            );
+        }
         self.sync_from_lattice();
 
         self.time_ms = saved.core.time_ms.max(0.0);
@@ -6193,6 +6366,7 @@ impl WholeCellSimulator {
                 self.initialize_complex_assembly_state();
             }
         }
+        self.refresh_spatial_fields();
 
         self.disable_local_chemistry();
         if let Some(local) = saved.local_chemistry {
@@ -6251,6 +6425,7 @@ impl WholeCellSimulator {
         } else {
             WholeCellBackend::Cpu
         };
+        let spatial_dims = (config.x_dim, config.y_dim, config.z_dim);
 
         #[cfg(target_os = "macos")]
         let gpu = if backend == WholeCellBackend::Metal {
@@ -6307,6 +6482,11 @@ impl WholeCellSimulator {
             #[cfg(target_os = "macos")]
             gpu,
             lattice,
+            spatial_fields: IntracellularSpatialState::new(
+                spatial_dims.0,
+                spatial_dims.1,
+                spatial_dims.2,
+            ),
             time_ms: 0.0,
             step_count: 0,
             atp_mm: 1.20,
@@ -6350,6 +6530,7 @@ impl WholeCellSimulator {
         simulator.synchronize_chromosome_summary();
         simulator.membrane_division_state = simulator.seeded_membrane_division_state();
         simulator.synchronize_membrane_division_summary();
+        simulator.refresh_spatial_fields();
         simulator.refresh_organism_expression_state();
         simulator.initialize_complex_assembly_state();
         simulator.initialize_runtime_process_state();
@@ -6424,6 +6605,7 @@ impl WholeCellSimulator {
             .map(|state| simulator.normalize_membrane_division_state(state))
             .unwrap_or_else(|| simulator.seeded_membrane_division_state());
         simulator.synchronize_membrane_division_summary();
+        simulator.refresh_spatial_fields();
 
         simulator.disable_local_chemistry();
         if let Some(local) = local_chemistry {
@@ -6544,6 +6726,17 @@ impl WholeCellSimulator {
                     .lattice
                     .clone_species(IntracellularSpecies::MembranePrecursors),
             },
+            spatial_fields: Some(WholeCellSpatialFieldState {
+                membrane_adjacency: self
+                    .spatial_fields
+                    .clone_field(IntracellularSpatialField::MembraneAdjacency),
+                septum_zone: self
+                    .spatial_fields
+                    .clone_field(IntracellularSpatialField::SeptumZone),
+                nucleoid_occupancy: self
+                    .spatial_fields
+                    .clone_field(IntracellularSpatialField::NucleoidOccupancy),
+            }),
             local_chemistry: self.chemistry_bridge.as_ref().map(|bridge| {
                 let (x_dim, y_dim, z_dim) = bridge.lattice_shape();
                 WholeCellLocalChemistrySpec {
@@ -7101,7 +7294,40 @@ impl WholeCellSimulator {
     }
 
     fn rdme_stage(&mut self, dt: f32) {
+        self.refresh_spatial_fields();
         let effective_metabolic_load = self.effective_metabolic_load();
+        let rdme_context = WholeCellRdmeContext {
+            metabolic_load: effective_metabolic_load,
+            energy_local_sink: Self::finite_scale(
+                0.80 + 0.20 * self.membrane_division_state.divisome_occupancy
+                    + 0.16 * self.membrane_division_state.septum_localization,
+                1.0,
+                0.55,
+                1.85,
+            ),
+            nucleotide_local_sink: Self::finite_scale(
+                0.78 + 0.22 * self.chromosome_state.replicated_fraction
+                    + 0.18 * (1.0 - self.chromosome_state.mean_locus_accessibility).max(0.0),
+                1.0,
+                0.55,
+                1.85,
+            ),
+            membrane_local_source: Self::finite_scale(
+                0.70 + 0.20 * self.organism_expression.membrane_support
+                    + 0.10 * self.membrane_division_state.membrane_protein_insertion,
+                1.0,
+                0.45,
+                1.95,
+            ),
+            membrane_local_sink: Self::finite_scale(
+                0.62 + 0.24 * self.membrane_division_state.septum_localization
+                    + 0.14 * self.membrane_division_state.divisome_occupancy,
+                1.0,
+                0.35,
+                2.10,
+            ),
+            crowding_penalty: self.organism_expression.crowding_penalty.clamp(0.35, 1.10),
+        };
         match self.backend {
             WholeCellBackend::Metal => {
                 #[cfg(target_os = "macos")]
@@ -7110,20 +7336,26 @@ impl WholeCellSimulator {
                         dispatch_whole_cell_rdme(
                             gpu,
                             &mut self.lattice,
+                            &self.spatial_fields,
                             dt,
-                            effective_metabolic_load,
+                            rdme_context,
                         );
                     } else {
-                        cpu_whole_cell_rdme(&mut self.lattice, dt, effective_metabolic_load);
+                        cpu_whole_cell_rdme(
+                            &mut self.lattice,
+                            &self.spatial_fields,
+                            dt,
+                            rdme_context,
+                        );
                     }
                 }
                 #[cfg(not(target_os = "macos"))]
                 {
-                    cpu_whole_cell_rdme(&mut self.lattice, dt, effective_metabolic_load);
+                    cpu_whole_cell_rdme(&mut self.lattice, &self.spatial_fields, dt, rdme_context);
                 }
             }
             WholeCellBackend::Cpu => {
-                cpu_whole_cell_rdme(&mut self.lattice, dt, effective_metabolic_load)
+                cpu_whole_cell_rdme(&mut self.lattice, &self.spatial_fields, dt, rdme_context)
             }
         }
         self.sync_from_lattice();
@@ -7280,6 +7512,19 @@ mod tests {
         LocalChemistryReport, LocalChemistrySiteReport, LocalMDProbeRequest, Syn3ASubsystemPreset,
         WholeCellChemistrySite,
     };
+
+    fn distribute_total_by_weights(weights: &[f32], mean_value: f32) -> Vec<f32> {
+        let total = mean_value.max(0.0) * weights.len() as f32;
+        let weight_sum = weights
+            .iter()
+            .map(|weight| weight.max(0.0))
+            .sum::<f32>()
+            .max(1.0e-6);
+        weights
+            .iter()
+            .map(|weight| total * weight.max(0.0) / weight_sum)
+            .collect()
+    }
 
     #[test]
     fn test_cpu_whole_cell_progresses_state() {
@@ -7720,6 +7965,140 @@ mod tests {
         let atp = sim.atp_lattice();
         let first = atp.first().copied().expect("atp lattice");
         assert!(atp.iter().all(|value| (*value - first).abs() < 1.0e-6));
+    }
+
+    #[test]
+    fn test_spatial_fields_round_trip_through_saved_state() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        sim.run(4);
+        let saved = sim.save_state_json().expect("saved state json");
+        let restored =
+            WholeCellSimulator::from_saved_state_json(&saved).expect("restore saved state");
+
+        let original_membrane = sim
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::MembraneAdjacency);
+        let restored_membrane = restored
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::MembraneAdjacency);
+        let original_nucleoid = sim
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::NucleoidOccupancy);
+        let restored_nucleoid = restored
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::NucleoidOccupancy);
+
+        assert_eq!(original_membrane.len(), restored_membrane.len());
+        assert_eq!(original_nucleoid.len(), restored_nucleoid.len());
+        assert!(original_membrane
+            .iter()
+            .zip(restored_membrane.iter())
+            .all(|(lhs, rhs)| (lhs - rhs).abs() < 1.0e-6));
+        assert!(original_nucleoid
+            .iter()
+            .zip(restored_nucleoid.iter())
+            .all(|(lhs, rhs)| (lhs - rhs).abs() < 1.0e-6));
+    }
+
+    #[test]
+    fn test_nucleoid_localization_biases_nucleotide_signal() {
+        let mut nucleoid_loaded =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let mut pole_loaded =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let nucleoid_weights = nucleoid_loaded
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::NucleoidOccupancy);
+        let pole_weights: Vec<f32> = nucleoid_weights
+            .iter()
+            .map(|weight| (1.0 - *weight).max(0.02))
+            .collect();
+        let nucleoid_values = distribute_total_by_weights(&nucleoid_weights, 0.80);
+        let pole_values = distribute_total_by_weights(&pole_weights, 0.80);
+
+        nucleoid_loaded
+            .lattice
+            .set_species(IntracellularSpecies::Nucleotides, &nucleoid_values)
+            .expect("nucleoid-targeted nucleotides");
+        pole_loaded
+            .lattice
+            .set_species(IntracellularSpecies::Nucleotides, &pole_values)
+            .expect("pole-targeted nucleotides");
+        nucleoid_loaded.sync_from_lattice();
+        pole_loaded.sync_from_lattice();
+
+        let nucleoid_ctx = nucleoid_loaded.base_rule_context(0.0);
+        let pole_ctx = pole_loaded.base_rule_context(0.0);
+
+        assert!((nucleoid_loaded.nucleotides_mm - pole_loaded.nucleotides_mm).abs() < 1.0e-6);
+        assert!(
+            nucleoid_loaded.localized_nucleotide_pool_mm()
+                > pole_loaded.localized_nucleotide_pool_mm()
+        );
+        assert!(
+            nucleoid_ctx.get(WholeCellRuleSignal::NucleotideSignal)
+                > pole_ctx.get(WholeCellRuleSignal::NucleotideSignal)
+        );
+    }
+
+    #[test]
+    fn test_septum_localization_biases_membrane_constriction_support() {
+        let mut septum_loaded =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let mut pole_loaded =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        let septum_weights = septum_loaded
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::SeptumZone);
+        let pole_weights: Vec<f32> = septum_loaded
+            .spatial_fields
+            .clone_field(IntracellularSpatialField::MembraneAdjacency)
+            .into_iter()
+            .zip(septum_weights.iter().copied())
+            .map(|(membrane, septum)| (membrane - septum).max(0.02))
+            .collect();
+        let septum_values = distribute_total_by_weights(&septum_weights, 0.35);
+        let pole_values = distribute_total_by_weights(&pole_weights, 0.35);
+
+        septum_loaded
+            .lattice
+            .set_species(IntracellularSpecies::MembranePrecursors, &septum_values)
+            .expect("septum-targeted membrane precursors");
+        pole_loaded
+            .lattice
+            .set_species(IntracellularSpecies::MembranePrecursors, &pole_values)
+            .expect("pole-targeted membrane precursors");
+        septum_loaded.sync_from_lattice();
+        pole_loaded.sync_from_lattice();
+        assert!(
+            (septum_loaded.membrane_precursors_mm - pole_loaded.membrane_precursors_mm).abs()
+                < 1.0e-4
+        );
+        septum_loaded.refresh_organism_expression_state();
+        pole_loaded.refresh_organism_expression_state();
+
+        for _ in 0..8 {
+            septum_loaded.geometry_stage(septum_loaded.config.dt_ms);
+            pole_loaded.geometry_stage(pole_loaded.config.dt_ms);
+        }
+
+        assert!(
+            septum_loaded.localized_membrane_precursor_pool_mm()
+                > pole_loaded.localized_membrane_precursor_pool_mm()
+        );
+        assert!(
+            septum_loaded.membrane_division_state.constriction_force
+                > pole_loaded.membrane_division_state.constriction_force
+        );
+        assert!(
+            septum_loaded
+                .membrane_division_state
+                .septal_lipid_inventory_nm2
+                > pole_loaded
+                    .membrane_division_state
+                    .septal_lipid_inventory_nm2
+        );
     }
 
     #[test]

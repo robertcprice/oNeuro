@@ -261,3 +261,26 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `membrane and division now flow through explicit local state, but envelope turnover, cell-wall synthesis, and division completion still need deeper native ownership in the next slice`
+
+### 2026-03-11 - Phase 7 / Spatial Field Coupling Slice
+
+- Summary:
+  - added explicit membrane-adjacency, septum-zone, and nucleoid-occupancy spatial fields on the native intracellular lattice and persisted them through saved-state JSON as restartable spatial artifacts
+  - upgraded the Rust and Metal RDME path so diffusion, source, and sink terms now depend on those spatial fields plus local membrane/chromosome demand instead of only uniform whole-cell means
+  - coupled chromosome and membrane rule inputs to localized nucleotide, membrane-precursor, and ATP availability so spatial chemistry now changes replication and constriction support through local fields rather than ad hoc direct overrides
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/gpu/whole_cell_rdme.rs`
+  - `oneuro-metal/src/metal/whole_cell_rdme.metal`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q gpu::whole_cell_rdme --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && maturin develop -m oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && cd /tmp/oNeuro-phase7-membrane.5ezW2U && PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `spatial chemistry now carries authoritative local fields for the current lattice species, but membrane patch reactions, richer compartment scopes, and chromosome-local execution still need broader compiled-species coverage in later Phase 7 slices`
