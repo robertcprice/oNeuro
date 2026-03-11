@@ -267,6 +267,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Remaining blockers:
   - `diagnostic and subsystem inventory seeding still uses legacy name checks for ribosome/RNAP/DnaA/FtsZ pools because those pools do not yet carry compiled role metadata`
 
+### 2026-03-11 - Phase 7 / Explicit Pool Role Metadata Slice
+
+- Summary:
+  - added explicit pool-role metadata for ribosome, RNAP, DnaA, and FtsZ diagnostic pools and normalized that metadata at the same asset ingress boundary as bulk fields
+  - removed runtime diagnostic seeding from string matching so opaque pool names can seed those subsystems when their compiled role metadata is explicit
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell_data.rs oneuro-metal/src/whole_cell.rs`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `broader asset-class, subsystem-target, and patch-domain inference for genes, operons, and complexes still falls back to name heuristics when bundle metadata is absent`
+
 ### 2026-03-11 - Phase 5 / Explicit Chromosome Runtime Slice
 
 - Summary:

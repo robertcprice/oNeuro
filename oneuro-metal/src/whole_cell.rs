@@ -32,8 +32,8 @@ use crate::whole_cell_data::{
     WholeCellGenomeProcessRegistry, WholeCellGenomeProcessRegistrySummary, WholeCellLatticeState,
     WholeCellLocalChemistrySpec, WholeCellMembraneDivisionState, WholeCellMoleculePoolSpec,
     WholeCellNamedComplexState, WholeCellOrganismExpressionState, WholeCellOrganismProfile,
-    WholeCellOrganismSpec, WholeCellOrganismSummary, WholeCellPatchDomain, WholeCellProcessWeights,
-    WholeCellProgramSpec, WholeCellProvenance, WholeCellReactionClass,
+    WholeCellOrganismSpec, WholeCellOrganismSummary, WholeCellPatchDomain, WholeCellPoolRole,
+    WholeCellProcessWeights, WholeCellProgramSpec, WholeCellProvenance, WholeCellReactionClass,
     WholeCellReactionRuntimeState, WholeCellSavedCoreState, WholeCellSavedState,
     WholeCellSchedulerState, WholeCellSolverStage, WholeCellSpatialFieldState,
     WholeCellSpatialScope, WholeCellSpeciesClass, WholeCellSpeciesRuntimeState,
@@ -2761,10 +2761,28 @@ impl WholeCellSimulator {
         }
     }
 
-    fn backfill_legacy_pool_bulk_fields(pools: &mut [WholeCellMoleculePoolSpec]) {
+    fn infer_pool_role_from_name(name: &str) -> Option<WholeCellPoolRole> {
+        let lowered = name.trim().to_lowercase();
+        if lowered.contains("ribosome") {
+            Some(WholeCellPoolRole::ActiveRibosomes)
+        } else if lowered.contains("rnap") || lowered.contains("rna_polymerase") {
+            Some(WholeCellPoolRole::ActiveRnap)
+        } else if lowered.contains("dnaa") {
+            Some(WholeCellPoolRole::Dnaa)
+        } else if lowered.contains("ftsz") {
+            Some(WholeCellPoolRole::Ftsz)
+        } else {
+            None
+        }
+    }
+
+    fn backfill_legacy_pool_metadata(pools: &mut [WholeCellMoleculePoolSpec]) {
         for pool in pools {
             if pool.bulk_field.is_none() {
                 pool.bulk_field = Self::infer_bulk_field_from_name(&pool.species);
+            }
+            if pool.role.is_none() {
+                pool.role = Self::infer_pool_role_from_name(&pool.species);
             }
         }
     }
@@ -2809,8 +2827,16 @@ impl WholeCellSimulator {
         }
     }
 
+    fn apply_pool_role_seed(&mut self, role: WholeCellPoolRole, count: f32) {
+        match role {
+            WholeCellPoolRole::ActiveRibosomes => self.active_ribosomes = count,
+            WholeCellPoolRole::ActiveRnap => self.active_rnap = count,
+            WholeCellPoolRole::Dnaa => self.dnaa = count,
+            WholeCellPoolRole::Ftsz => self.ftsz = count,
+        }
+    }
+
     fn apply_pool_seed(&mut self, pool: &WholeCellMoleculePoolSpec) {
-        let name = pool.species.trim().to_lowercase();
         if pool.concentration_mm.is_finite() && pool.concentration_mm > 0.0 {
             let concentration = pool.concentration_mm.max(0.0);
             match pool.bulk_field {
@@ -2847,14 +2873,8 @@ impl WholeCellSimulator {
         if count <= 0.0 {
             return;
         }
-        if name.contains("ribosome") {
-            self.active_ribosomes = count;
-        } else if name.contains("rnap") || name.contains("rna_polymerase") {
-            self.active_rnap = count;
-        } else if name.contains("dnaa") {
-            self.dnaa = count;
-        } else if name.contains("ftsz") {
-            self.ftsz = count;
+        if let Some(role) = pool.role {
+            self.apply_pool_role_seed(role, count);
         }
     }
 
@@ -3247,7 +3267,7 @@ impl WholeCellSimulator {
         let Some(mut organism) = self.organism_data.clone() else {
             return;
         };
-        Self::backfill_legacy_pool_bulk_fields(&mut organism.pools);
+        Self::backfill_legacy_pool_metadata(&mut organism.pools);
         self.organism_data = Some(organism.clone());
 
         self.genome_bp = organism.chromosome_length_bp.max(1);
@@ -3258,15 +3278,10 @@ impl WholeCellSimulator {
             self.volume_nm3 = Self::volume_from_radius(self.radius_nm);
         }
 
-        let diagnostic_seeded = organism.pools.iter().any(|pool| {
-            let name = pool.species.trim().to_lowercase();
-            Self::molecule_pool_count(pool) > 0.0
-                && (name.contains("ribosome")
-                    || name.contains("rnap")
-                    || name.contains("rna_polymerase")
-                    || name.contains("dnaa")
-                    || name.contains("ftsz"))
-        });
+        let diagnostic_seeded = organism
+            .pools
+            .iter()
+            .any(|pool| Self::molecule_pool_count(pool) > 0.0 && pool.role.is_some());
 
         for pool in &organism.pools {
             self.apply_pool_seed(pool);
@@ -7987,7 +8002,7 @@ impl WholeCellSimulator {
         self.organism_data_ref = saved.organism_data_ref.clone();
         self.organism_data = saved.organism_data.clone();
         if let Some(organism) = self.organism_data.as_mut() {
-            Self::backfill_legacy_pool_bulk_fields(&mut organism.pools);
+            Self::backfill_legacy_pool_metadata(&mut organism.pools);
         }
         self.organism_assets = saved.organism_assets.clone();
         self.organism_process_registry = saved.organism_process_registry.clone();
@@ -11255,24 +11270,28 @@ mod tests {
         sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
             species: "custom_energy_buffer".to_string(),
             bulk_field: Some(WholeCellBulkField::ATP),
+            role: None,
             concentration_mm: 1.75,
             count: 0.0,
         });
         sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
             species: "fallback_carrier".to_string(),
             bulk_field: Some(WholeCellBulkField::Glucose),
+            role: None,
             concentration_mm: 1.45,
             count: 0.0,
         });
         sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
             species: "respiratory_buffer".to_string(),
             bulk_field: Some(WholeCellBulkField::Oxygen),
+            role: None,
             concentration_mm: 1.05,
             count: 0.0,
         });
         sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
             species: "spent_energy_buffer".to_string(),
             bulk_field: Some(WholeCellBulkField::ADP),
+            role: None,
             concentration_mm: 0.42,
             count: 0.0,
         });
@@ -11392,6 +11411,28 @@ mod tests {
             .find(|pool| pool.species.eq_ignore_ascii_case("atp"))
             .expect("stored ATP pool");
         assert_eq!(stored_pool.bulk_field, Some(WholeCellBulkField::ATP));
+    }
+
+    #[test]
+    fn test_apply_pool_seed_uses_explicit_pool_roles_for_diagnostics() {
+        let mut sim = WholeCellSimulator::new(WholeCellConfig::default());
+        sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
+            species: "opaque_diagnostic_pool".to_string(),
+            bulk_field: None,
+            role: Some(WholeCellPoolRole::ActiveRibosomes),
+            concentration_mm: 0.0,
+            count: 88.0,
+        });
+        sim.apply_pool_seed(&WholeCellMoleculePoolSpec {
+            species: "opaque_polymer_pool".to_string(),
+            bulk_field: None,
+            role: Some(WholeCellPoolRole::Ftsz),
+            concentration_mm: 0.0,
+            count: 42.0,
+        });
+
+        assert!((sim.active_ribosomes - 88.0).abs() < 1.0e-6);
+        assert!((sim.ftsz - 42.0).abs() < 1.0e-6);
     }
 
     #[test]

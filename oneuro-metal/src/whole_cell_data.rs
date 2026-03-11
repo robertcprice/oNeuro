@@ -190,6 +190,8 @@ pub struct WholeCellMoleculePoolSpec {
     #[serde(default)]
     pub bulk_field: Option<WholeCellBulkField>,
     #[serde(default)]
+    pub role: Option<WholeCellPoolRole>,
+    #[serde(default)]
     pub concentration_mm: f32,
     #[serde(default)]
     pub count: f32,
@@ -290,6 +292,15 @@ pub enum WholeCellBulkField {
     AminoAcids,
     Nucleotides,
     MembranePrecursors,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WholeCellPoolRole {
+    ActiveRibosomes,
+    ActiveRnap,
+    Dnaa,
+    Ftsz,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2053,10 +2064,28 @@ fn infer_pool_bulk_field(species_name: &str) -> Option<WholeCellBulkField> {
     }
 }
 
+fn infer_pool_role(species_name: &str) -> Option<WholeCellPoolRole> {
+    let lowered = species_name.trim().to_ascii_lowercase();
+    if lowered.contains("ribosome") {
+        Some(WholeCellPoolRole::ActiveRibosomes)
+    } else if lowered.contains("rnap") || lowered.contains("rna_polymerase") {
+        Some(WholeCellPoolRole::ActiveRnap)
+    } else if lowered.contains("dnaa") {
+        Some(WholeCellPoolRole::Dnaa)
+    } else if lowered.contains("ftsz") {
+        Some(WholeCellPoolRole::Ftsz)
+    } else {
+        None
+    }
+}
+
 fn normalize_pool_metadata(pools: &mut [WholeCellMoleculePoolSpec]) {
     for pool in pools {
         if pool.bulk_field.is_none() {
             pool.bulk_field = infer_pool_bulk_field(&pool.species);
+        }
+        if pool.role.is_none() {
+            pool.role = infer_pool_role(&pool.species);
         }
     }
 }
@@ -4970,6 +4999,7 @@ mod tests {
         package.pools.push(WholeCellMoleculePoolSpec {
             species: "adp".to_string(),
             bulk_field: Some(WholeCellBulkField::ADP),
+            role: None,
             concentration_mm: 0.35,
             count: 3200.0,
         });
@@ -5007,6 +5037,7 @@ mod tests {
         package.pools.push(WholeCellMoleculePoolSpec {
             species: "opaque_pool_alpha".to_string(),
             bulk_field: Some(WholeCellBulkField::MembranePrecursors),
+            role: None,
             concentration_mm: 0.22,
             count: 900.0,
         });
@@ -5048,6 +5079,27 @@ mod tests {
             .find(|pool| pool.species.eq_ignore_ascii_case("atp"))
             .expect("reparsed ATP pool");
         assert_eq!(reparsed_atp_pool.bulk_field, Some(WholeCellBulkField::ATP));
+    }
+
+    #[test]
+    fn parse_genome_asset_package_json_backfills_legacy_pool_role_metadata() {
+        let mut package = bundled_syn3a_genome_asset_package().expect("bundled asset package");
+        package.pools.push(WholeCellMoleculePoolSpec {
+            species: "ribosome_shadow_buffer".to_string(),
+            bulk_field: None,
+            role: None,
+            concentration_mm: 0.0,
+            count: 96.0,
+        });
+
+        let json = serde_json::to_string(&package).expect("serialize package");
+        let reparsed = parse_genome_asset_package_json(&json).expect("parse package");
+        let reparsed_pool = reparsed
+            .pools
+            .iter()
+            .find(|pool| pool.species == "ribosome_shadow_buffer")
+            .expect("reparsed role pool");
+        assert_eq!(reparsed_pool.role, Some(WholeCellPoolRole::ActiveRibosomes));
     }
 
     #[test]
