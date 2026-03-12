@@ -1363,3 +1363,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `runtime rebuild helpers and any remaining bootstrap paths that still compile registries from assets need the same explicit-vs-legacy split so the live simulator never repairs missing whole-cell metadata implicitly`
+
+### 2026-03-12 - Phase 7 / Remove Explicit Parser Registry And Species Repair
+
+- Summary:
+  - changed `parse_program_spec_json` and `parse_saved_state_json` to stop regenerating process registries from inline asset packages, so explicit JSON now preserves missing registry state instead of silently compiling one from assets
+  - kept bundled-reference hydration on the explicit path by resolving `organism_data_ref` to the matching bundled process registry, while moving inline-asset registry regeneration fully behind the legacy parser entrypoints
+  - removed runtime-species bulk-field normalization from the explicit saved-state parser and kept it only on the legacy saved-state path, so explicit saved-state JSON now round-trips species metadata without silent repair
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell_data.rs`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `the remaining explicit compatibility hook is the manual registry rebuild helper in the simulator, and any other live-path repair utilities should be pushed behind legacy-only or explicitly named migration paths`

@@ -5964,17 +5964,7 @@ pub fn compile_genome_process_registry_json_from_bundle_manifest_path(
         .map_err(|error| format!("failed to serialize compiled genome process registry: {error}"))
 }
 
-fn finalize_parsed_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
-    if spec.organism_data.is_none() {
-        if let Some(reference) = spec.organism_data_ref.as_deref() {
-            spec.organism_data = Some(resolve_bundled_organism_spec(reference)?);
-        }
-    }
-    if spec.organism_assets.is_none() {
-        if let Some(reference) = spec.organism_data_ref.as_deref() {
-            spec.organism_assets = Some(resolve_bundled_genome_asset_package(reference)?);
-        }
-    }
+fn refresh_program_spec_registry_from_assets_if_needed(spec: &mut WholeCellProgramSpec) {
     let refresh_registry = match (
         spec.organism_assets.as_ref(),
         spec.organism_process_registry.as_ref(),
@@ -5998,6 +5988,25 @@ fn finalize_parsed_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), S
     if refresh_registry {
         if let Some(assets) = spec.organism_assets.as_ref() {
             spec.organism_process_registry = Some(compile_genome_process_registry(assets));
+        }
+    }
+}
+
+fn finalize_parsed_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
+    if spec.organism_data.is_none() {
+        if let Some(reference) = spec.organism_data_ref.as_deref() {
+            spec.organism_data = Some(resolve_bundled_organism_spec(reference)?);
+        }
+    }
+    if spec.organism_assets.is_none() {
+        if let Some(reference) = spec.organism_data_ref.as_deref() {
+            spec.organism_assets = Some(resolve_bundled_genome_asset_package(reference)?);
+        }
+    }
+    if spec.organism_process_registry.is_none() {
+        if let Some(reference) = spec.organism_data_ref.as_deref() {
+            spec.organism_process_registry =
+                Some(resolve_bundled_genome_process_registry(reference)?);
         }
     }
     populate_program_contract_metadata(spec)?;
@@ -6028,6 +6037,7 @@ pub fn parse_legacy_program_spec_json(spec_json: &str) -> Result<WholeCellProgra
             *assets = compile_genome_asset_package(organism);
         }
     }
+    refresh_program_spec_registry_from_assets_if_needed(&mut spec);
     finalize_parsed_program_spec(&mut spec)?;
     Ok(spec)
 }
@@ -6219,9 +6229,7 @@ pub fn bundled_syn3a_program_spec() -> Result<WholeCellProgramSpec, String> {
         .clone()
 }
 
-fn finalize_parsed_saved_state(
-    mut state: WholeCellSavedState,
-) -> Result<WholeCellSavedState, String> {
+fn refresh_saved_state_registry_from_assets_if_needed(state: &mut WholeCellSavedState) {
     let refresh_registry = match (
         state.organism_assets.as_ref(),
         state.organism_process_registry.as_ref(),
@@ -6247,10 +6255,24 @@ fn finalize_parsed_saved_state(
             state.organism_process_registry = Some(compile_genome_process_registry(assets));
         }
     }
+}
+
+fn normalize_saved_state_runtime_species_from_registry(state: &mut WholeCellSavedState) {
     normalize_runtime_species_bulk_fields_from_registry(
         &mut state.organism_species,
         state.organism_process_registry.as_ref(),
     );
+}
+
+fn finalize_parsed_saved_state(
+    mut state: WholeCellSavedState,
+) -> Result<WholeCellSavedState, String> {
+    if state.organism_process_registry.is_none() {
+        if let Some(reference) = state.organism_data_ref.as_deref() {
+            state.organism_process_registry =
+                Some(resolve_bundled_genome_process_registry(reference)?);
+        }
+    }
     populate_saved_state_contract_metadata(&mut state)?;
     Ok(state)
 }
@@ -6280,7 +6302,9 @@ pub fn parse_legacy_saved_state_json(state_json: &str) -> Result<WholeCellSavedS
             *assets = compile_genome_asset_package(organism);
         }
     }
+    refresh_saved_state_registry_from_assets_if_needed(&mut state);
     backfill_legacy_runtime_species_bulk_fields(&mut state.organism_species);
+    normalize_saved_state_runtime_species_from_registry(&mut state);
     finalize_parsed_saved_state(state)
 }
 
@@ -6515,6 +6539,21 @@ mod tests {
             parsed.contract.program_schema_version,
             WHOLE_CELL_PROGRAM_SCHEMA_VERSION
         );
+    }
+
+    #[test]
+    fn parse_program_spec_json_keeps_inline_assets_without_registry_explicit() {
+        let mut spec = bundled_syn3a_program_spec().expect("bundled Syn3A program spec");
+        spec.organism_data_ref = None;
+        spec.organism_process_registry = None;
+
+        let parsed = parse_program_spec_json(
+            &serde_json::to_string(&spec).expect("serialize explicit asset-backed program spec"),
+        )
+        .expect("parse explicit asset-backed program spec");
+
+        assert!(parsed.organism_assets.is_some());
+        assert!(parsed.organism_process_registry.is_none());
     }
 
     #[test]
@@ -7427,6 +7466,36 @@ mod tests {
     }
 
     #[test]
+    fn parse_saved_state_json_keeps_runtime_species_bulk_fields_explicit() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.organism_species = vec![WholeCellSpeciesRuntimeState {
+            id: "atp_runtime_pool".to_string(),
+            name: "ATP".to_string(),
+            species_class: WholeCellSpeciesClass::Pool,
+            compartment: "cytosol".to_string(),
+            asset_class: WholeCellAssetClass::Energy,
+            basal_abundance: 8.0,
+            bulk_field: None,
+            operon: None,
+            parent_complex: None,
+            subsystem_targets: Vec::new(),
+            spatial_scope: WholeCellSpatialScope::WellMixed,
+            patch_domain: WholeCellPatchDomain::Distributed,
+            chromosome_domain: None,
+            count: 8.0,
+            anchor_count: 8.0,
+            synthesis_rate: 0.0,
+            turnover_rate: 0.0,
+        }];
+
+        let reparsed = parse_saved_state_json(&saved_state_to_json(&saved).expect("saved json"))
+            .expect("reparsed explicit saved state");
+
+        assert_eq!(reparsed.organism_species[0].bulk_field, None);
+    }
+
+    #[test]
     fn parse_legacy_saved_state_json_derives_inline_organism_assets() {
         let spec = bundled_syn3a_program_spec().expect("bundled spec");
         let mut saved = minimal_saved_state_from_spec(&spec);
@@ -7441,6 +7510,20 @@ mod tests {
         assert!(reparsed.organism_data.is_some());
         assert!(reparsed.organism_assets.is_some());
         assert!(reparsed.organism_process_registry.is_some());
+    }
+
+    #[test]
+    fn parse_saved_state_json_keeps_inline_assets_without_registry_explicit() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.organism_data_ref = None;
+        saved.organism_process_registry = None;
+
+        let reparsed = parse_saved_state_json(&saved_state_to_json(&saved).expect("saved json"))
+            .expect("reparsed explicit saved state");
+
+        assert!(reparsed.organism_assets.is_some());
+        assert!(reparsed.organism_process_registry.is_none());
     }
 
     #[test]
