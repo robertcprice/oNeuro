@@ -1804,3 +1804,21 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `explicit diagnostic summaries now follow explicit inventory, but legacy fallback inventory targets and the remaining compatibility-only derived summary rollups still need to be collapsed or isolated behind legacy-only boundaries`
+
+### 2026-03-12 - Phase 7 / Legacy Assembly Seed Narrowing
+
+- Summary:
+  - made the legacy-derived complex target path prefer persisted `complex_assembly` inventory before falling back to scalar-rule priors, so non-asset runtimes stop rebuilding targets from heuristic inventory whenever explicit assembly state already exists
+  - updated the quantum-growth regression to assert on explicit complex assembly state instead of the compatibility `ftsz` summary pool
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_legacy_derived_complex_targets_prefer_persistent_complex_inventory --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_quantum_profile_accelerates_growth --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy derived targets now prefer persisted explicit assembly state, but the remaining compatibility-only derived summary rollups still need to be collapsed or isolated behind legacy-only boundaries`

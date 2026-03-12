@@ -2717,6 +2717,14 @@ impl WholeCellSimulator {
         }
     }
 
+    fn legacy_fallback_assembly_inventory(&self) -> WholeCellAssemblyInventory {
+        if self.complex_assembly.total_complexes() > 1.0e-6 {
+            self.complex_assembly
+        } else {
+            self.prior_assembly_inventory()
+        }
+    }
+
     fn asset_class_process_scale(
         &self,
         asset_class: crate::whole_cell_data::WholeCellAssetClass,
@@ -6017,7 +6025,7 @@ impl WholeCellSimulator {
     }
 
     fn derived_complex_assembly_target(&self) -> WholeCellComplexAssemblyState {
-        let prior = self.prior_assembly_inventory();
+        let prior = self.legacy_fallback_assembly_inventory();
         let expression = &self.organism_expression;
         if self.organism_data.is_none() || expression.transcription_units.is_empty() {
             let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
@@ -10413,11 +10421,13 @@ mod tests {
 
         let baseline_snapshot = baseline.snapshot();
         let accelerated_snapshot = accelerated.snapshot();
+        let baseline_complex = baseline.complex_assembly_state();
+        let accelerated_complex = accelerated.complex_assembly_state();
         let baseline_membrane = baseline.membrane_division_state();
         let accelerated_membrane = accelerated.membrane_division_state();
 
         assert!(accelerated_snapshot.atp_mm >= baseline_snapshot.atp_mm);
-        assert!(accelerated_snapshot.ftsz > baseline_snapshot.ftsz);
+        assert!(accelerated_complex.ftsz_polymer >= baseline_complex.ftsz_polymer);
         assert!(accelerated_snapshot.surface_area_nm2 > baseline_snapshot.surface_area_nm2);
         assert!(accelerated_membrane.constriction_force > baseline_membrane.constriction_force);
     }
@@ -11782,6 +11792,45 @@ mod tests {
         assert!(high.target_abundance > low.target_abundance);
         assert!(high.subunit_pool > low.subunit_pool);
         assert!(low.target_abundance < 16.0);
+    }
+
+    #[test]
+    fn test_legacy_derived_complex_targets_prefer_persistent_complex_inventory() {
+        let mut sim = WholeCellSimulator::new(WholeCellConfig {
+            use_gpu: false,
+            ..WholeCellConfig::default()
+        });
+        sim.atp_mm = 1.4;
+        sim.amino_acids_mm = 1.3;
+        sim.nucleotides_mm = 1.2;
+        sim.membrane_precursors_mm = 1.1;
+        sim.glucose_mm = 1.0;
+        sim.oxygen_mm = 1.0;
+        sim.md_translation_scale = 1.2;
+        sim.md_membrane_scale = 1.1;
+        sim.complex_assembly = WholeCellComplexAssemblyState {
+            atp_band_complexes: 5.0,
+            ribosome_complexes: 19.0,
+            rnap_complexes: 11.0,
+            replisome_complexes: 7.0,
+            membrane_complexes: 13.0,
+            ftsz_polymer: 17.0,
+            dnaa_activity: 9.0,
+            ..WholeCellComplexAssemblyState::default()
+        };
+
+        let scalar_prior = sim.prior_assembly_inventory();
+        let target = sim.derived_complex_assembly_target();
+
+        assert!((target.ribosome_complexes - 19.0).abs() < 1.0e-6);
+        assert!((target.rnap_complexes - 11.0).abs() < 1.0e-6);
+        assert!((target.replisome_complexes - 7.0).abs() < 1.0e-6);
+        assert!((target.membrane_complexes - 13.0).abs() < 1.0e-6);
+        assert!((target.ftsz_polymer - 17.0).abs() < 1.0e-6);
+        assert!((scalar_prior.ribosome_complexes - target.ribosome_complexes).abs() > 1.0e-3);
+        assert!((scalar_prior.membrane_complexes - target.membrane_complexes).abs() > 1.0e-3);
+        assert!(target.ribosome_target > 0.0);
+        assert!(target.membrane_target > 0.0);
     }
 
     #[test]
