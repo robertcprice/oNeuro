@@ -1005,3 +1005,21 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `Syn3A now compiles through explicit structured sources, but the remaining monolithic compatibility path still exists for older organism specs and should keep shrinking until explicit bundles are the default ingestion form`
+
+### 2026-03-11 - Phase 7 / Embedded Structured Syn3A Native Slice
+
+- Summary:
+  - replaced the native Rust bundled Syn3A organism source path so it now compiles from embedded structured bundle files (`manifest`, `metadata`, `gene_features`, `gene_products`, `gene_semantics`, `transcription_units`, `transcription_unit_semantics`, `chromosome_domains`, and `pools`) instead of a separate monolithic embedded organism JSON
+  - kept `bundled_syn3a_organism_spec_json()` as a convenience surface, but made it a serialized view of the structured native compilation result rather than an independent source of truth
+  - added a native regression proving the embedded structured Syn3A build matches the checked-in structured manifest compilation exactly, so the bundled Rust path and the source-bundle path stay locked together
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `the bundled Syn3A native path now uses explicit structured sources, but the broader compatibility layer still supports legacy monolithic organism ingestion and should continue shrinking as more organisms move onto explicit bundle contracts`

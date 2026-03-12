@@ -15,7 +15,25 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 const BUNDLED_SYN3A_PROGRAM_JSON: &str = include_str!("../specs/whole_cell_syn3a_reference.json");
-const BUNDLED_SYN3A_ORGANISM_JSON: &str = include_str!("../specs/whole_cell_syn3a_organism.json");
+const BUNDLED_SYN3A_BUNDLE_MANIFEST_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/manifest.json");
+const BUNDLED_SYN3A_BUNDLE_METADATA_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/metadata.json");
+const BUNDLED_SYN3A_BUNDLE_GENE_FEATURES_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/gene_features.json");
+const BUNDLED_SYN3A_BUNDLE_GENE_PRODUCTS_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/gene_products.json");
+const BUNDLED_SYN3A_BUNDLE_GENE_SEMANTICS_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/gene_semantics.json");
+const BUNDLED_SYN3A_BUNDLE_TRANSCRIPTION_UNITS_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/transcription_units.json");
+const BUNDLED_SYN3A_BUNDLE_TRANSCRIPTION_UNIT_SEMANTICS_JSON: &str = include_str!(
+    "../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/transcription_unit_semantics.json"
+);
+const BUNDLED_SYN3A_BUNDLE_CHROMOSOME_DOMAINS_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/chromosome_domains.json");
+const BUNDLED_SYN3A_BUNDLE_POOLS_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/pools.json");
 pub const WHOLE_CELL_CONTRACT_VERSION: &str = "whole_cell_phase0";
 pub const WHOLE_CELL_PROGRAM_SCHEMA_VERSION: u32 = 1;
 pub const WHOLE_CELL_SAVED_STATE_SCHEMA_VERSION: u32 = 1;
@@ -4897,6 +4915,77 @@ fn parse_bundle_manifest_json(
         .map_err(|error| format!("failed to parse organism bundle manifest: {error}"))
 }
 
+fn compile_embedded_syn3a_organism_spec() -> Result<WholeCellOrganismSpec, String> {
+    let manifest = parse_bundle_manifest_json(BUNDLED_SYN3A_BUNDLE_MANIFEST_JSON)?;
+    let metadata: WholeCellOrganismBundleMetadata =
+        serde_json::from_str(BUNDLED_SYN3A_BUNDLE_METADATA_JSON)
+            .map_err(|error| format!("failed to parse embedded Syn3A bundle metadata: {error}"))?;
+    let chromosome_length_bp = metadata
+        .chromosome_length_bp
+        .ok_or_else(|| "embedded Syn3A bundle metadata missing chromosome_length_bp".to_string())?;
+
+    let mut genes = serde_json::from_str::<Vec<WholeCellGenomeFeature>>(
+        BUNDLED_SYN3A_BUNDLE_GENE_FEATURES_JSON,
+    )
+    .map_err(|error| format!("failed to parse embedded Syn3A gene features: {error}"))?;
+    let gene_products = serde_json::from_str::<Vec<WholeCellGeneProductAnnotation>>(
+        BUNDLED_SYN3A_BUNDLE_GENE_PRODUCTS_JSON,
+    )
+    .map_err(|error| format!("failed to parse embedded Syn3A gene products: {error}"))?;
+    merge_gene_product_annotations(&mut genes, &gene_products);
+    let gene_semantics = serde_json::from_str::<Vec<WholeCellGeneSemanticAnnotation>>(
+        BUNDLED_SYN3A_BUNDLE_GENE_SEMANTICS_JSON,
+    )
+    .map_err(|error| format!("failed to parse embedded Syn3A gene semantics: {error}"))?;
+    merge_gene_semantic_annotations(&mut genes, &gene_semantics);
+    if manifest.require_explicit_gene_semantics {
+        validate_explicit_gene_semantics(&genes)?;
+    }
+
+    let mut transcription_units = serde_json::from_str::<Vec<WholeCellTranscriptionUnitSpec>>(
+        BUNDLED_SYN3A_BUNDLE_TRANSCRIPTION_UNITS_JSON,
+    )
+    .map_err(|error| format!("failed to parse embedded Syn3A transcription units: {error}"))?;
+    let unit_semantics = serde_json::from_str::<Vec<WholeCellTranscriptionUnitSemanticAnnotation>>(
+        BUNDLED_SYN3A_BUNDLE_TRANSCRIPTION_UNIT_SEMANTICS_JSON,
+    )
+    .map_err(|error| {
+        format!("failed to parse embedded Syn3A transcription unit semantics: {error}")
+    })?;
+    merge_transcription_unit_semantic_annotations(&mut transcription_units, &unit_semantics);
+    if manifest.require_explicit_transcription_unit_semantics {
+        validate_explicit_transcription_unit_semantics(&transcription_units)?;
+    }
+
+    let mut pools =
+        serde_json::from_str::<Vec<WholeCellMoleculePoolSpec>>(BUNDLED_SYN3A_BUNDLE_POOLS_JSON)
+            .map_err(|error| format!("failed to parse embedded Syn3A pools: {error}"))?;
+    normalize_pool_metadata(&mut pools);
+
+    let chromosome_domains = serde_json::from_str::<Vec<WholeCellChromosomeDomainSpec>>(
+        BUNDLED_SYN3A_BUNDLE_CHROMOSOME_DOMAINS_JSON,
+    )
+    .map_err(|error| format!("failed to parse embedded Syn3A chromosome domains: {error}"))?;
+
+    Ok(with_compiled_chromosome_domains(
+        with_normalized_semantic_metadata(with_normalized_pool_metadata(WholeCellOrganismSpec {
+            organism: manifest
+                .organism
+                .clone()
+                .unwrap_or_else(|| metadata.organism.clone()),
+            chromosome_length_bp: chromosome_length_bp.max(1),
+            origin_bp: metadata.origin_bp.min(chromosome_length_bp.max(1)),
+            terminus_bp: metadata.terminus_bp.min(chromosome_length_bp.max(1)),
+            geometry: metadata.geometry,
+            composition: metadata.composition,
+            chromosome_domains,
+            pools,
+            genes,
+            transcription_units,
+        })),
+    ))
+}
+
 pub fn compile_organism_spec_from_bundle_manifest_path(
     manifest_path: &str,
 ) -> Result<WholeCellOrganismSpec, String> {
@@ -5208,13 +5297,19 @@ pub fn parse_genome_asset_package_json(
 }
 
 pub fn bundled_syn3a_organism_spec_json() -> &'static str {
-    BUNDLED_SYN3A_ORGANISM_JSON
+    static BUNDLED_ORGANISM_JSON: OnceLock<String> = OnceLock::new();
+    BUNDLED_ORGANISM_JSON.get_or_init(|| {
+        let organism =
+            bundled_syn3a_organism_spec().expect("compile embedded structured Syn3A organism");
+        serde_json::to_string_pretty(&organism)
+            .expect("serialize embedded structured Syn3A organism")
+    })
 }
 
 pub fn bundled_syn3a_organism_spec() -> Result<WholeCellOrganismSpec, String> {
     static BUNDLED_ORGANISM: OnceLock<Result<WholeCellOrganismSpec, String>> = OnceLock::new();
     BUNDLED_ORGANISM
-        .get_or_init(|| parse_organism_spec_json(BUNDLED_SYN3A_ORGANISM_JSON))
+        .get_or_init(compile_embedded_syn3a_organism_spec)
         .clone()
 }
 
@@ -5882,6 +5977,26 @@ mod tests {
                         .starts_with("pool_nucleoid_track_atp")
                 })
         }));
+    }
+
+    #[test]
+    fn bundled_syn3a_embedded_structured_sources_match_manifest_compilation() {
+        let embedded = bundled_syn3a_organism_spec().expect("embedded organism");
+        let manifest_path = bundle_manifest_path("jcvi_syn3a");
+        let from_manifest = compile_organism_spec_from_bundle_manifest_path(&manifest_path)
+            .expect("manifest organism");
+
+        assert_eq!(embedded.organism, from_manifest.organism);
+        assert_eq!(embedded.genes, from_manifest.genes);
+        assert_eq!(
+            embedded.transcription_units,
+            from_manifest.transcription_units
+        );
+        assert_eq!(embedded.pools, from_manifest.pools);
+        assert_eq!(
+            embedded.chromosome_domains,
+            from_manifest.chromosome_domains
+        );
     }
 
     #[test]
