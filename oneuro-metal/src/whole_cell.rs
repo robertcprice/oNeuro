@@ -175,6 +175,42 @@ pub struct WholeCellSnapshot {
 
 type WholeCellAssemblyInventory = WholeCellComplexAssemblyState;
 
+#[derive(Debug, Clone, Copy, Default)]
+struct WholeCellAssemblyChannelShares {
+    atp_band: f32,
+    ribosome: f32,
+    rnap: f32,
+    replisome: f32,
+    membrane: f32,
+    ftsz: f32,
+    dnaa: f32,
+}
+
+impl WholeCellAssemblyChannelShares {
+    fn total(self) -> f32 {
+        self.atp_band
+            + self.ribosome
+            + self.rnap
+            + self.replisome
+            + self.membrane
+            + self.ftsz
+            + self.dnaa
+    }
+
+    fn normalized(self) -> Self {
+        let total = self.total().max(1.0e-6);
+        Self {
+            atp_band: self.atp_band / total,
+            ribosome: self.ribosome / total,
+            rnap: self.rnap / total,
+            replisome: self.replisome / total,
+            membrane: self.membrane / total,
+            ftsz: self.ftsz / total,
+            dnaa: self.dnaa / total,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct WholeCellProcessFluxes {
     energy_capacity: f32,
@@ -6302,43 +6338,14 @@ impl WholeCellSimulator {
                 + 0.55 * state.maturation_rate
                 + 0.30 * state.elongation_rate
                 + 0.15 * state.nucleation_rate;
-            let mut weights = complex.process_weights.clamped();
-            for target in &complex.subsystem_targets {
-                match target {
-                    Syn3ASubsystemPreset::AtpSynthaseMembraneBand => {
-                        weights.energy += 1.2;
-                        weights.membrane += 0.35;
-                    }
-                    Syn3ASubsystemPreset::RibosomePolysomeCluster => {
-                        weights.translation += 1.25;
-                        weights.transcription += 0.20;
-                    }
-                    Syn3ASubsystemPreset::ReplisomeTrack => {
-                        weights.replication += 1.15;
-                        weights.segregation += 0.55;
-                    }
-                    Syn3ASubsystemPreset::FtsZSeptumRing => {
-                        weights.constriction += 1.25;
-                        weights.membrane += 0.30;
-                    }
-                }
-            }
-            if weights.transcription <= 1.0e-6 {
-                weights.transcription += 0.18
-                    * (weights.translation
-                        + weights.replication
-                        + weights.membrane
-                        + weights.energy)
-                        .max(0.1);
-            }
-            let total = weights.total().max(1.0e-6);
-            let atp_share = (weights.energy + 0.20 * weights.membrane) / total;
-            let ribosome_share = (weights.translation + 0.10 * weights.transcription) / total;
-            let rnap_share = (weights.transcription + 0.10 * weights.translation) / total;
-            let replisome_share = (weights.replication + 0.70 * weights.segregation) / total;
-            let membrane_share = (weights.membrane + 0.15 * weights.energy) / total;
-            let constriction_share = (weights.constriction + 0.20 * weights.membrane) / total;
-            let dnaa_share = (0.65 * weights.replication + 0.35 * weights.transcription) / total;
+            let shares = self.named_complex_inventory_shares(complex);
+            let atp_share = shares.atp_band;
+            let ribosome_share = shares.ribosome;
+            let rnap_share = shares.rnap;
+            let replisome_share = shares.replisome;
+            let membrane_share = shares.membrane;
+            let constriction_share = shares.ftsz;
+            let dnaa_share = shares.dnaa;
 
             aggregate.atp_band_complexes += effective_abundance * atp_share;
             aggregate.ribosome_complexes += effective_abundance * ribosome_share;
@@ -6373,6 +6380,153 @@ impl WholeCellSimulator {
             aggregate.dnaa_degradation_rate += state.degradation_rate * dnaa_share;
         }
         aggregate
+    }
+
+    fn heuristic_complex_inventory_shares(
+        &self,
+        complex: &WholeCellComplexSpec,
+    ) -> WholeCellAssemblyChannelShares {
+        let mut weights = complex.process_weights.clamped();
+        for target in &complex.subsystem_targets {
+            match target {
+                Syn3ASubsystemPreset::AtpSynthaseMembraneBand => {
+                    weights.energy += 1.2;
+                    weights.membrane += 0.35;
+                }
+                Syn3ASubsystemPreset::RibosomePolysomeCluster => {
+                    weights.translation += 1.25;
+                    weights.transcription += 0.20;
+                }
+                Syn3ASubsystemPreset::ReplisomeTrack => {
+                    weights.replication += 1.15;
+                    weights.segregation += 0.55;
+                }
+                Syn3ASubsystemPreset::FtsZSeptumRing => {
+                    weights.constriction += 1.25;
+                    weights.membrane += 0.30;
+                }
+            }
+        }
+        if weights.transcription <= 1.0e-6 {
+            weights.transcription += 0.18
+                * (weights.translation + weights.replication + weights.membrane + weights.energy)
+                    .max(0.1);
+        }
+        let total = weights.total().max(1.0e-6);
+        WholeCellAssemblyChannelShares {
+            atp_band: (weights.energy + 0.20 * weights.membrane) / total,
+            ribosome: (weights.translation + 0.10 * weights.transcription) / total,
+            rnap: (weights.transcription + 0.10 * weights.translation) / total,
+            replisome: (weights.replication + 0.70 * weights.segregation) / total,
+            membrane: (weights.membrane + 0.15 * weights.energy) / total,
+            ftsz: (weights.constriction + 0.20 * weights.membrane) / total,
+            dnaa: (0.65 * weights.replication + 0.35 * weights.transcription) / total,
+        }
+    }
+
+    fn named_complex_inventory_shares(
+        &self,
+        complex: &WholeCellComplexSpec,
+    ) -> WholeCellAssemblyChannelShares {
+        let mut shares = WholeCellAssemblyChannelShares::default();
+        for target in &complex.subsystem_targets {
+            match target {
+                Syn3ASubsystemPreset::AtpSynthaseMembraneBand => {
+                    shares.atp_band += 1.0;
+                }
+                Syn3ASubsystemPreset::RibosomePolysomeCluster => {
+                    shares.ribosome += 1.0;
+                }
+                Syn3ASubsystemPreset::ReplisomeTrack => {
+                    shares.replisome += 0.78;
+                    shares.dnaa += 0.22;
+                }
+                Syn3ASubsystemPreset::FtsZSeptumRing => {
+                    shares.ftsz += 1.0;
+                }
+            }
+        }
+        if shares.total() > 1.0e-6 {
+            return shares.normalized();
+        }
+
+        shares = match complex.family {
+            WholeCellAssemblyFamily::Ribosome => WholeCellAssemblyChannelShares {
+                ribosome: 1.0,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            WholeCellAssemblyFamily::RnaPolymerase => WholeCellAssemblyChannelShares {
+                rnap: 1.0,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            WholeCellAssemblyFamily::Replisome => WholeCellAssemblyChannelShares {
+                replisome: 0.78,
+                dnaa: 0.22,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            WholeCellAssemblyFamily::AtpSynthase => WholeCellAssemblyChannelShares {
+                atp_band: 1.0,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            WholeCellAssemblyFamily::Transporter
+            | WholeCellAssemblyFamily::MembraneEnzyme => WholeCellAssemblyChannelShares {
+                membrane: 1.0,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            WholeCellAssemblyFamily::Divisome => WholeCellAssemblyChannelShares {
+                ftsz: 1.0,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            WholeCellAssemblyFamily::ChaperoneClient | WholeCellAssemblyFamily::Generic => {
+                WholeCellAssemblyChannelShares::default()
+            }
+        };
+        if shares.total() > 1.0e-6 {
+            return shares.normalized();
+        }
+
+        shares = match complex.asset_class {
+            crate::whole_cell_data::WholeCellAssetClass::Energy => WholeCellAssemblyChannelShares {
+                atp_band: 1.0,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            crate::whole_cell_data::WholeCellAssetClass::Translation => {
+                WholeCellAssemblyChannelShares {
+                    ribosome: 1.0,
+                    ..WholeCellAssemblyChannelShares::default()
+                }
+            }
+            crate::whole_cell_data::WholeCellAssetClass::Replication
+            | crate::whole_cell_data::WholeCellAssetClass::Segregation => {
+                WholeCellAssemblyChannelShares {
+                    replisome: 0.78,
+                    dnaa: 0.22,
+                    ..WholeCellAssemblyChannelShares::default()
+                }
+            }
+            crate::whole_cell_data::WholeCellAssetClass::Membrane => {
+                WholeCellAssemblyChannelShares {
+                    membrane: 1.0,
+                    ..WholeCellAssemblyChannelShares::default()
+                }
+            }
+            crate::whole_cell_data::WholeCellAssetClass::Constriction => {
+                WholeCellAssemblyChannelShares {
+                    ftsz: 1.0,
+                    ..WholeCellAssemblyChannelShares::default()
+                }
+            }
+            crate::whole_cell_data::WholeCellAssetClass::QualityControl
+            | crate::whole_cell_data::WholeCellAssetClass::Homeostasis
+            | crate::whole_cell_data::WholeCellAssetClass::Generic => {
+                WholeCellAssemblyChannelShares::default()
+            }
+        };
+        if shares.total() > 1.0e-6 {
+            return shares.normalized();
+        }
+
+        self.heuristic_complex_inventory_shares(complex)
     }
 
     fn update_named_complexes_state(&mut self, dt: f32) -> bool {
@@ -12008,9 +12162,9 @@ mod tests {
         assert!(end.total_complexes() > 0.0);
         assert!(end.ribosome_target > 0.0);
         assert!(end.ribosome_assembly_rate > 0.0);
-        assert!(end.rnap_assembly_rate > 0.0);
+        assert!(end.replisome_assembly_rate > 0.0);
         assert!(end.ribosome_complexes != start.ribosome_complexes);
-        assert!(end.rnap_complexes != start.rnap_complexes);
+        assert!(end.replisome_complexes != start.replisome_complexes);
     }
 
     #[test]
@@ -12282,8 +12436,8 @@ mod tests {
         let reduced_fluxes = sim.process_fluxes(reduced_inventory);
 
         assert!(reduced_inventory.ribosome_complexes < baseline_inventory.ribosome_complexes);
-        assert!(reduced_inventory.rnap_complexes < baseline_inventory.rnap_complexes);
         assert!(reduced_inventory.replisome_complexes < baseline_inventory.replisome_complexes);
+        assert!(reduced_inventory.ftsz_polymer < baseline_inventory.ftsz_polymer);
         assert!(reduced_fluxes.translation_capacity <= baseline_fluxes.translation_capacity);
         assert!(reduced_fluxes.transcription_capacity <= baseline_fluxes.transcription_capacity);
         assert!(reduced_fluxes.replication_capacity <= baseline_fluxes.replication_capacity);
@@ -12314,6 +12468,182 @@ mod tests {
         assert!((inventory.rnap_complexes - expected.rnap_complexes).abs() < 1.0e-6);
         assert!((inventory.replisome_complexes - expected.replisome_complexes).abs() < 1.0e-6);
         assert!((inventory.ftsz_target - expected.ftsz_target).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_named_complex_aggregation_prefers_explicit_family_channels() {
+        let sim = WholeCellSimulator::new(WholeCellConfig {
+            use_gpu: false,
+            ..WholeCellConfig::default()
+        });
+        let assets = WholeCellGenomeAssetPackage {
+            organism: "Aggregation-demo".to_string(),
+            chromosome_length_bp: 800,
+            origin_bp: 0,
+            terminus_bp: 400,
+            chromosome_domains: Vec::new(),
+            operons: Vec::new(),
+            operon_semantics: Vec::new(),
+            rnas: Vec::new(),
+            proteins: Vec::new(),
+            protein_semantics: Vec::new(),
+            complex_semantics: Vec::new(),
+            complexes: vec![
+                WholeCellComplexSpec {
+                    id: "ribosome_complex".to_string(),
+                    name: "ribosome complex".to_string(),
+                    operon: "ribosome_operon".to_string(),
+                    components: Vec::new(),
+                    basal_abundance: 12.0,
+                    asset_class: WholeCellAssetClass::Replication,
+                    family: WholeCellAssemblyFamily::Ribosome,
+                    process_weights: WholeCellProcessWeights {
+                        replication: 5.0,
+                        segregation: 3.0,
+                        ..WholeCellProcessWeights::default()
+                    },
+                    subsystem_targets: Vec::new(),
+                    membrane_inserted: false,
+                    chromosome_coupled: false,
+                    division_coupled: false,
+                },
+                WholeCellComplexSpec {
+                    id: "rnap_complex".to_string(),
+                    name: "rnap complex".to_string(),
+                    operon: "rnap_operon".to_string(),
+                    components: Vec::new(),
+                    basal_abundance: 6.0,
+                    asset_class: WholeCellAssetClass::QualityControl,
+                    family: WholeCellAssemblyFamily::RnaPolymerase,
+                    process_weights: WholeCellProcessWeights {
+                        replication: 4.0,
+                        translation: 2.0,
+                        ..WholeCellProcessWeights::default()
+                    },
+                    subsystem_targets: Vec::new(),
+                    membrane_inserted: false,
+                    chromosome_coupled: false,
+                    division_coupled: false,
+                },
+                WholeCellComplexSpec {
+                    id: "divisome_complex".to_string(),
+                    name: "divisome complex".to_string(),
+                    operon: "division_operon".to_string(),
+                    components: Vec::new(),
+                    basal_abundance: 10.0,
+                    asset_class: WholeCellAssetClass::Energy,
+                    family: WholeCellAssemblyFamily::Divisome,
+                    process_weights: WholeCellProcessWeights {
+                        energy: 4.0,
+                        membrane: 2.0,
+                        ..WholeCellProcessWeights::default()
+                    },
+                    subsystem_targets: Vec::new(),
+                    membrane_inserted: false,
+                    chromosome_coupled: false,
+                    division_coupled: false,
+                },
+            ],
+            pools: Vec::new(),
+        };
+        let mut sim = sim;
+        sim.named_complexes = vec![
+            WholeCellNamedComplexState {
+                id: "ribosome_complex".to_string(),
+                operon: "ribosome_operon".to_string(),
+                asset_class: WholeCellAssetClass::Replication,
+                family: WholeCellAssemblyFamily::Ribosome,
+                subsystem_targets: Vec::new(),
+                subunit_pool: 0.0,
+                nucleation_intermediate: 0.0,
+                elongation_intermediate: 0.0,
+                abundance: 10.0,
+                target_abundance: 12.0,
+                assembly_rate: 3.0,
+                degradation_rate: 1.0,
+                nucleation_rate: 0.0,
+                elongation_rate: 0.0,
+                maturation_rate: 0.0,
+                component_satisfaction: 1.0,
+                structural_support: 1.0,
+                assembly_progress: 1.0,
+                stalled_intermediate: 0.0,
+                damaged_abundance: 0.0,
+                limiting_component_signal: 1.0,
+                shared_component_pressure: 0.0,
+                insertion_progress: 1.0,
+                failure_count: 0.0,
+            },
+            WholeCellNamedComplexState {
+                id: "rnap_complex".to_string(),
+                operon: "rnap_operon".to_string(),
+                asset_class: WholeCellAssetClass::QualityControl,
+                family: WholeCellAssemblyFamily::RnaPolymerase,
+                subsystem_targets: Vec::new(),
+                subunit_pool: 0.0,
+                nucleation_intermediate: 0.0,
+                elongation_intermediate: 0.0,
+                abundance: 6.0,
+                target_abundance: 7.0,
+                assembly_rate: 1.5,
+                degradation_rate: 0.25,
+                nucleation_rate: 0.0,
+                elongation_rate: 0.0,
+                maturation_rate: 0.0,
+                component_satisfaction: 1.0,
+                structural_support: 1.0,
+                assembly_progress: 1.0,
+                stalled_intermediate: 0.0,
+                damaged_abundance: 0.0,
+                limiting_component_signal: 1.0,
+                shared_component_pressure: 0.0,
+                insertion_progress: 1.0,
+                failure_count: 0.0,
+            },
+            WholeCellNamedComplexState {
+                id: "divisome_complex".to_string(),
+                operon: "division_operon".to_string(),
+                asset_class: WholeCellAssetClass::Energy,
+                family: WholeCellAssemblyFamily::Divisome,
+                subsystem_targets: Vec::new(),
+                subunit_pool: 0.0,
+                nucleation_intermediate: 0.0,
+                elongation_intermediate: 0.0,
+                abundance: 8.0,
+                target_abundance: 9.0,
+                assembly_rate: 2.0,
+                degradation_rate: 0.5,
+                nucleation_rate: 0.0,
+                elongation_rate: 0.0,
+                maturation_rate: 0.0,
+                component_satisfaction: 1.0,
+                structural_support: 1.0,
+                assembly_progress: 1.0,
+                stalled_intermediate: 0.0,
+                damaged_abundance: 0.0,
+                limiting_component_signal: 1.0,
+                shared_component_pressure: 0.0,
+                insertion_progress: 1.0,
+                failure_count: 0.0,
+            },
+        ];
+
+        let aggregate = sim.aggregate_named_complex_assembly_state(&assets);
+
+        assert!((aggregate.ribosome_complexes - 10.0).abs() < 1.0e-6);
+        assert!((aggregate.ribosome_target - 12.0).abs() < 1.0e-6);
+        assert!((aggregate.ribosome_assembly_rate - 3.0).abs() < 1.0e-6);
+        assert!((aggregate.ribosome_degradation_rate - 1.0).abs() < 1.0e-6);
+        assert!((aggregate.rnap_complexes - 6.0).abs() < 1.0e-6);
+        assert!((aggregate.rnap_target - 7.0).abs() < 1.0e-6);
+        assert!((aggregate.rnap_assembly_rate - 1.5).abs() < 1.0e-6);
+        assert!((aggregate.rnap_degradation_rate - 0.25).abs() < 1.0e-6);
+        assert!((aggregate.ftsz_polymer - 8.0).abs() < 1.0e-6);
+        assert!((aggregate.ftsz_target - 9.0).abs() < 1.0e-6);
+        assert!((aggregate.ftsz_assembly_rate - 2.0).abs() < 1.0e-6);
+        assert!((aggregate.ftsz_degradation_rate - 0.5).abs() < 1.0e-6);
+        assert!(aggregate.replisome_complexes.abs() < 1.0e-6);
+        assert!(aggregate.atp_band_complexes.abs() < 1.0e-6);
     }
 
     #[test]

@@ -1701,3 +1701,18 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `named-complex inventory now owns the active assembly rollup, but the downstream process-capacity rules still compress explicit inventories into coarse subsystem scalars and remain a good next target for bottom-up replacement`
+
+### 2026-03-12 - Phase 7 / Explicit Complex Channel Ownership
+
+- Summary:
+  - replaced the active named-complex aggregation share mix with explicit channel ownership from subsystem targets, family, and asset class, leaving the old process-weight blend only as a compatibility fallback for unmapped legacy cases
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_named_complex_aggregation_prefers_explicit_family_channels --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `named-complex aggregation now follows explicit biological ownership, but the downstream process-capacity rules still collapse those explicit inventories into scalar rule surrogates and remain the next bottom-up target`
