@@ -3190,41 +3190,145 @@ fn transcription_unit_midpoint_bp(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ChromosomeDomainSeed {
+    start_bp: u32,
+    end_bp: u32,
+    midpoint_bp: u32,
+    span_bp: u32,
+}
+
+fn implicit_chromosome_domain_seeds(
+    spec: &WholeCellOrganismSpec,
+    operons: &[WholeCellOperonSpec],
+    genome_bp: u32,
+) -> Vec<ChromosomeDomainSeed> {
+    let mut seeds = if !operons.is_empty() {
+        operons
+            .iter()
+            .map(|operon| {
+                let (start_bp, end_bp) =
+                    normalized_chromosome_interval(operon.promoter_bp, operon.terminator_bp, genome_bp);
+                ChromosomeDomainSeed {
+                    start_bp,
+                    end_bp,
+                    midpoint_bp: midpoint_bp(start_bp, end_bp),
+                    span_bp: end_bp.saturating_sub(start_bp) + 1,
+                }
+            })
+            .collect::<Vec<_>>()
+    } else {
+        spec.genes
+            .iter()
+            .map(|gene| {
+                let (start_bp, end_bp) =
+                    normalized_chromosome_interval(gene.start_bp, gene.end_bp, genome_bp);
+                ChromosomeDomainSeed {
+                    start_bp,
+                    end_bp,
+                    midpoint_bp: midpoint_bp(start_bp, end_bp),
+                    span_bp: end_bp.saturating_sub(start_bp) + 1,
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    seeds.sort_by_key(|seed| (seed.midpoint_bp, seed.start_bp, seed.end_bp));
+    seeds
+}
+
+fn compile_implicit_chromosome_domains(
+    spec: &WholeCellOrganismSpec,
+    operons: &[WholeCellOperonSpec],
+    genome_bp: u32,
+) -> Vec<WholeCellChromosomeDomainSpec> {
+    let seeds = implicit_chromosome_domain_seeds(spec, operons, genome_bp);
+    if seeds.is_empty() {
+        return vec![WholeCellChromosomeDomainSpec {
+            id: "chromosome_domain_0".to_string(),
+            start_bp: 0,
+            end_bp: genome_bp.saturating_sub(1),
+            axial_center_fraction: 0.5,
+            axial_spread_fraction: 0.24,
+            genes: Vec::new(),
+            transcription_units: Vec::new(),
+            operons: Vec::new(),
+        }];
+    }
+
+    let mut split_points = Vec::new();
+    for pair in seeds.windows(2) {
+        let previous = pair[0];
+        let current = pair[1];
+        let gap_start = previous.end_bp.saturating_add(1).min(genome_bp.saturating_sub(1));
+        let gap_end = current.start_bp.saturating_sub(1);
+        if gap_start > gap_end {
+            continue;
+        }
+        let gap_bp = gap_end.saturating_sub(gap_start) + 1;
+        let local_feature_span = ((previous.span_bp as u64 + current.span_bp as u64) / 2) as u32;
+        if gap_bp > local_feature_span.max(1) {
+            split_points.push(midpoint_bp(gap_start, gap_end));
+        }
+    }
+
+    let mut domains = Vec::new();
+    let mut domain_start = 0u32;
+    for split_bp in split_points {
+        let domain_end = split_bp.min(genome_bp.saturating_sub(1));
+        if domain_end < domain_start {
+            continue;
+        }
+        let center_fraction =
+            ((midpoint_bp(domain_start, domain_end) as f32 + 0.5) / genome_bp as f32)
+                .clamp(0.02, 0.98);
+        let spread_fraction = (((domain_end.saturating_sub(domain_start) + 1) as f32
+            / genome_bp as f32)
+            * 0.75)
+            .clamp(0.08, 0.24);
+        domains.push(WholeCellChromosomeDomainSpec {
+            id: format!("chromosome_domain_{}", domains.len()),
+            start_bp: domain_start,
+            end_bp: domain_end,
+            axial_center_fraction: center_fraction,
+            axial_spread_fraction: spread_fraction,
+            genes: Vec::new(),
+            transcription_units: Vec::new(),
+            operons: Vec::new(),
+        });
+        domain_start = domain_end.saturating_add(1).min(genome_bp.saturating_sub(1));
+    }
+
+    let domain_end = genome_bp.saturating_sub(1);
+    if domains.is_empty() || domain_start <= domain_end {
+        let center_fraction = ((midpoint_bp(domain_start, domain_end) as f32 + 0.5)
+            / genome_bp as f32)
+            .clamp(0.02, 0.98);
+        let spread_fraction =
+            (((domain_end.saturating_sub(domain_start) + 1) as f32 / genome_bp as f32) * 0.75)
+                .clamp(0.08, 0.24);
+        domains.push(WholeCellChromosomeDomainSpec {
+            id: format!("chromosome_domain_{}", domains.len()),
+            start_bp: domain_start,
+            end_bp: domain_end,
+            axial_center_fraction: center_fraction,
+            axial_spread_fraction: spread_fraction,
+            genes: Vec::new(),
+            transcription_units: Vec::new(),
+            operons: Vec::new(),
+        });
+    }
+
+    domains
+}
+
 fn compile_chromosome_domains(
     spec: &WholeCellOrganismSpec,
     operons: &[WholeCellOperonSpec],
 ) -> Vec<WholeCellChromosomeDomainSpec> {
-    const DEFAULT_DOMAIN_COUNT: usize = 4;
-
     let genome_bp = spec.chromosome_length_bp.max(1);
-    let mut domains = if spec.chromosome_domains.is_empty() {
-        let domain_count = DEFAULT_DOMAIN_COUNT.max(1);
-        (0..domain_count)
-            .map(|index| {
-                let start_bp = ((index as u64 * genome_bp as u64) / domain_count as u64) as u32;
-                let mut end_bp =
-                    (((index as u64 + 1) * genome_bp as u64) / domain_count as u64) as u32;
-                end_bp = end_bp.saturating_sub(1);
-                let (start_bp, end_bp) =
-                    normalized_chromosome_interval(start_bp, end_bp.max(start_bp), genome_bp);
-                let center_fraction = ((midpoint_bp(start_bp, end_bp) as f32 + 0.5)
-                    / genome_bp as f32)
-                    .clamp(0.02, 0.98);
-                let spread_fraction =
-                    (((end_bp.saturating_sub(start_bp) + 1) as f32 / genome_bp as f32) * 0.75)
-                        .clamp(0.08, 0.24);
-                WholeCellChromosomeDomainSpec {
-                    id: format!("chromosome_domain_{}", index),
-                    start_bp,
-                    end_bp,
-                    axial_center_fraction: center_fraction,
-                    axial_spread_fraction: spread_fraction,
-                    genes: Vec::new(),
-                    transcription_units: Vec::new(),
-                    operons: Vec::new(),
-                }
-            })
-            .collect::<Vec<_>>()
+    let implicit_domains = spec.chromosome_domains.is_empty();
+    let mut domains = if implicit_domains {
+        compile_implicit_chromosome_domains(spec, operons, genome_bp)
     } else {
         spec.chromosome_domains
             .iter()
@@ -3258,28 +3362,30 @@ fn compile_chromosome_domains(
     domains.sort_by_key(|domain| (domain.start_bp, domain.end_bp, domain.id.clone()));
 
     for domain in &mut domains {
-        for gene in &spec.genes {
-            let gene_midpoint = gene_midpoint_bp(gene);
-            if interval_contains_bp(domain.start_bp, domain.end_bp, gene_midpoint)
-                && !domain.genes.contains(&gene.gene)
-            {
-                domain.genes.push(gene.gene.clone());
+        if implicit_domains {
+            for gene in &spec.genes {
+                let gene_midpoint = gene_midpoint_bp(gene);
+                if interval_contains_bp(domain.start_bp, domain.end_bp, gene_midpoint)
+                    && !domain.genes.contains(&gene.gene)
+                {
+                    domain.genes.push(gene.gene.clone());
+                }
             }
-        }
-        for unit in &spec.transcription_units {
-            let midpoint = transcription_unit_midpoint_bp(spec, unit);
-            if interval_contains_bp(domain.start_bp, domain.end_bp, midpoint)
-                && !domain.transcription_units.contains(&unit.name)
-            {
-                domain.transcription_units.push(unit.name.clone());
+            for unit in &spec.transcription_units {
+                let midpoint = transcription_unit_midpoint_bp(spec, unit);
+                if interval_contains_bp(domain.start_bp, domain.end_bp, midpoint)
+                    && !domain.transcription_units.contains(&unit.name)
+                {
+                    domain.transcription_units.push(unit.name.clone());
+                }
             }
-        }
-        for operon in operons {
-            let midpoint = midpoint_bp(operon.promoter_bp, operon.terminator_bp);
-            if interval_contains_bp(domain.start_bp, domain.end_bp, midpoint)
-                && !domain.operons.contains(&operon.name)
-            {
-                domain.operons.push(operon.name.clone());
+            for operon in operons {
+                let midpoint = midpoint_bp(operon.promoter_bp, operon.terminator_bp);
+                if interval_contains_bp(domain.start_bp, domain.end_bp, midpoint)
+                    && !domain.operons.contains(&operon.name)
+                {
+                    domain.operons.push(operon.name.clone());
+                }
             }
         }
         domain.genes.sort();
@@ -6562,6 +6668,286 @@ mod tests {
         assert!(registry.species.len() > assets.proteins.len());
         assert!(registry.reactions.len() >= assets.proteins.len());
         assert!(spec.provenance.compiled_ir_hash.is_some());
+    }
+
+    #[test]
+    fn compiled_chromosome_domains_follow_feature_gaps_for_sparse_specs() {
+        let spec = WholeCellOrganismSpec {
+            organism: "Gap-driven demo".to_string(),
+            chromosome_length_bp: 1_000,
+            origin_bp: 0,
+            terminus_bp: 500,
+            geometry: WholeCellGeometryPrior {
+                radius_nm: 120.0,
+                chromosome_radius_fraction: 0.42,
+                membrane_fraction: 0.20,
+            },
+            composition: WholeCellCompositionPrior {
+                dry_mass_fg: 120.0,
+                gc_fraction: 0.30,
+                protein_fraction: 0.55,
+                rna_fraction: 0.20,
+                lipid_fraction: 0.12,
+            },
+            chromosome_domains: Vec::new(),
+            pools: Vec::new(),
+            genes: vec![
+                WholeCellGenomeFeature {
+                    gene: "gene_a".to_string(),
+                    start_bp: 40,
+                    end_bp: 90,
+                    strand: 1,
+                    essential: false,
+                    basal_expression: 1.0,
+                    translation_cost: 1.0,
+                    nucleotide_cost: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+                WholeCellGenomeFeature {
+                    gene: "gene_b".to_string(),
+                    start_bp: 120,
+                    end_bp: 180,
+                    strand: 1,
+                    essential: false,
+                    basal_expression: 1.0,
+                    translation_cost: 1.0,
+                    nucleotide_cost: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+                WholeCellGenomeFeature {
+                    gene: "gene_c".to_string(),
+                    start_bp: 700,
+                    end_bp: 760,
+                    strand: 1,
+                    essential: false,
+                    basal_expression: 1.0,
+                    translation_cost: 1.0,
+                    nucleotide_cost: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+                WholeCellGenomeFeature {
+                    gene: "gene_d".to_string(),
+                    start_bp: 790,
+                    end_bp: 840,
+                    strand: 1,
+                    essential: false,
+                    basal_expression: 1.0,
+                    translation_cost: 1.0,
+                    nucleotide_cost: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+            ],
+            transcription_units: vec![
+                WholeCellTranscriptionUnitSpec {
+                    name: "tu_left".to_string(),
+                    genes: vec!["gene_a".to_string(), "gene_b".to_string()],
+                    basal_activity: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+                WholeCellTranscriptionUnitSpec {
+                    name: "tu_right".to_string(),
+                    genes: vec!["gene_c".to_string(), "gene_d".to_string()],
+                    basal_activity: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+            ],
+        };
+
+        let compiled = with_compiled_chromosome_domains(spec);
+
+        assert_eq!(compiled.chromosome_domains.len(), 2);
+        let left = &compiled.chromosome_domains[0];
+        let right = &compiled.chromosome_domains[1];
+        assert_eq!(left.start_bp, 0);
+        assert_eq!(right.end_bp, 999);
+        assert!(left.end_bp < right.start_bp);
+        assert!(left.genes.contains(&"gene_a".to_string()));
+        assert!(left.genes.contains(&"gene_b".to_string()));
+        assert!(left.transcription_units.contains(&"tu_left".to_string()));
+        assert!(left.operons.contains(&"tu_left".to_string()));
+        assert!(!left.genes.contains(&"gene_c".to_string()));
+        assert!(right.genes.contains(&"gene_c".to_string()));
+        assert!(right.genes.contains(&"gene_d".to_string()));
+        assert!(right.transcription_units.contains(&"tu_right".to_string()));
+        assert!(right.operons.contains(&"tu_right".to_string()));
+    }
+
+    #[test]
+    fn compiled_chromosome_domains_use_single_domain_without_features() {
+        let spec = WholeCellOrganismSpec {
+            organism: "Featureless demo".to_string(),
+            chromosome_length_bp: 640,
+            origin_bp: 0,
+            terminus_bp: 320,
+            geometry: WholeCellGeometryPrior {
+                radius_nm: 120.0,
+                chromosome_radius_fraction: 0.40,
+                membrane_fraction: 0.20,
+            },
+            composition: WholeCellCompositionPrior {
+                dry_mass_fg: 110.0,
+                gc_fraction: 0.32,
+                protein_fraction: 0.54,
+                rna_fraction: 0.21,
+                lipid_fraction: 0.10,
+            },
+            chromosome_domains: Vec::new(),
+            pools: Vec::new(),
+            genes: Vec::new(),
+            transcription_units: Vec::new(),
+        };
+
+        let compiled = with_compiled_chromosome_domains(spec);
+
+        assert_eq!(compiled.chromosome_domains.len(), 1);
+        assert_eq!(compiled.chromosome_domains[0].start_bp, 0);
+        assert_eq!(compiled.chromosome_domains[0].end_bp, 639);
+    }
+
+    #[test]
+    fn compiled_chromosome_domains_preserve_explicit_membership_without_backfill() {
+        let spec = WholeCellOrganismSpec {
+            organism: "Explicit-domain demo".to_string(),
+            chromosome_length_bp: 800,
+            origin_bp: 0,
+            terminus_bp: 400,
+            geometry: WholeCellGeometryPrior {
+                radius_nm: 120.0,
+                chromosome_radius_fraction: 0.40,
+                membrane_fraction: 0.20,
+            },
+            composition: WholeCellCompositionPrior {
+                dry_mass_fg: 110.0,
+                gc_fraction: 0.32,
+                protein_fraction: 0.54,
+                rna_fraction: 0.21,
+                lipid_fraction: 0.10,
+            },
+            chromosome_domains: vec![
+                WholeCellChromosomeDomainSpec {
+                    id: "domain_left".to_string(),
+                    start_bp: 0,
+                    end_bp: 399,
+                    axial_center_fraction: 0.25,
+                    axial_spread_fraction: 0.16,
+                    genes: vec!["gene_a".to_string()],
+                    transcription_units: vec!["tu_left".to_string()],
+                    operons: vec!["tu_left".to_string()],
+                },
+                WholeCellChromosomeDomainSpec {
+                    id: "domain_right".to_string(),
+                    start_bp: 400,
+                    end_bp: 799,
+                    axial_center_fraction: 0.75,
+                    axial_spread_fraction: 0.16,
+                    genes: Vec::new(),
+                    transcription_units: Vec::new(),
+                    operons: Vec::new(),
+                },
+            ],
+            pools: Vec::new(),
+            genes: vec![
+                WholeCellGenomeFeature {
+                    gene: "gene_a".to_string(),
+                    start_bp: 40,
+                    end_bp: 90,
+                    strand: 1,
+                    essential: false,
+                    basal_expression: 1.0,
+                    translation_cost: 1.0,
+                    nucleotide_cost: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+                WholeCellGenomeFeature {
+                    gene: "gene_b".to_string(),
+                    start_bp: 120,
+                    end_bp: 180,
+                    strand: 1,
+                    essential: false,
+                    basal_expression: 1.0,
+                    translation_cost: 1.0,
+                    nucleotide_cost: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+                WholeCellGenomeFeature {
+                    gene: "gene_c".to_string(),
+                    start_bp: 620,
+                    end_bp: 700,
+                    strand: 1,
+                    essential: false,
+                    basal_expression: 1.0,
+                    translation_cost: 1.0,
+                    nucleotide_cost: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+            ],
+            transcription_units: vec![
+                WholeCellTranscriptionUnitSpec {
+                    name: "tu_left".to_string(),
+                    genes: vec!["gene_a".to_string(), "gene_b".to_string()],
+                    basal_activity: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+                WholeCellTranscriptionUnitSpec {
+                    name: "tu_right".to_string(),
+                    genes: vec!["gene_c".to_string()],
+                    basal_activity: 1.0,
+                    process_weights: WholeCellProcessWeights::default(),
+                    subsystem_targets: Vec::new(),
+                    asset_class: None,
+                    complex_family: None,
+                },
+            ],
+        };
+
+        let compiled = with_compiled_chromosome_domains(spec);
+
+        assert_eq!(compiled.chromosome_domains.len(), 2);
+        assert_eq!(
+            compiled.chromosome_domains[0].genes,
+            vec!["gene_a".to_string()]
+        );
+        assert_eq!(
+            compiled.chromosome_domains[0].transcription_units,
+            vec!["tu_left".to_string()]
+        );
+        assert_eq!(
+            compiled.chromosome_domains[0].operons,
+            vec!["tu_left".to_string()]
+        );
+        assert!(compiled.chromosome_domains[1].genes.is_empty());
+        assert!(compiled.chromosome_domains[1].transcription_units.is_empty());
+        assert!(compiled.chromosome_domains[1].operons.is_empty());
     }
 
     #[test]

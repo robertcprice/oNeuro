@@ -13,6 +13,7 @@ from oneuro.whole_cell import (
     write_structured_bundle_sources,
     write_compiled_bundle,
 )
+from oneuro.whole_cell.assets.source_normalization import _compile_chromosome_domains
 
 
 def test_available_bundles_include_syn3a_and_demo_bundle():
@@ -153,6 +154,87 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     assert Path(written["organism_spec"]).exists()
     assert Path(written["genome_assets"]).exists()
     assert Path(written["summary"]).exists()
+
+
+def test_python_chromosome_domain_compiler_uses_feature_gaps_for_implicit_domains():
+    spec = {
+        "organism": "Gap-driven demo",
+        "chromosome_length_bp": 1000,
+        "origin_bp": 0,
+        "terminus_bp": 500,
+        "genes": [
+            {"gene": "gene_a", "start_bp": 40, "end_bp": 90},
+            {"gene": "gene_b", "start_bp": 120, "end_bp": 180},
+            {"gene": "gene_c", "start_bp": 700, "end_bp": 760},
+            {"gene": "gene_d", "start_bp": 790, "end_bp": 840},
+        ],
+        "transcription_units": [
+            {"name": "tu_left", "genes": ["gene_a", "gene_b"]},
+            {"name": "tu_right", "genes": ["gene_c", "gene_d"]},
+        ],
+        "chromosome_domains": [],
+    }
+
+    domains = _compile_chromosome_domains(spec)
+
+    assert len(domains) == 2
+    assert domains[0]["start_bp"] == 0
+    assert domains[1]["end_bp"] == 999
+    assert "gene_a" in domains[0]["genes"]
+    assert "tu_left" in domains[0]["transcription_units"]
+    assert "tu_left" in domains[0]["operons"]
+    assert "gene_c" in domains[1]["genes"]
+    assert "tu_right" in domains[1]["transcription_units"]
+    assert "tu_right" in domains[1]["operons"]
+
+
+def test_python_chromosome_domain_compiler_preserves_explicit_membership():
+    spec = {
+        "organism": "Explicit-domain demo",
+        "chromosome_length_bp": 800,
+        "origin_bp": 0,
+        "terminus_bp": 400,
+        "genes": [
+            {"gene": "gene_a", "start_bp": 40, "end_bp": 90},
+            {"gene": "gene_b", "start_bp": 120, "end_bp": 180},
+            {"gene": "gene_c", "start_bp": 620, "end_bp": 700},
+        ],
+        "transcription_units": [
+            {"name": "tu_left", "genes": ["gene_a", "gene_b"]},
+            {"name": "tu_right", "genes": ["gene_c"]},
+        ],
+        "chromosome_domains": [
+            {
+                "id": "domain_left",
+                "start_bp": 0,
+                "end_bp": 399,
+                "axial_center_fraction": 0.25,
+                "axial_spread_fraction": 0.16,
+                "genes": ["gene_a"],
+                "transcription_units": ["tu_left"],
+                "operons": ["tu_left"],
+            },
+            {
+                "id": "domain_right",
+                "start_bp": 400,
+                "end_bp": 799,
+                "axial_center_fraction": 0.75,
+                "axial_spread_fraction": 0.16,
+                "genes": [],
+                "transcription_units": [],
+                "operons": [],
+            },
+        ],
+    }
+
+    domains = _compile_chromosome_domains(spec)
+
+    assert domains[0]["genes"] == ["gene_a"]
+    assert domains[0]["transcription_units"] == ["tu_left"]
+    assert domains[0]["operons"] == ["tu_left"]
+    assert domains[1]["genes"] == []
+    assert domains[1]["transcription_units"] == []
+    assert domains[1]["operons"] == []
 
 
 def test_rust_bundle_manifest_ingestion_if_available():

@@ -1636,3 +1636,38 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `domain-local runtime behavior now prefers compiled domains over the fixed quartile fallback, but other coarse fallback scales remain in the native runtime and should be replaced with compiled metadata or direct local state as we keep deepening the bottom-up path`
+
+### 2026-03-12 - Phase 7 / Feature-Driven Legacy Chromosome Domains
+
+- Summary:
+  - replaced the fixed four-quartile chromosome-domain fallback in the native data compiler with feature-gap-driven domain recovery, so sparse legacy organism specs derive implicit domains from actual operon or gene spacing instead of a hardcoded count
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q compiled_chromosome_domains_follow_feature_gaps_for_sparse_specs --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q compiled_chromosome_domains_use_single_domain_without_features --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `explicit structured bundles already own chromosome domains, but the remaining legacy recovery path still needs more compiled/local ownership in other organism subsystems so sparse fallback behavior keeps shrinking`
+
+### 2026-03-12 - Phase 7 / Explicit Domain Source Authority
+
+- Summary:
+  - aligned the Rust and Python chromosome-domain compilers so explicit domain membership stays source-authoritative, while implicit legacy domains are still recovered from feature gaps instead of a fixed count
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `src/oneuro/whole_cell/assets/source_normalization.py`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `cargo test -q compiled_chromosome_domains_preserve_explicit_membership_without_backfill --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `python3 -m py_compile src/oneuro/whole_cell/assets/source_normalization.py tests/test_whole_cell_assets.py`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `explicit chromosome domains are now normalized instead of inferred, but more downstream bundle and runtime surfaces still need the same treatment so explicit sources fully own the active path`

@@ -89,6 +89,154 @@ def _validate_explicit_transcription_unit_semantics(
         )
 
 
+def _normalized_interval(
+    start_bp: int, end_bp: int, chromosome_length_bp: int
+) -> tuple[int, int]:
+    right_bound = max(0, chromosome_length_bp - 1)
+    left = min(right_bound, max(0, int(start_bp)))
+    right = min(right_bound, max(0, int(end_bp)))
+    return (left, right) if left <= right else (right, left)
+
+
+def _implicit_chromosome_domain_seeds(spec: Dict[str, Any]) -> list[Dict[str, int]]:
+    chromosome_length_bp = max(1, int(spec["chromosome_length_bp"]))
+    genes = list(spec.get("genes", []))
+    transcription_units = list(spec.get("transcription_units", []))
+    operons = []
+    for unit in transcription_units:
+        promoter_bp, terminator_bp = _operon_bounds(genes, unit.get("genes", []))
+        start_bp, end_bp = _normalized_interval(
+            promoter_bp, terminator_bp, chromosome_length_bp
+        )
+        operons.append(
+            {
+                "name": unit["name"],
+                "start_bp": start_bp,
+                "end_bp": end_bp,
+                "midpoint_bp": _midpoint_bp(start_bp, end_bp),
+                "span_bp": end_bp - start_bp + 1,
+            }
+        )
+    if operons:
+        operons.sort(
+            key=lambda operon: (
+                operon["midpoint_bp"],
+                operon["start_bp"],
+                operon["end_bp"],
+            )
+        )
+        return operons
+
+    genes_only = []
+    for gene in genes:
+        start_bp, end_bp = _normalized_interval(
+            int(gene["start_bp"]), int(gene["end_bp"]), chromosome_length_bp
+        )
+        genes_only.append(
+            {
+                "name": gene["gene"],
+                "start_bp": start_bp,
+                "end_bp": end_bp,
+                "midpoint_bp": _midpoint_bp(start_bp, end_bp),
+                "span_bp": end_bp - start_bp + 1,
+            }
+        )
+    genes_only.sort(
+        key=lambda gene: (gene["midpoint_bp"], gene["start_bp"], gene["end_bp"])
+    )
+    return genes_only
+
+
+def _compile_implicit_chromosome_domains(spec: Dict[str, Any]) -> list[Dict[str, Any]]:
+    chromosome_length_bp = max(1, int(spec["chromosome_length_bp"]))
+    seeds = _implicit_chromosome_domain_seeds(spec)
+    if not seeds:
+        return [
+            {
+                "id": "chromosome_domain_0",
+                "start_bp": 0,
+                "end_bp": chromosome_length_bp - 1,
+                "axial_center_fraction": 0.5,
+                "axial_spread_fraction": 0.24,
+                "genes": [],
+                "transcription_units": [],
+                "operons": [],
+            }
+        ]
+
+    split_points = []
+    for previous, current in zip(seeds, seeds[1:]):
+        gap_start = min(chromosome_length_bp - 1, previous["end_bp"] + 1)
+        gap_end = current["start_bp"] - 1
+        if gap_start > gap_end:
+            continue
+        gap_bp = gap_end - gap_start + 1
+        local_feature_span = max(1, (previous["span_bp"] + current["span_bp"]) // 2)
+        if gap_bp > local_feature_span:
+            split_points.append(_midpoint_bp(gap_start, gap_end))
+
+    domains = []
+    domain_start = 0
+    for split_bp in split_points:
+        domain_end = min(chromosome_length_bp - 1, int(split_bp))
+        if domain_end < domain_start:
+            continue
+        domains.append(
+            {
+                "id": f"chromosome_domain_{len(domains)}",
+                "start_bp": domain_start,
+                "end_bp": domain_end,
+                "axial_center_fraction": max(
+                    0.02,
+                    min(
+                        0.98,
+                        (_midpoint_bp(domain_start, domain_end) + 0.5)
+                        / chromosome_length_bp,
+                    ),
+                ),
+                "axial_spread_fraction": max(
+                    0.08,
+                    min(
+                        0.24,
+                        ((domain_end - domain_start + 1) / chromosome_length_bp) * 0.75,
+                    ),
+                ),
+                "genes": [],
+                "transcription_units": [],
+                "operons": [],
+            }
+        )
+        domain_start = min(chromosome_length_bp - 1, domain_end + 1)
+    if not domains or domain_start <= chromosome_length_bp - 1:
+        domain_end = chromosome_length_bp - 1
+        domains.append(
+            {
+                "id": f"chromosome_domain_{len(domains)}",
+                "start_bp": domain_start,
+                "end_bp": domain_end,
+                "axial_center_fraction": max(
+                    0.02,
+                    min(
+                        0.98,
+                        (_midpoint_bp(domain_start, domain_end) + 0.5)
+                        / chromosome_length_bp,
+                    ),
+                ),
+                "axial_spread_fraction": max(
+                    0.08,
+                    min(
+                        0.24,
+                        ((domain_end - domain_start + 1) / chromosome_length_bp) * 0.75,
+                    ),
+                ),
+                "genes": [],
+                "transcription_units": [],
+                "operons": [],
+            }
+        )
+    return domains
+
+
 def _compile_chromosome_domains(spec: Dict[str, Any]) -> list[Dict[str, Any]]:
     chromosome_length_bp = max(1, int(spec["chromosome_length_bp"]))
     genes = list(spec.get("genes", []))
@@ -115,15 +263,14 @@ def _compile_chromosome_domains(spec: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     existing_domains = list(spec.get("chromosome_domains", []))
+    implicit_domains = not existing_domains
     if existing_domains:
         domains = []
         for index, domain in enumerate(existing_domains):
-            start_bp = min(
-                chromosome_length_bp - 1, max(0, int(domain.get("start_bp", 0)))
-            )
-            end_bp = min(
-                chromosome_length_bp - 1,
-                max(start_bp, int(domain.get("end_bp", start_bp))),
+            start_bp, end_bp = _normalized_interval(
+                int(domain.get("start_bp", 0)),
+                int(domain.get("end_bp", domain.get("start_bp", 0))),
+                chromosome_length_bp,
             )
             center_fraction = float(domain.get("axial_center_fraction") or 0.0)
             if center_fraction <= 0.0:
@@ -144,53 +291,33 @@ def _compile_chromosome_domains(spec: Dict[str, Any]) -> list[Dict[str, Any]]:
                 }
             )
     else:
-        domains = []
-        for index in range(4):
-            start_bp = int(index * chromosome_length_bp / 4)
-            end_bp = max(start_bp, int((index + 1) * chromosome_length_bp / 4) - 1)
-            domains.append(
-                {
-                    "id": f"chromosome_domain_{index}",
-                    "start_bp": start_bp,
-                    "end_bp": end_bp,
-                    "axial_center_fraction": max(
-                        0.02,
-                        min(0.98, (_midpoint_bp(start_bp, end_bp) + 0.5) / chromosome_length_bp),
-                    ),
-                    "axial_spread_fraction": max(
-                        0.08,
-                        min(0.24, ((end_bp - start_bp + 1) / chromosome_length_bp) * 0.75),
-                    ),
-                    "genes": [],
-                    "transcription_units": [],
-                    "operons": [],
-                }
-            )
+        domains = _compile_implicit_chromosome_domains(spec)
 
     domains.sort(key=lambda domain: (int(domain["start_bp"]), int(domain["end_bp"]), domain["id"]))
     for domain in domains:
         start_bp = int(domain["start_bp"])
         end_bp = int(domain["end_bp"])
-        for gene in genes:
-            if _interval_contains_bp(start_bp, end_bp, _gene_midpoint_bp(gene)):
-                if gene["gene"] not in domain["genes"]:
-                    domain["genes"].append(gene["gene"])
-        for unit in transcription_units:
-            if _interval_contains_bp(
-                start_bp,
-                end_bp,
-                _midpoint_bp(*_operon_bounds(genes, unit.get("genes", []))),
-            ):
-                if unit["name"] not in domain["transcription_units"]:
-                    domain["transcription_units"].append(unit["name"])
-        for operon in operons:
-            if _interval_contains_bp(
-                start_bp,
-                end_bp,
-                _midpoint_bp(int(operon["promoter_bp"]), int(operon["terminator_bp"])),
-            ):
-                if operon["name"] not in domain["operons"]:
-                    domain["operons"].append(operon["name"])
+        if implicit_domains:
+            for gene in genes:
+                if _interval_contains_bp(start_bp, end_bp, _gene_midpoint_bp(gene)):
+                    if gene["gene"] not in domain["genes"]:
+                        domain["genes"].append(gene["gene"])
+            for unit in transcription_units:
+                if _interval_contains_bp(
+                    start_bp,
+                    end_bp,
+                    _midpoint_bp(*_operon_bounds(genes, unit.get("genes", []))),
+                ):
+                    if unit["name"] not in domain["transcription_units"]:
+                        domain["transcription_units"].append(unit["name"])
+            for operon in operons:
+                if _interval_contains_bp(
+                    start_bp,
+                    end_bp,
+                    _midpoint_bp(int(operon["promoter_bp"]), int(operon["terminator_bp"])),
+                ):
+                    if operon["name"] not in domain["operons"]:
+                        domain["operons"].append(operon["name"])
         domain["genes"].sort()
         domain["transcription_units"].sort()
         domain["operons"].sort()
