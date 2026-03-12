@@ -301,53 +301,7 @@ impl SubsystemEstimatorContext {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(usize)]
-enum ResourceEstimatorSignal {
-    RawPool = 0,
-    LocalMean,
-    SupportMix,
-    Pressure,
-}
-
-impl ResourceEstimatorSignal {
-    const COUNT: usize = Self::Pressure as usize + 1;
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ResourceEstimatorContext {
-    signals: [f32; ResourceEstimatorSignal::COUNT],
-}
-
-impl Default for ResourceEstimatorContext {
-    fn default() -> Self {
-        Self {
-            signals: [0.0; ResourceEstimatorSignal::COUNT],
-        }
-    }
-}
-
-impl ResourceEstimatorContext {
-    fn set(&mut self, signal: ResourceEstimatorSignal, value: f32) {
-        self.signals[signal as usize] = if value.is_finite() {
-            value.max(0.0)
-        } else {
-            0.0
-        };
-    }
-
-    fn scalar(self) -> ScalarContext<{ ResourceEstimatorSignal::COUNT }> {
-        ScalarContext {
-            signals: self.signals,
-        }
-    }
-}
-
 const fn subsystem_factor(signal: SubsystemEstimatorSignal, bias: f32, scale: f32) -> ScalarFactor {
-    ScalarFactor::new(signal as usize, bias, scale, 1.0)
-}
-
-const fn resource_factor(signal: ResourceEstimatorSignal, bias: f32, scale: f32) -> ScalarFactor {
     ScalarFactor::new(signal as usize, bias, scale, 1.0)
 }
 
@@ -416,156 +370,6 @@ const SUBSYSTEM_INVENTORY_SIGNAL_RULE: ScalarRule = ScalarRule::new(
     1.60,
 );
 
-const GLUCOSE_SIGNAL_RULE: ScalarRule = ScalarRule::new(
-    0.10,
-    4,
-    [
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::RawPool, 0.0, 1.0),
-            0.42,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::LocalMean, 0.0, 1.0),
-            0.18,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::SupportMix, 0.0, 1.0),
-            0.20,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::Pressure, 0.0, 1.0),
-            -0.10,
-        ),
-    ],
-    0.0,
-    1.0,
-);
-
-const OXYGEN_SIGNAL_RULE: ScalarRule = ScalarRule::new(
-    0.10,
-    4,
-    [
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::RawPool, 0.0, 1.0),
-            0.50,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::LocalMean, 0.0, 1.0),
-            0.16,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::SupportMix, 0.0, 1.0),
-            0.18,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::Pressure, 0.0, 1.0),
-            -0.10,
-        ),
-    ],
-    0.0,
-    1.0,
-);
-
-const AMINO_SIGNAL_RULE: ScalarRule = ScalarRule::new(
-    0.08,
-    4,
-    [
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::RawPool, 0.0, 1.0),
-            0.62,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::LocalMean, 0.0, 1.0),
-            0.08,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::SupportMix, 0.0, 1.0),
-            0.18,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::Pressure, 0.0, 1.0),
-            -0.10,
-        ),
-    ],
-    0.0,
-    1.0,
-);
-
-const NUCLEOTIDE_SIGNAL_RULE: ScalarRule = ScalarRule::new(
-    0.12,
-    4,
-    [
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::RawPool, 0.0, 1.0),
-            0.62,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::LocalMean, 0.0, 1.0),
-            0.10,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::SupportMix, 0.0, 1.0),
-            0.16,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::Pressure, 0.0, 1.0),
-            -0.10,
-        ),
-    ],
-    0.0,
-    1.0,
-);
-
-const MEMBRANE_SIGNAL_RULE: ScalarRule = ScalarRule::new(
-    0.10,
-    4,
-    [
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::RawPool, 0.0, 1.0),
-            1.00,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::LocalMean, 0.0, 1.0),
-            0.08,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::SupportMix, 0.0, 1.0),
-            0.18,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::Pressure, 0.0, 1.0),
-            -0.12,
-        ),
-    ],
-    0.0,
-    1.0,
-);
-
-const ENERGY_SIGNAL_RULE: ScalarRule = ScalarRule::new(
-    0.08,
-    4,
-    [
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::RawPool, 0.0, 1.0),
-            0.40,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::LocalMean, 0.0, 1.0),
-            0.22,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::SupportMix, 0.0, 1.0),
-            0.18,
-        ),
-        scalar_branch_1(
-            resource_factor(ResourceEstimatorSignal::Pressure, 0.0, 1.0),
-            -0.10,
-        ),
-    ],
-    0.0,
-    1.0,
-);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
 enum WholeCellRuleSignal {
@@ -606,24 +410,10 @@ enum WholeCellRuleSignal {
     QuantumSegregationEfficiency,
     EffectiveMetabolicLoad,
     MembranePrecursorFloor,
-    AtpBandComplexes,
-    RibosomeComplexes,
-    RnapComplexes,
-    ReplisomeComplexes,
-    MembraneComplexes,
-    FtszPolymer,
-    DnaaActivity,
-    EnergyCapacity,
-    DnaaSignal,
-    ReplisomeAssemblySignal,
-    ConstrictionSignal,
-    TranscriptionDriveMix,
-    TranslationDriveMix,
-    BiosyntheticLoadMix,
 }
 
 impl WholeCellRuleSignal {
-    const COUNT: usize = Self::BiosyntheticLoadMix as usize + 1;
+    const COUNT: usize = Self::MembranePrecursorFloor as usize + 1;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -661,23 +451,6 @@ impl WholeCellRuleContext {
 
 const fn scalar_factor(signal: WholeCellRuleSignal, bias: f32, scale: f32) -> ScalarFactor {
     ScalarFactor::new(signal as usize, bias, scale, 1.0)
-}
-
-const fn scalar_branch_1(f1: ScalarFactor, coefficient: f32) -> ScalarBranch {
-    ScalarBranch::new(
-        coefficient,
-        1,
-        [
-            f1,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-        ],
-    )
 }
 
 const fn scalar_branch_3(
@@ -718,30 +491,6 @@ const fn scalar_branch_4(
             f3,
             f4,
             EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-            EMPTY_SCALAR_FACTOR,
-        ],
-    )
-}
-
-const fn scalar_branch_5(
-    f1: ScalarFactor,
-    f2: ScalarFactor,
-    f3: ScalarFactor,
-    f4: ScalarFactor,
-    f5: ScalarFactor,
-    coefficient: f32,
-) -> ScalarBranch {
-    ScalarBranch::new(
-        coefficient,
-        5,
-        [
-            f1,
-            f2,
-            f3,
-            f4,
-            f5,
             EMPTY_SCALAR_FACTOR,
             EMPTY_SCALAR_FACTOR,
             EMPTY_SCALAR_FACTOR,
@@ -883,64 +632,6 @@ const DNAA_ACTIVITY_RULE: ScalarRule = ScalarRule::new(
     ],
     8.0,
     192.0,
-);
-
-const ENERGY_GAIN_RULE: ScalarRule = ScalarRule::new(
-    0.0,
-    1,
-    [
-        scalar_branch_5(
-            scalar_factor(WholeCellRuleSignal::Dt, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::EnergyCapacity, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::QuantumOxphosEfficiency, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::GlucoseSignal, 0.55, 0.45),
-            scalar_factor(WholeCellRuleSignal::OxygenSignal, 0.55, 0.45),
-            0.0155,
-        ),
-        EMPTY_SCALAR_BRANCH,
-        EMPTY_SCALAR_BRANCH,
-        EMPTY_SCALAR_BRANCH,
-    ],
-    0.0,
-    10.0,
-);
-
-const ENERGY_COST_RULE: ScalarRule = ScalarRule::new(
-    0.0,
-    1,
-    [
-        scalar_branch_3(
-            scalar_factor(WholeCellRuleSignal::Dt, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::EffectiveMetabolicLoad, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::BiosyntheticLoadMix, 0.34, 1.0),
-            0.010,
-        ),
-        EMPTY_SCALAR_BRANCH,
-        EMPTY_SCALAR_BRANCH,
-        EMPTY_SCALAR_BRANCH,
-    ],
-    0.0,
-    10.0,
-);
-
-const NUCLEOTIDE_RECHARGE_RULE: ScalarRule = ScalarRule::new(
-    0.0,
-    1,
-    [
-        scalar_branch_5(
-            scalar_factor(WholeCellRuleSignal::Dt, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::EnergyCapacity, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::NucleotideSignal, 0.55, 0.45),
-            scalar_factor(WholeCellRuleSignal::QuantumNucleotideEfficiency, 0.0, 1.0),
-            scalar_factor(WholeCellRuleSignal::GlucoseSignal, 0.55, 0.45),
-            0.0032,
-        ),
-        EMPTY_SCALAR_BRANCH,
-        EMPTY_SCALAR_BRANCH,
-        EMPTY_SCALAR_BRANCH,
-    ],
-    0.0,
-    10.0,
 );
 
 /// Native whole-cell simulator with a Rust-owned state and scheduler.
@@ -1319,10 +1010,12 @@ impl WholeCellSimulator {
                 })
             })
             .or_else(|| {
-                self.organism_process_registry.as_ref().and_then(|registry| {
-                    (!registry.chromosome_domains.is_empty())
-                        .then_some(registry.chromosome_domains.as_slice())
-                })
+                self.organism_process_registry
+                    .as_ref()
+                    .and_then(|registry| {
+                        (!registry.chromosome_domains.is_empty())
+                            .then_some(registry.chromosome_domains.as_slice())
+                    })
             })
     }
 
@@ -2197,12 +1890,18 @@ impl WholeCellSimulator {
             &chromosome_domain_nucleotide_support,
             origin_domain_index,
         );
+        let chromosome_local_nucleoid_atp =
+            Self::saturating_signal(self.localized_nucleoid_atp_pool_mm(), 0.90);
+        let chromosome_local_nucleoid_nucleotides =
+            Self::saturating_signal(self.localized_nucleotide_pool_mm(), 0.55);
         let initiation_support = Self::finite_scale(
-            0.40 * Self::saturating_signal(self.dnaa, 64.0)
-                + 0.20 * chromosome_local_nucleotide_support
-                + 0.16 * chromosome_local_energy_support
-                + 0.12 * crowding
-                + 0.12 * Self::saturating_signal(self.complex_assembly.replisome_complexes, 16.0),
+            0.32 * Self::saturating_signal(self.complex_assembly.dnaa_activity, 64.0)
+                + 0.18 * chromosome_local_nucleotide_support
+                + 0.14 * chromosome_local_energy_support
+                + 0.10 * chromosome_local_nucleoid_nucleotides
+                + 0.08 * chromosome_local_nucleoid_atp
+                + 0.10 * crowding
+                + 0.08 * Self::saturating_signal(self.complex_assembly.replisome_complexes, 16.0),
             1.0,
             0.40,
             1.60,
@@ -2465,21 +2164,6 @@ impl WholeCellSimulator {
         (value / (value + half_saturation)).clamp(0.0, 1.0)
     }
 
-    fn evaluate_resource_signal(
-        rule: ScalarRule,
-        raw_pool: f32,
-        local_mean: f32,
-        support_mix: f32,
-        pressure: f32,
-    ) -> f32 {
-        let mut ctx = ResourceEstimatorContext::default();
-        ctx.set(ResourceEstimatorSignal::RawPool, raw_pool);
-        ctx.set(ResourceEstimatorSignal::LocalMean, local_mean);
-        ctx.set(ResourceEstimatorSignal::SupportMix, support_mix);
-        ctx.set(ResourceEstimatorSignal::Pressure, pressure);
-        rule.evaluate(ctx.scalar())
-    }
-
     fn subsystem_inventory_signal(state: WholeCellSubsystemState, support: f32) -> f32 {
         let mut ctx = SubsystemEstimatorContext::default();
         ctx.set(
@@ -2529,50 +2213,67 @@ impl WholeCellSimulator {
         let localized_supply_scale = self.localized_supply_scale();
         let localized_resource_pressure =
             Self::finite_scale(self.localized_resource_pressure(), 0.0, 0.0, 1.5);
-        let glucose_signal = Self::evaluate_resource_signal(
-            GLUCOSE_SIGNAL_RULE,
-            self.glucose_mm,
-            self.chemistry_report.mean_glucose,
-            localized_supply_scale,
-            localized_resource_pressure,
-        );
-        let oxygen_signal = Self::evaluate_resource_signal(
-            OXYGEN_SIGNAL_RULE,
-            self.oxygen_mm,
-            self.chemistry_report.mean_oxygen,
-            localized_supply_scale,
-            localized_resource_pressure,
-        );
-        let amino_signal = Self::evaluate_resource_signal(
-            AMINO_SIGNAL_RULE,
-            self.amino_acids_mm,
-            0.5 * (self.chemistry_report.mean_glucose + self.chemistry_report.mean_atp_flux),
-            0.60 * translation_support + 0.40 * localized_supply_scale,
-            localized_resource_pressure,
-        );
-        let nucleotide_signal = Self::evaluate_resource_signal(
-            NUCLEOTIDE_SIGNAL_RULE,
-            0.55 * self.nucleotides_mm + 0.45 * localized_nucleotide_pool,
-            0.5 * self.chemistry_report.mean_atp_flux,
-            0.60 * nucleotide_support + 0.40 * localized_supply_scale,
-            localized_resource_pressure,
-        );
-        let membrane_signal = Self::evaluate_resource_signal(
-            MEMBRANE_SIGNAL_RULE,
-            0.45 * self.membrane_precursors_mm + 0.55 * localized_membrane_pool,
-            0.5 * self.chemistry_report.mean_oxygen,
-            0.60 * membrane_support + 0.40 * localized_supply_scale,
-            localized_resource_pressure,
-        );
-        let energy_signal = Self::evaluate_resource_signal(
-            ENERGY_SIGNAL_RULE,
-            0.42 * self.atp_mm + 0.30 * localized_membrane_atp + 0.28 * localized_nucleoid_atp,
-            self.chemistry_report.mean_atp_flux,
-            0.50 * atp_support
-                + 0.28 * localized_supply_scale
-                + 0.22 * Self::saturating_signal(localized_nucleoid_atp, 0.90),
-            localized_resource_pressure,
-        );
+        let glucose_pool_signal = Self::saturating_signal(self.glucose_mm, 0.90);
+        let glucose_local_signal =
+            Self::saturating_signal(self.chemistry_report.mean_glucose, 0.90);
+        let glucose_signal = (0.10
+            + 0.42 * glucose_pool_signal
+            + 0.18 * glucose_local_signal
+            + 0.20 * localized_supply_scale
+            - 0.10 * localized_resource_pressure)
+            .clamp(0.0, 1.0);
+
+        let oxygen_pool_signal = Self::saturating_signal(self.oxygen_mm, 0.90);
+        let oxygen_local_signal = Self::saturating_signal(self.chemistry_report.mean_oxygen, 0.90);
+        let oxygen_signal = (0.10
+            + 0.50 * oxygen_pool_signal
+            + 0.16 * oxygen_local_signal
+            + 0.18 * localized_supply_scale
+            - 0.10 * localized_resource_pressure)
+            .clamp(0.0, 1.0);
+
+        let amino_local_mean =
+            0.5 * (self.chemistry_report.mean_glucose + self.chemistry_report.mean_atp_flux);
+        let amino_support_mix = 0.60 * translation_support + 0.40 * localized_supply_scale;
+        let amino_signal = (0.08
+            + 0.62 * Self::saturating_signal(self.amino_acids_mm, 0.90)
+            + 0.08 * Self::saturating_signal(amino_local_mean, 0.90)
+            + 0.18 * amino_support_mix
+            - 0.10 * localized_resource_pressure)
+            .clamp(0.0, 1.0);
+
+        let nucleotide_pool_signal = 0.55 * self.nucleotides_mm + 0.45 * localized_nucleotide_pool;
+        let nucleotide_local_mean = 0.5 * self.chemistry_report.mean_atp_flux;
+        let nucleotide_support_mix = 0.60 * nucleotide_support + 0.40 * localized_supply_scale;
+        let nucleotide_signal = (0.12
+            + 0.62 * Self::saturating_signal(nucleotide_pool_signal, 0.90)
+            + 0.10 * Self::saturating_signal(nucleotide_local_mean, 0.90)
+            + 0.16 * nucleotide_support_mix
+            - 0.10 * localized_resource_pressure)
+            .clamp(0.0, 1.0);
+
+        let membrane_pool_signal =
+            0.45 * self.membrane_precursors_mm + 0.55 * localized_membrane_pool;
+        let membrane_local_mean = 0.5 * self.chemistry_report.mean_oxygen;
+        let membrane_support_mix = 0.60 * membrane_support + 0.40 * localized_supply_scale;
+        let membrane_signal = (0.10
+            + 1.00 * Self::saturating_signal(membrane_pool_signal, 0.85)
+            + 0.08 * Self::saturating_signal(membrane_local_mean, 0.85)
+            + 0.18 * membrane_support_mix
+            - 0.12 * localized_resource_pressure)
+            .clamp(0.0, 1.0);
+
+        let energy_pool_signal =
+            0.42 * self.atp_mm + 0.30 * localized_membrane_atp + 0.28 * localized_nucleoid_atp;
+        let energy_support_mix = 0.50 * atp_support
+            + 0.28 * localized_supply_scale
+            + 0.22 * Self::saturating_signal(localized_nucleoid_atp, 0.90);
+        let energy_signal = (0.08
+            + 0.40 * Self::saturating_signal(energy_pool_signal, 0.90)
+            + 0.22 * Self::saturating_signal(self.chemistry_report.mean_atp_flux, 0.90)
+            + 0.18 * energy_support_mix
+            - 0.10 * localized_resource_pressure)
+            .clamp(0.0, 1.0);
         let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
         let division_readiness = (0.35 + 0.65 * replicated_fraction).clamp(0.35, 1.0);
 
@@ -2674,79 +2375,6 @@ impl WholeCellSimulator {
         ctx
     }
 
-    fn process_rule_context(
-        &self,
-        dt: f32,
-        inventory: WholeCellAssemblyInventory,
-    ) -> WholeCellRuleContext {
-        let mut ctx = self.base_rule_context(dt);
-        ctx.set(
-            WholeCellRuleSignal::AtpBandComplexes,
-            inventory.atp_band_complexes,
-        );
-        ctx.set(
-            WholeCellRuleSignal::RibosomeComplexes,
-            inventory.ribosome_complexes,
-        );
-        ctx.set(WholeCellRuleSignal::RnapComplexes, inventory.rnap_complexes);
-        ctx.set(
-            WholeCellRuleSignal::ReplisomeComplexes,
-            inventory.replisome_complexes,
-        );
-        ctx.set(
-            WholeCellRuleSignal::MembraneComplexes,
-            inventory.membrane_complexes,
-        );
-        ctx.set(WholeCellRuleSignal::FtszPolymer, inventory.ftsz_polymer);
-        ctx.set(WholeCellRuleSignal::DnaaActivity, inventory.dnaa_activity);
-        ctx
-    }
-
-    fn stage_rule_context(
-        &self,
-        dt: f32,
-        inventory: WholeCellAssemblyInventory,
-        fluxes: WholeCellProcessFluxes,
-    ) -> WholeCellRuleContext {
-        let mut ctx = self.process_rule_context(dt, inventory);
-        ctx.set(WholeCellRuleSignal::EnergyCapacity, fluxes.energy_capacity);
-        let replisome_replication_scale = self.replisome_replication_scale();
-        ctx.set(
-            WholeCellRuleSignal::DnaaSignal,
-            Self::saturating_signal(inventory.dnaa_activity * replisome_replication_scale, 48.0),
-        );
-        let replisome_structure_scale =
-            0.5 * (replisome_replication_scale + self.replisome_segregation_scale());
-        ctx.set(
-            WholeCellRuleSignal::ReplisomeAssemblySignal,
-            Self::saturating_signal(
-                inventory.replisome_complexes * replisome_structure_scale,
-                28.0,
-            ),
-        );
-        ctx.set(
-            WholeCellRuleSignal::ConstrictionSignal,
-            Self::saturating_signal(inventory.ftsz_polymer, 90.0),
-        );
-        ctx.set(
-            WholeCellRuleSignal::TranscriptionDriveMix,
-            0.35 * fluxes.energy_capacity.min(1.6)
-                + 0.15 * ctx.get(WholeCellRuleSignal::GlucoseSignal),
-        );
-        ctx.set(
-            WholeCellRuleSignal::TranslationDriveMix,
-            0.30 * fluxes.energy_capacity.min(1.8) + 0.15 * fluxes.transcription_capacity,
-        );
-        ctx.set(
-            WholeCellRuleSignal::BiosyntheticLoadMix,
-            0.28 * fluxes.translation_capacity
-                + 0.16 * fluxes.transcription_capacity
-                + 0.12 * fluxes.replication_capacity
-                + 0.10 * fluxes.constriction_capacity,
-        );
-        ctx
-    }
-
     fn assembly_inventory(&self) -> WholeCellAssemblyInventory {
         if let Some(assets) = self.organism_assets.as_ref() {
             if !self.named_complexes.is_empty() {
@@ -2771,10 +2399,8 @@ impl WholeCellSimulator {
         let energy_signal = base.get(WholeCellRuleSignal::EnergySignal);
         let atp_band_scale = base.get(WholeCellRuleSignal::AtpBandScale);
         let ribosome_translation_scale = base.get(WholeCellRuleSignal::RibosomeTranslationScale);
-        let replisome_replication_scale =
-            base.get(WholeCellRuleSignal::ReplisomeReplicationScale);
-        let replisome_segregation_scale =
-            base.get(WholeCellRuleSignal::ReplisomeSegregationScale);
+        let replisome_replication_scale = base.get(WholeCellRuleSignal::ReplisomeReplicationScale);
+        let replisome_segregation_scale = base.get(WholeCellRuleSignal::ReplisomeSegregationScale);
         let membrane_assembly_scale = base.get(WholeCellRuleSignal::MembraneAssemblyScale);
         let ftsz_constriction_scale = base.get(WholeCellRuleSignal::FtszConstrictionScale);
         let md_translation_scale = base.get(WholeCellRuleSignal::MdTranslationScale);
@@ -2816,7 +2442,10 @@ impl WholeCellSimulator {
             segregation_capacity: ((1.0 / 28.0)
                 * inventory.replisome_complexes.max(0.0)
                 * replisome_segregation_scale
-                * self.quantum_profile.chromosome_segregation_efficiency.max(0.0)
+                * self
+                    .quantum_profile
+                    .chromosome_segregation_efficiency
+                    .max(0.0)
                 * (0.60 + 0.40 * energy_signal))
                 .clamp(0.30, 2.40),
             membrane_capacity: ((1.0 / 24.0)
@@ -5546,8 +5175,7 @@ impl WholeCellSimulator {
         if counted == 0 {
             complex.basal_abundance.max(0.0)
         } else {
-            (0.72 * limiting_capacity + 0.28 * (mean_capacity / counted as f32))
-                .clamp(0.0, 1024.0)
+            (0.72 * limiting_capacity + 0.28 * (mean_capacity / counted as f32)).clamp(0.0, 1024.0)
         }
     }
 
@@ -5846,7 +5474,9 @@ impl WholeCellSimulator {
         assets: &WholeCellGenomeAssetPackage,
         complex: &WholeCellComplexSpec,
     ) -> f32 {
-        let component_capacity = self.named_complex_component_capacity(assets, complex).max(0.1);
+        let component_capacity = self
+            .named_complex_component_capacity(assets, complex)
+            .max(0.1);
         let supply_signal = self.named_complex_component_supply_signal(assets, complex);
         let structural_support = self.named_complex_structural_support(assets, complex);
         let total_stoichiometry = Self::named_complex_total_stoichiometry(complex);
@@ -5884,7 +5514,7 @@ impl WholeCellSimulator {
                     * structural_support
                     * self.organism_expression.crowding_penalty.clamp(0.65, 1.10)
                     * family_gate)
-                .clamp(0.0, 512.0);
+                    .clamp(0.0, 512.0);
                 let nucleation_intermediate =
                     (0.10 * target_abundance * component_satisfaction * total_stoichiometry.sqrt())
                         .clamp(0.0, 256.0);
@@ -6101,11 +5731,12 @@ impl WholeCellSimulator {
                 atp_band: 1.0,
                 ..WholeCellAssemblyChannelShares::default()
             },
-            WholeCellAssemblyFamily::Transporter
-            | WholeCellAssemblyFamily::MembraneEnzyme => WholeCellAssemblyChannelShares {
-                membrane: 1.0,
-                ..WholeCellAssemblyChannelShares::default()
-            },
+            WholeCellAssemblyFamily::Transporter | WholeCellAssemblyFamily::MembraneEnzyme => {
+                WholeCellAssemblyChannelShares {
+                    membrane: 1.0,
+                    ..WholeCellAssemblyChannelShares::default()
+                }
+            }
             WholeCellAssemblyFamily::Divisome => WholeCellAssemblyChannelShares {
                 ftsz: 1.0,
                 ..WholeCellAssemblyChannelShares::default()
@@ -6221,8 +5852,9 @@ impl WholeCellSimulator {
                     * structural_support
                     * crowding
                     * family_gate)
-                    * (1.0 - 0.12 * shared_component_pressure.clamp(0.0, 1.5)).clamp(0.35, 1.0)
-                    .clamp(0.0, 512.0);
+                    * (1.0 - 0.12 * shared_component_pressure.clamp(0.0, 1.5))
+                        .clamp(0.35, 1.0)
+                        .clamp(0.0, 512.0);
                 let subunit_supply_rate = (subunit_pool_target - state.subunit_pool).max(0.0)
                     * (0.10 + 0.16 * component_supply_signal)
                     * (1.0 - 0.18 * shared_component_pressure.clamp(0.0, 1.5));
@@ -7210,9 +6842,9 @@ impl WholeCellSimulator {
         let crowding = self.organism_expression.crowding_penalty.clamp(0.65, 1.10);
         let transcription_flux = transcription_flux.max(0.0);
         let translation_flux = translation_flux.max(0.0);
-        let engaged_rnap_capacity =
-            self.active_rnap.clamp(8.0, 256.0) * (0.08 + 0.04 * transcription_flux.clamp(0.0, 2.5));
-        let engaged_ribosome_capacity = self.active_ribosomes.clamp(12.0, 320.0)
+        let engaged_rnap_capacity = self.complex_assembly.rnap_complexes.clamp(8.0, 256.0)
+            * (0.08 + 0.04 * transcription_flux.clamp(0.0, 2.5));
+        let engaged_ribosome_capacity = self.complex_assembly.ribosome_complexes.clamp(12.0, 320.0)
             * (0.10 + 0.05 * translation_flux.clamp(0.0, 2.5));
 
         let mut transcription_demands =
@@ -7629,8 +7261,7 @@ impl WholeCellSimulator {
             let axial_spread = (base_spread
                 * (1.0
                     + 0.30 * (1.0 - self.chromosome_state.compaction_fraction.clamp(0.0, 1.0))
-                    + 0.18
-                        * (1.0 - self.chromosome_state.segregation_progress.clamp(0.0, 1.0))))
+                    + 0.18 * (1.0 - self.chromosome_state.segregation_progress.clamp(0.0, 1.0))))
             .clamp(0.06, 0.28);
             for gid in 0..total_voxels {
                 let x = gid % x_dim;
@@ -8886,13 +8517,17 @@ impl WholeCellSimulator {
         self.refresh_organism_expression_state();
         let inventory = self.assembly_inventory();
         let fluxes = self.process_fluxes(inventory);
-        let ctx = self.stage_rule_context(dt, inventory, fluxes);
+        let ctx = self.base_rule_context(dt);
         let organism_scales = self.organism_process_scales();
+        let transcription_drive_mix = 0.35 * fluxes.energy_capacity.min(1.6)
+            + 0.15 * ctx.get(WholeCellRuleSignal::GlucoseSignal);
+        let translation_drive_mix =
+            0.30 * fluxes.energy_capacity.min(1.8) + 0.15 * fluxes.transcription_capacity;
         let transcription_flux = (0.060
             * dt
             * fluxes.transcription_capacity
             * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::NucleotideSignal))
-            * (0.50 + ctx.get(WholeCellRuleSignal::TranscriptionDriveMix))
+            * (0.50 + transcription_drive_mix)
             * ctx.get(WholeCellRuleSignal::QuantumNucleotideEfficiency)
             * ctx.get(WholeCellRuleSignal::CrowdingPenalty)
             * (0.65 + 0.35 * ctx.get(WholeCellRuleSignal::InverseReplicatedFraction)))
@@ -8901,7 +8536,7 @@ impl WholeCellSimulator {
             * dt
             * fluxes.translation_capacity
             * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::AminoSignal))
-            * (0.55 + ctx.get(WholeCellRuleSignal::TranslationDriveMix))
+            * (0.55 + translation_drive_mix)
             * ctx.get(WholeCellRuleSignal::QuantumTranslationEfficiency)
             * ctx.get(WholeCellRuleSignal::CrowdingPenalty)
             * (0.65 + 0.35 * fluxes.transcription_capacity.min(1.6)))
@@ -8938,16 +8573,30 @@ impl WholeCellSimulator {
         self.refresh_organism_expression_state();
         let inventory = self.assembly_inventory();
         let fluxes = self.process_fluxes(inventory);
-        let ctx = self.stage_rule_context(dt, inventory, fluxes);
-        let scalar = ctx.scalar();
+        let ctx = self.base_rule_context(dt);
         let organism_scales = self.organism_process_scales();
         let effective_metabolic_load = ctx.get(WholeCellRuleSignal::EffectiveMetabolicLoad);
-        let energy_gain = ENERGY_GAIN_RULE.evaluate(scalar) * organism_scales.energy_scale;
-        let energy_cost = ENERGY_COST_RULE.evaluate(scalar)
+        let biosynthetic_load_mix = 0.28 * fluxes.translation_capacity
+            + 0.16 * fluxes.transcription_capacity
+            + 0.12 * fluxes.replication_capacity
+            + 0.10 * fluxes.constriction_capacity;
+        let energy_gain = (0.0155
+            * dt
+            * fluxes.energy_capacity
+            * ctx.get(WholeCellRuleSignal::QuantumOxphosEfficiency)
+            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::GlucoseSignal))
+            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::OxygenSignal)))
+            * organism_scales.energy_scale;
+        let energy_cost = (0.010 * dt * effective_metabolic_load * (0.34 + biosynthetic_load_mix))
             * 0.5
             * (organism_scales.transcription_scale + organism_scales.translation_scale);
-        let nucleotide_recharge =
-            NUCLEOTIDE_RECHARGE_RULE.evaluate(scalar) * organism_scales.replication_scale;
+        let nucleotide_recharge = (0.0032
+            * dt
+            * fluxes.energy_capacity
+            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::NucleotideSignal))
+            * ctx.get(WholeCellRuleSignal::QuantumNucleotideEfficiency)
+            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::GlucoseSignal)))
+            * organism_scales.replication_scale;
         let membrane_flux = (0.0028
             * dt
             * fluxes.membrane_capacity
@@ -8977,14 +8626,25 @@ impl WholeCellSimulator {
         self.refresh_organism_expression_state();
         let inventory = self.assembly_inventory();
         let fluxes = self.process_fluxes(inventory);
-        let ctx = self.stage_rule_context(dt, inventory, fluxes);
+        let ctx = self.base_rule_context(dt);
         let organism_scales = self.organism_process_scales();
+        let replisome_replication_scale =
+            Self::finite_scale(self.replisome_replication_scale(), 1.0, 0.70, 1.45);
+        let replisome_structure_scale = 0.5
+            * (replisome_replication_scale
+                + Self::finite_scale(self.replisome_segregation_scale(), 1.0, 0.70, 1.45));
+        let dnaa_signal =
+            Self::saturating_signal(inventory.dnaa_activity * replisome_replication_scale, 48.0);
+        let replisome_assembly_signal = Self::saturating_signal(
+            inventory.replisome_complexes * replisome_structure_scale,
+            28.0,
+        );
         let replication_drive = (18.0
             * dt
             * fluxes.replication_capacity
-            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::DnaaSignal))
+            * (0.55 + 0.45 * dnaa_signal)
             * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::NucleotideSignal))
-            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::ReplisomeAssemblySignal))
+            * (0.55 + 0.45 * replisome_assembly_signal)
             * ctx.get(WholeCellRuleSignal::QuantumNucleotideEfficiency)
             * ctx.get(WholeCellRuleSignal::NucleotideSupport)
             * ctx.get(WholeCellRuleSignal::CrowdingPenalty))
@@ -8994,7 +8654,7 @@ impl WholeCellSimulator {
         let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
         let segregation_drive = (dt
             * fluxes.segregation_capacity
-            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::ReplisomeAssemblySignal))
+            * (0.55 + 0.45 * replisome_assembly_signal)
             * (3.0 + 18.0 * replicated_fraction))
             * organism_scales.segregation_scale;
         self.advance_chromosome_state(dt, replication_drive, segregation_drive);
@@ -9005,9 +8665,10 @@ impl WholeCellSimulator {
         self.refresh_organism_expression_state();
         let inventory = self.assembly_inventory();
         let fluxes = self.process_fluxes(inventory);
-        let ctx = self.stage_rule_context(dt, inventory, fluxes);
+        let ctx = self.base_rule_context(dt);
         let organism_scales = self.organism_process_scales();
         let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        let constriction_signal = Self::saturating_signal(inventory.ftsz_polymer, 90.0);
         let membrane_growth_nm2 = (14.0
             * dt
             * ctx.get(WholeCellRuleSignal::MembranePrecursorFloor)
@@ -9017,7 +8678,7 @@ impl WholeCellSimulator {
 
         let constriction_flux = (dt
             * fluxes.constriction_capacity
-            * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::ConstrictionSignal))
+            * (0.55 + 0.45 * constriction_signal)
             * (0.55 + 0.45 * ctx.get(WholeCellRuleSignal::MembraneSignal))
             * (0.55 + 0.45 * replicated_fraction))
             * organism_scales.constriction_scale;
@@ -12142,8 +11803,13 @@ mod tests {
             ..WholeCellAssemblyInventory::default()
         });
 
-        assert!(translation_fluxes.translation_capacity > transcription_fluxes.translation_capacity);
-        assert!(translation_fluxes.transcription_capacity <= transcription_fluxes.transcription_capacity);
+        assert!(
+            translation_fluxes.translation_capacity > transcription_fluxes.translation_capacity
+        );
+        assert!(
+            translation_fluxes.transcription_capacity
+                <= transcription_fluxes.transcription_capacity
+        );
         assert!(replication_fluxes.replication_capacity > translation_fluxes.replication_capacity);
         assert!((translation_fluxes.transcription_capacity - 0.35).abs() < 1.0e-6);
         assert!((transcription_fluxes.translation_capacity - 0.35).abs() < 1.0e-6);

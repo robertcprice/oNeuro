@@ -39,10 +39,13 @@ What is already built on the active path:
 - explicit complex channel ownership from subsystem targets, family, and asset class
 - direct process-capacity computation from explicit channel inventory, chemistry support, local pool state, and quantum efficiency instead of generic scalar-rule capacity wrappers
 - direct CME, ODE, BD, and geometry stage flux or drive computation from explicit capacities and local signals instead of generic scalar-rule stage wrappers
+- active stage execution now reads base local chemistry and explicit inventory directly, without an intermediate stage-rule context carrying derived channel surrogates
+- base whole-cell resource signals now come directly from local pools, local chemistry, support, and pressure instead of generic resource-estimator rules
+- diagnostic RNAP, ribosome, DnaA, and FtsZ pools no longer drive active replication or expression execution when explicit complex inventory is present
 
 What is still not at the target:
 
-- energy/resource rules, fallback inventory targets, and several downstream mix signals still use scalar-rule or derived surrogate paths instead of explicit local reaction or channel execution
+- fallback inventory targets and several derived summary paths still use scalar-rule or derived surrogate behavior instead of explicit local reaction or channel execution
 - reaction/species coverage is still narrow relative to a full microbial cell
 - membrane chemistry, chromosome mechanics, and local chemistry are still too coarse for parity
 - atomistic refinement exists as infrastructure, but not yet as an authoritative live feedback service
@@ -147,7 +150,7 @@ These rules are operational, not aspirational.
 
 This is the direct task ladder from the current runtime to the full vision. The detailed work packages below remain authoritative; this section is the execution-facing todo.
 
-1. Remove the remaining energy/resource and fallback-inventory scalar-rule surrogates so the active path no longer depends on generic rule wrappers for whole-cell execution-critical behavior.
+1. Remove the remaining fallback inventory surrogates and derived summary paths, so the active path no longer depends on generic rule wrappers or diagnostic pools for execution-critical behavior.
 2. Replace `prior_assembly_inventory()` and other derived aggregate fallbacks with explicit compiled local inventories wherever assets exist.
 3. Expand compiled species/reaction coverage for metabolites, ions, cofactors, lipids, damage states, repair states, and membrane-local species beyond the current narrow bundle set.
 4. Move more reaction execution from generic process scales into explicit registry-driven reaction families with direct ownership of pools, transcripts, proteins, complexes, and local fields.

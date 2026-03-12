@@ -1750,3 +1750,22 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the active stage drives are now direct, but energy/resource rules and fallback inventory targets still retain generic scalar-rule or derived-surrogate behavior and are the next bottom-up removal target`
+
+### 2026-03-12 - Phase 7 / Direct Resource Signals And Diagnostic Pool Isolation
+
+- Summary:
+  - removed the generic resource-estimator rule layer from `base_rule_context()` so glucose, oxygen, amino-acid, nucleotide, membrane, and energy signals now come directly from local pools, local chemistry, support, and pressure
+  - moved active replication and expression execution off the diagnostic `active_rnap`, `active_ribosomes`, and `dnaa` pools and back onto explicit complex inventory, so those compatibility pools no longer steer the live stage path
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_surrogate_pools_are_diagnostics_not_stage_drivers --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_cme_stage_follows_explicit_inventory_channels --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `base resource signals and diagnostic pools are now off the active path, but fallback inventory targets and several derived summary rollups still rely on surrogate or scalar-rule behavior instead of explicit local channel ownership`
