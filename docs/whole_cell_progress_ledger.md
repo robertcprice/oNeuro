@@ -1461,3 +1461,21 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy normalization and export/migration helpers still live beside the main compiler code, so the next cleanup target is isolating those migration-only transforms from the active explicit compiler implementation`
+
+### 2026-03-12 - Phase 1 / Export Boundary And Bundled Syn3A Spec Asset
+
+- Summary:
+  - added a dedicated Python exporter module as the public home for whole-cell bundle export helpers and checked in the bundled native Syn3A organism spec JSON that the Rust whole-cell code already compiles with `include_str!`, so the structured bundle path and bundled native reference both resolve directly from tracked repository assets
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/specs/whole_cell_syn3a_organism.json`
+  - `src/oneuro/whole_cell/assets/__init__.py`
+  - `src/oneuro/whole_cell/assets/exporter.py`
+- Tests run:
+  - `python3 -m py_compile src/oneuro/whole_cell/assets/__init__.py src/oneuro/whole_cell/assets/exporter.py`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `oneuro-metal/specs/whole_cell_syn3a_organism.json`
+- Remaining blockers:
+  - `the exporter implementation still lives in compiler.py internally; the next cleanup target is moving that implementation behind the exporter module without regressing the newer explicit-bundle compiler path on origin/main`

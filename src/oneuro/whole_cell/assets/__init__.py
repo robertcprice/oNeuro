@@ -7,9 +7,8 @@ from .compiler import (
     compile_legacy_bundle_manifest,
     compile_legacy_named_bundle,
     compile_named_bundle,
-    write_structured_bundle_sources,
-    write_compiled_bundle,
 )
+from .exporter import write_compiled_bundle, write_structured_bundle_sources
 
 __all__ = [
     "CompiledOrganismBundle",
