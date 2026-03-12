@@ -1839,3 +1839,20 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `execution-time consumers now prefer explicit chromosome and membrane state, but compatibility-only summary payloads and boundary-facing rollups still need to be pushed fully to serialization and diagnostics boundaries`
+
+### 2026-03-12 - Phase 7 / Boundary State Derivation Narrowing
+
+- Summary:
+  - moved snapshot, save-state, and public whole-cell progress or diagnostic getters onto explicit chromosome, membrane, and complex-inventory accessors so boundary payloads on the explicit-asset path no longer reuse stale synchronized scalar summaries
+  - kept the synchronized scalar summaries as compatibility state for legacy restore and non-asset paths, but narrowed their role further toward boundary-only behavior
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_boundary_snapshots_and_save_state_prefer_explicit_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `explicit-asset boundary payloads now derive from explicit state, but legacy restore or serialization bridges still preserve synchronized scalar summaries and need to be pushed further behind compatibility-only boundaries`
