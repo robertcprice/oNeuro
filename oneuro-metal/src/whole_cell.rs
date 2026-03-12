@@ -3732,7 +3732,7 @@ impl WholeCellSimulator {
         self.organism_process_registry.clone()
     }
 
-    fn rebuild_process_registry_from_assets(&mut self) -> bool {
+    fn recompile_process_registry_from_assets(&mut self) -> bool {
         self.organism_process_registry = self
             .organism_assets
             .as_ref()
@@ -11538,7 +11538,7 @@ mod tests {
                 }
             }
         }
-        assert!(registry_boosted.rebuild_process_registry_from_assets());
+        assert!(registry_boosted.recompile_process_registry_from_assets());
         registry_boosted.refresh_organism_expression_state();
         let boosted_ribosome_rna = registry_boosted
             .organism_species
