@@ -1479,3 +1479,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `oneuro-metal/specs/whole_cell_syn3a_organism.json`
 - Remaining blockers:
   - `the exporter implementation still lives in compiler.py internally; the next cleanup target is moving that implementation behind the exporter module without regressing the newer explicit-bundle compiler path on origin/main`
+
+### 2026-03-12 - Phase 1 / Embedded Structured Syn3A Reference Program
+
+- Summary:
+  - switched the bundled native Syn3A reference program to compile from the embedded structured bundle plus explicit `program_defaults.json` instead of a standalone reference-spec JSON, preserved the public `jcvi_syn3a_reference` alias on the bundled helper, and removed the dead bundled Syn3A organism/reference monolith files from `oneuro-metal/specs`
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `oneuro-metal/specs/whole_cell_syn3a_organism.json`
+  - `oneuro-metal/specs/whole_cell_syn3a_reference.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/program_defaults.json`
+  - `tests/test_whole_cell.py`
+- Tests run:
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `bundled export helpers still share implementation with compiler.py; the next cleanup target is moving those implementation details fully behind the exporter boundary`

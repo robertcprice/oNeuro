@@ -1,5 +1,5 @@
 {
-  "program_name": "jcvi_syn3a_structured_bundle_native",
+  "program_name": "jcvi_syn3a_reference_native",
   "config": {
     "x_dim": 24,
     "y_dim": 24,
@@ -19,12 +19,12 @@
     "membrane_precursors": 0.35
   },
   "initial_state": {
-    "adp_mm": 0.2,
+    "adp_mm": 0.3,
     "glucose_mm": 1.0,
     "oxygen_mm": 0.85,
     "genome_bp": 543000,
     "replicated_bp": 0,
-    "chromosome_separation_nm": 116.0,
+    "chromosome_separation_nm": 40.0,
     "radius_nm": 200.0,
     "division_progress": 0.0,
     "metabolic_load": 1.0
@@ -35,5 +35,14 @@
     "nucleotide_polymerization_efficiency": 1.0,
     "membrane_synthesis_efficiency": 1.0,
     "chromosome_segregation_efficiency": 1.0
+  },
+  "local_chemistry": {
+    "x_dim": 12,
+    "y_dim": 12,
+    "z_dim": 6,
+    "voxel_size_au": 0.5,
+    "use_gpu": true,
+    "enable_default_syn3a_subsystems": true,
+    "scheduled_subsystem_probes": []
   }
 }

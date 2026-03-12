@@ -14,7 +14,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-const BUNDLED_SYN3A_PROGRAM_JSON: &str = include_str!("../specs/whole_cell_syn3a_reference.json");
 const BUNDLED_SYN3A_BUNDLE_MANIFEST_JSON: &str =
     include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/manifest.json");
 const BUNDLED_SYN3A_BUNDLE_METADATA_JSON: &str =
@@ -48,6 +47,8 @@ const BUNDLED_SYN3A_BUNDLE_PROTEIN_SEMANTICS_JSON: &str =
     include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/protein_semantics.json");
 const BUNDLED_SYN3A_BUNDLE_COMPLEX_SEMANTICS_JSON: &str =
     include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/complex_semantics.json");
+const BUNDLED_SYN3A_BUNDLE_PROGRAM_DEFAULTS_JSON: &str =
+    include_str!("../../src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/program_defaults.json");
 pub const WHOLE_CELL_CONTRACT_VERSION: &str = "whole_cell_phase0";
 pub const WHOLE_CELL_PROGRAM_SCHEMA_VERSION: u32 = 1;
 pub const WHOLE_CELL_SAVED_STATE_SCHEMA_VERSION: u32 = 1;
@@ -5946,6 +5947,13 @@ fn apply_bundle_program_defaults(
             defaults_path.display()
         )
     })?;
+    apply_program_defaults(defaults, spec)
+}
+
+fn apply_program_defaults(
+    defaults: WholeCellProgramDefaultsSpec,
+    spec: &mut WholeCellProgramSpec,
+) -> Result<(), String> {
     if defaults.program_name.is_some() {
         spec.program_name = defaults.program_name;
     }
@@ -6320,10 +6328,28 @@ pub fn resolve_bundled_genome_process_registry(
     }
 }
 
+fn compile_embedded_syn3a_program_spec() -> Result<WholeCellProgramSpec, String> {
+    let manifest = parse_bundle_manifest_json(BUNDLED_SYN3A_BUNDLE_MANIFEST_JSON)?;
+    validate_bundle_compile_entrypoint(&manifest, false)?;
+    let organism = bundled_syn3a_organism_spec()?;
+    let assets = bundled_syn3a_genome_asset_package()?;
+    let registry = bundled_syn3a_process_registry()?;
+    let mut spec = build_program_spec_from_organism(organism, manifest.source_dataset.clone())?;
+    spec.organism_data_ref = Some("jcvi_syn3a_reference".to_string());
+    spec.organism_assets = Some(assets);
+    spec.organism_process_registry = Some(registry);
+    let defaults = serde_json::from_str::<WholeCellProgramDefaultsSpec>(
+        BUNDLED_SYN3A_BUNDLE_PROGRAM_DEFAULTS_JSON,
+    )
+    .map_err(|error| format!("failed to parse embedded Syn3A program defaults: {error}"))?;
+    apply_program_defaults(defaults, &mut spec)?;
+    Ok(spec)
+}
+
 pub fn bundled_syn3a_program_spec() -> Result<WholeCellProgramSpec, String> {
     static BUNDLED_SPEC: OnceLock<Result<WholeCellProgramSpec, String>> = OnceLock::new();
     BUNDLED_SPEC
-        .get_or_init(|| parse_program_spec_json(BUNDLED_SYN3A_PROGRAM_JSON))
+        .get_or_init(compile_embedded_syn3a_program_spec)
         .clone()
 }
 
@@ -6536,6 +6562,28 @@ mod tests {
         assert!(registry.species.len() > assets.proteins.len());
         assert!(registry.reactions.len() >= assets.proteins.len());
         assert!(spec.provenance.compiled_ir_hash.is_some());
+    }
+
+    #[test]
+    fn bundled_syn3a_embedded_program_spec_matches_manifest_compilation() {
+        let embedded = bundled_syn3a_program_spec().expect("embedded bundled program spec");
+        let manifest_path = bundle_manifest_path("jcvi_syn3a");
+        let from_manifest = compile_program_spec_from_bundle_manifest_path(&manifest_path)
+            .expect("manifest compiled program spec");
+
+        assert_eq!(embedded.program_name, from_manifest.program_name);
+        assert_eq!(embedded.config, from_manifest.config);
+        assert_eq!(embedded.initial_lattice, from_manifest.initial_lattice);
+        assert_eq!(embedded.initial_state, from_manifest.initial_state);
+        assert_eq!(embedded.quantum_profile, from_manifest.quantum_profile);
+        assert_eq!(embedded.local_chemistry, from_manifest.local_chemistry);
+        assert_eq!(embedded.organism_data, from_manifest.organism_data);
+        assert_eq!(embedded.organism_assets, from_manifest.organism_assets);
+        assert_eq!(
+            embedded.organism_process_registry,
+            from_manifest.organism_process_registry
+        );
+        assert_eq!(embedded.provenance, from_manifest.provenance);
     }
 
     #[test]
@@ -7740,7 +7788,7 @@ mod tests {
         assert_eq!(organism.organism, "JCVI-syn3A");
         assert_eq!(
             spec.program_name.as_deref(),
-            Some("jcvi_syn3a_structured_bundle_native")
+            Some("jcvi_syn3a_reference_native")
         );
         assert_eq!(assets.proteins.len(), organism.genes.len());
         assert!(assets.complexes.len() >= organism.transcription_units.len());

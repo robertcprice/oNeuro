@@ -34,7 +34,7 @@ What already exists in this repo:
 - Rust whole-cell runtime in `oneuro-metal/src/whole_cell.rs`
 - serialized whole-cell program and asset contracts in `oneuro-metal/src/whole_cell_data.rs`
 - local chemistry, assembly-bridge, and local MD probe surfaces in `oneuro-metal/src/whole_cell_submodels.rs`
-- bundled Syn3A reference program spec in `oneuro-metal/specs/whole_cell_syn3a_reference.json` and structured organism sources in `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/`
+- bundled Syn3A native reference compiled from structured source files in `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/`
 - atomistic template support in `oneuro-metal/specs/whole_cell_atomistic_templates.json` and `oneuro-metal/src/atomistic_topology.rs`
 - Python orchestration surfaces in `src/oneuro/whole_cell`
 - prior strategy and gap docs in:
