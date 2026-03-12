@@ -819,7 +819,7 @@ impl WholeCellSimulator {
         let expression = &self.organism_expression;
         let stress = (self.average_unit_stress_penalty() - 1.0).max(0.0);
         let load = (self.effective_metabolic_load() - 1.0).max(0.0);
-        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        let replicated_fraction = self.current_replicated_fraction();
         match stage {
             WholeCellSolverStage::AtomisticRefinement => {
                 if self.chemistry_bridge.is_none() {
@@ -834,7 +834,7 @@ impl WholeCellSimulator {
                     let drive = (0.85
                         + 0.45 * load
                         + 0.25 * stress
-                        + 0.18 * self.division_progress
+                        + 0.18 * self.current_division_progress()
                         + 0.12 * (1.0 - self.chemistry_report.crowding_penalty).max(0.0))
                     .clamp(0.6, 2.6);
                     Self::scaled_interval(base.max(1), drive, 3).min(probe_floor)
@@ -870,7 +870,7 @@ impl WholeCellSimulator {
             }
             WholeCellSolverStage::Geometry => {
                 let drive = (0.54
-                    + 0.52 * self.division_progress
+                    + 0.52 * self.current_division_progress()
                     + 0.22 * expression.process_scales.membrane
                     + 0.18 * expression.process_scales.constriction
                     + 0.12 * self.complex_assembly.ftsz_polymer.sqrt() / 8.0)
@@ -1314,7 +1314,7 @@ impl WholeCellSimulator {
     fn seeded_membrane_division_state(&self) -> WholeCellMembraneDivisionState {
         let preferred_area_nm2 = self.surface_area_nm2.max(1.0);
         let cardiolipin_share = self.membrane_cardiolipin_share();
-        let division_progress = self.division_progress.clamp(0.0, 0.99);
+        let division_progress = self.current_division_progress();
         let septum_radius_fraction = (1.0 - division_progress).clamp(0.01, 1.0);
         let septum_localization = (0.08 + 0.22 * division_progress).clamp(0.05, 0.60);
         let divisome_order_progress = (0.06 + 0.28 * division_progress).clamp(0.0, 1.0);
@@ -1407,6 +1407,72 @@ impl WholeCellSimulator {
             Self::volume_from_radius(self.radius_nm) * self.membrane_division_state.osmotic_balance;
         self.division_progress =
             (1.0 - self.membrane_division_state.septum_radius_fraction).clamp(0.0, 0.99);
+    }
+
+    fn current_genome_bp(&self) -> u32 {
+        let chromosome_length_bp = self.chromosome_state.chromosome_length_bp.max(1);
+        if chromosome_length_bp > 1 {
+            chromosome_length_bp
+        } else {
+            self.genome_bp.max(1)
+        }
+    }
+
+    fn current_replicated_bp(&self) -> u32 {
+        let genome_bp = self.current_genome_bp();
+        if self.chromosome_state.chromosome_length_bp > 1
+            || self.chromosome_state.replicated_bp > 0
+            || !self.chromosome_state.forks.is_empty()
+        {
+            self.chromosome_state.replicated_bp.min(genome_bp)
+        } else {
+            self.replicated_bp.min(genome_bp)
+        }
+    }
+
+    fn current_replicated_fraction(&self) -> f32 {
+        self.current_replicated_bp() as f32 / self.current_genome_bp().max(1) as f32
+    }
+
+    fn current_surface_area_nm2(&self) -> f32 {
+        if self.membrane_division_state.membrane_area_nm2 > 1.0 {
+            self.membrane_division_state.membrane_area_nm2.max(1.0)
+        } else {
+            self.surface_area_nm2.max(1.0)
+        }
+    }
+
+    fn current_radius_nm(&self) -> f32 {
+        (self.current_surface_area_nm2() / (4.0 * PI)).sqrt()
+    }
+
+    fn current_division_progress(&self) -> f32 {
+        if self.membrane_division_state.preferred_membrane_area_nm2 > 1.0
+            || self.membrane_division_state.membrane_area_nm2 > 1.0
+        {
+            (1.0 - self.membrane_division_state.septum_radius_fraction).clamp(0.0, 0.99)
+        } else {
+            self.division_progress.clamp(0.0, 0.99)
+        }
+    }
+
+    fn current_chromosome_separation_nm(&self) -> f32 {
+        if self.chromosome_state.chromosome_length_bp > 1
+            || self.chromosome_state.replicated_bp > 0
+            || !self.chromosome_state.forks.is_empty()
+        {
+            let radius_scale = self
+                .organism_data
+                .as_ref()
+                .map(|organism| organism.geometry.chromosome_radius_fraction.max(0.1))
+                .unwrap_or(0.55);
+            (self.current_radius_nm()
+                * radius_scale
+                * (0.35 + 1.45 * self.chromosome_state.segregation_progress))
+                .max(10.0)
+        } else {
+            self.chromosome_separation_nm.max(0.0)
+        }
     }
 
     fn membrane_chromosome_occlusion(&self) -> f32 {
@@ -2274,7 +2340,7 @@ impl WholeCellSimulator {
             + 0.18 * energy_support_mix
             - 0.10 * localized_resource_pressure)
             .clamp(0.0, 1.0);
-        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        let replicated_fraction = self.current_replicated_fraction();
         let division_readiness = (0.35 + 0.65 * replicated_fraction).clamp(0.35, 1.0);
 
         let mut ctx = WholeCellRuleContext::default();
@@ -5384,7 +5450,8 @@ impl WholeCellSimulator {
     }
 
     fn named_complex_family_gate(&self, complex: &WholeCellComplexSpec) -> f32 {
-        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        let replicated_fraction = self.current_replicated_fraction();
+        let division_progress = self.current_division_progress();
         match complex.family {
             WholeCellAssemblyFamily::Ribosome => 1.0,
             WholeCellAssemblyFamily::RnaPolymerase => {
@@ -5412,7 +5479,7 @@ impl WholeCellSimulator {
             WholeCellAssemblyFamily::MembraneEnzyme => Self::finite_scale(
                 0.55 * self.organism_expression.membrane_support
                     + 0.20 * self.localized_supply_scale()
-                    + 0.25 * (1.0 - self.division_progress).clamp(0.0, 1.0),
+                    + 0.25 * (1.0 - division_progress).clamp(0.0, 1.0),
                 1.0,
                 0.55,
                 1.20,
@@ -5424,8 +5491,7 @@ impl WholeCellSimulator {
                 1.40,
             ),
             WholeCellAssemblyFamily::Divisome => {
-                (0.55 + 0.80 * replicated_fraction + 0.25 * self.division_progress)
-                    .clamp(0.45, 1.45)
+                (0.55 + 0.80 * replicated_fraction + 0.25 * division_progress).clamp(0.45, 1.45)
             }
             WholeCellAssemblyFamily::Generic => 1.0,
         }
@@ -6028,7 +6094,7 @@ impl WholeCellSimulator {
         let prior = self.legacy_fallback_assembly_inventory();
         let expression = &self.organism_expression;
         if self.organism_data.is_none() || expression.transcription_units.is_empty() {
-            let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+            let replicated_fraction = self.current_replicated_fraction();
             let energy_signal = Self::saturating_signal(
                 0.70 * self.atp_mm.max(0.0) + 0.30 * self.chemistry_report.atp_support.max(0.0),
                 1.2,
@@ -6096,7 +6162,7 @@ impl WholeCellSimulator {
         );
         let localized_supply = self.localized_supply_scale();
         let crowding = expression.crowding_penalty.clamp(0.65, 1.10);
-        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        let replicated_fraction = self.current_replicated_fraction();
 
         let energy_scale = Self::finite_scale(
             0.45 * expression.process_scales.energy
@@ -6320,7 +6386,7 @@ impl WholeCellSimulator {
         let constriction_support = Self::finite_scale(
             0.50 * self.organism_expression.membrane_support
                 + 0.30 * self.organism_expression.process_scales.constriction
-                + 0.20 * (0.70 + 0.60 * (self.replicated_bp as f32 / self.genome_bp.max(1) as f32)),
+                + 0.20 * (0.70 + 0.60 * self.current_replicated_fraction()),
             1.0,
             0.55,
             1.70,
@@ -7129,7 +7195,7 @@ impl WholeCellSimulator {
             (0.10 + 0.18 * self.membrane_division_state.septum_radius_fraction).clamp(0.06, 0.32);
         let septum_gain =
             (0.35 + 0.65 * self.membrane_division_state.septum_localization).clamp(0.20, 1.25);
-        let division_progress = self.division_progress.clamp(0.0, 0.99);
+        let division_progress = self.current_division_progress();
         let cardiolipin_share = self.membrane_cardiolipin_share();
         let pole_width =
             (0.10 + 0.18 * cardiolipin_share + 0.08 * division_progress).clamp(0.08, 0.26);
@@ -7151,8 +7217,8 @@ impl WholeCellSimulator {
             + 0.30 * chromosome_radius_fraction
             + 0.12 * (1.0 - self.chromosome_state.compaction_fraction.clamp(0.0, 1.0)))
         .clamp(0.10, 0.42);
-        let separation_fraction = (self.chromosome_separation_nm
-            / (self.radius_nm * 2.2).max(self.lattice.voxel_size_nm))
+        let separation_fraction = (self.current_chromosome_separation_nm()
+            / (self.current_radius_nm() * 2.2).max(self.lattice.voxel_size_nm))
         .clamp(0.0, 0.45);
         let left_center = 0.5 - 0.5 * separation_fraction;
         let right_center = 0.5 + 0.5 * separation_fraction;
@@ -8678,7 +8744,7 @@ impl WholeCellSimulator {
             * organism_scales.replication_scale;
         let replication_flux = replication_drive / 18.0;
 
-        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        let replicated_fraction = self.current_replicated_fraction();
         let segregation_drive = (dt
             * fluxes.segregation_capacity
             * (0.55 + 0.45 * replisome_assembly_signal)
@@ -8694,7 +8760,7 @@ impl WholeCellSimulator {
         let fluxes = self.process_fluxes(inventory);
         let ctx = self.base_rule_context(dt);
         let organism_scales = self.organism_process_scales();
-        let replicated_fraction = self.replicated_bp as f32 / self.genome_bp.max(1) as f32;
+        let replicated_fraction = self.current_replicated_fraction();
         let constriction_signal = Self::saturating_signal(inventory.ftsz_polymer, 90.0);
         let membrane_growth_nm2 = (14.0
             * dt
@@ -10494,6 +10560,40 @@ mod tests {
         assert!((sim.active_ribosomes - 15.0_f32.clamp(12.0, 320.0)).abs() < 1.0e-6);
         assert!((sim.dnaa - 6.0_f32.clamp(8.0, 256.0)).abs() < 1.0e-6);
         assert!((sim.ftsz - 21.0_f32.clamp(12.0, 384.0)).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_hot_path_accessors_prefer_explicit_chromosome_and_membrane_state() {
+        let mut sim = WholeCellSimulator::new(WholeCellConfig {
+            use_gpu: false,
+            dt_ms: 0.25,
+            ..WholeCellConfig::default()
+        });
+        sim.genome_bp = 1000;
+        sim.replicated_bp = 0;
+        sim.chromosome_separation_nm = 0.0;
+        sim.radius_nm = 120.0;
+        sim.surface_area_nm2 = WholeCellSimulator::surface_area_from_radius(sim.radius_nm);
+        sim.volume_nm3 = WholeCellSimulator::volume_from_radius(sim.radius_nm);
+        sim.division_progress = 0.0;
+
+        sim.chromosome_state.chromosome_length_bp = 1000;
+        sim.chromosome_state.replicated_bp = 500;
+        sim.chromosome_state.replicated_fraction = 0.5;
+        sim.chromosome_state.segregation_progress = 0.6;
+
+        sim.membrane_division_state.membrane_area_nm2 = sim.surface_area_nm2 * 1.25;
+        sim.membrane_division_state.preferred_membrane_area_nm2 = sim.surface_area_nm2 * 1.25;
+        sim.membrane_division_state.septum_radius_fraction = 0.25;
+        sim.membrane_division_state.osmotic_balance = 1.0;
+
+        assert!((sim.current_replicated_fraction() - 0.5).abs() < 1.0e-6);
+        assert!((sim.current_division_progress() - 0.75).abs() < 1.0e-6);
+        assert!(sim.current_radius_nm() > sim.radius_nm);
+        assert!(sim.current_chromosome_separation_nm() > 0.0);
+
+        let ctx = sim.base_rule_context(0.0);
+        assert!((ctx.get(WholeCellRuleSignal::ReplicatedFraction) - 0.5).abs() < 1.0e-6);
     }
 
     #[test]

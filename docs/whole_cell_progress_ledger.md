@@ -1822,3 +1822,20 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy derived targets now prefer persisted explicit assembly state, but the remaining compatibility-only derived summary rollups still need to be collapsed or isolated behind legacy-only boundaries`
+
+### 2026-03-12 - Phase 7 / Explicit State Hot-Path Accessors
+
+- Summary:
+  - moved active scheduler, rule-context, assembly, BD, geometry, and spatial-field reads of replicated fraction, division progress, surface area, radius, and chromosome separation off synchronized summary scalars and onto explicit chromosome or membrane-state accessors
+  - kept synchronized summary scalars for compatibility and snapshot boundaries, but removed them from more execution-time decisions on the active path
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_hot_path_accessors_prefer_explicit_chromosome_and_membrane_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `execution-time consumers now prefer explicit chromosome and membrane state, but compatibility-only summary payloads and boundary-facing rollups still need to be pushed fully to serialization and diagnostics boundaries`

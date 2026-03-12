@@ -45,10 +45,11 @@ What is already built on the active path:
 - explicit asset bundles no longer fall back to derived complex-target inventories on the live assembly inventory path
 - explicit asset bundles now refresh diagnostic RNAP, ribosome, DnaA, and FtsZ summaries directly from explicit inventory instead of flux-blended surrogate rollups
 - legacy-derived complex targets now prefer persisted complex assembly state before falling back to scalar-rule priors
+- active scheduler, rule-context, assembly, BD, geometry, and spatial-field hot paths now read replicated fraction, division progress, surface area, radius, and chromosome separation from explicit chromosome or membrane state accessors instead of synchronized summary scalars
 
 What is still not at the target:
 
-- the remaining compatibility-only derived summary paths still use scalar-rule or derived surrogate behavior instead of explicit local reaction or channel execution
+- the remaining compatibility-only summary payloads and boundary-facing rollups still preserve synchronized scalar state instead of deriving everything purely from explicit state at serialization or diagnostics boundaries
 - reaction/species coverage is still narrow relative to a full microbial cell
 - membrane chemistry, chromosome mechanics, and local chemistry are still too coarse for parity
 - atomistic refinement exists as infrastructure, but not yet as an authoritative live feedback service
@@ -153,7 +154,7 @@ These rules are operational, not aspirational.
 
 This is the direct task ladder from the current runtime to the full vision. The detailed work packages below remain authoritative; this section is the execution-facing todo.
 
-1. Remove the remaining compatibility-only derived summary paths, so the active path no longer depends on generic rule wrappers or rollups for execution-critical behavior.
+1. Remove the remaining compatibility-only summary payload rollups, so synchronized scalar summaries become boundary serialization or diagnostics only and not execution-time dependencies.
 2. Replace any remaining uses of scalar-rule inventory priors in non-asset compatibility code with persisted explicit state or explicit local inventories wherever possible.
 3. Expand compiled species/reaction coverage for metabolites, ions, cofactors, lipids, damage states, repair states, and membrane-local species beyond the current narrow bundle set.
 4. Move more reaction execution from generic process scales into explicit registry-driven reaction families with direct ownership of pools, transcripts, proteins, complexes, and local fields.
