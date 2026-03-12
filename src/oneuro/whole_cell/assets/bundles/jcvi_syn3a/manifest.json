@@ -1,5 +1,14 @@
 {
   "organism": "JCVI-syn3A",
-  "source_dataset": "bundled_syn3a_organism_spec",
-  "organism_spec_json": "../../../../../../oneuro-metal/specs/whole_cell_syn3a_organism.json"
+  "source_dataset": "bundled_syn3a_structured_bundle",
+  "require_explicit_gene_semantics": true,
+  "require_explicit_transcription_unit_semantics": true,
+  "metadata_json": "metadata.json",
+  "gene_features_json": "gene_features.json",
+  "gene_products_json": "gene_products.json",
+  "gene_semantics_json": "gene_semantics.json",
+  "transcription_units_json": "transcription_units.json",
+  "transcription_unit_semantics_json": "transcription_unit_semantics.json",
+  "chromosome_domains_json": "chromosome_domains.json",
+  "pools_json": "pools.json"
 }

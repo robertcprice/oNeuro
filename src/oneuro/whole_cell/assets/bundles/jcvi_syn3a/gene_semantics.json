@@ -1,0 +1,132 @@
+[
+  {
+    "gene": "atp_synthase_catalytic_core",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand"
+    ],
+    "asset_class": "energy",
+    "complex_family": "atp_synthase"
+  },
+  {
+    "gene": "electron_transport_membrane_module",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand"
+    ],
+    "asset_class": "energy",
+    "complex_family": "atp_synthase"
+  },
+  {
+    "gene": "ribosome_small_subunit_core",
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "asset_class": "translation",
+    "complex_family": "ribosome"
+  },
+  {
+    "gene": "ribosome_large_subunit_core",
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "asset_class": "translation",
+    "complex_family": "ribosome"
+  },
+  {
+    "gene": "rrna_processing_module",
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "asset_class": "translation",
+    "complex_family": "ribosome"
+  },
+  {
+    "gene": "translation_factor_cycle",
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "asset_class": "translation",
+    "complex_family": "ribosome"
+  },
+  {
+    "gene": "dna_initiation_module",
+    "subsystem_targets": [
+      "ReplisomeTrack"
+    ],
+    "asset_class": "replication",
+    "complex_family": "replisome"
+  },
+  {
+    "gene": "dna_polymerase_processivity_module",
+    "subsystem_targets": [
+      "ReplisomeTrack"
+    ],
+    "asset_class": "replication",
+    "complex_family": "replisome"
+  },
+  {
+    "gene": "nucleotide_salvage_cycle",
+    "subsystem_targets": [
+      "ReplisomeTrack"
+    ],
+    "asset_class": "replication",
+    "complex_family": "replisome"
+  },
+  {
+    "gene": "chromosome_partitioning_scaffold",
+    "subsystem_targets": [
+      "ReplisomeTrack"
+    ],
+    "asset_class": "replication",
+    "complex_family": "replisome"
+  },
+  {
+    "gene": "lipid_activation_module",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand",
+      "FtsZSeptumRing"
+    ],
+    "asset_class": "energy",
+    "complex_family": "atp_synthase"
+  },
+  {
+    "gene": "membrane_transport_homeostasis",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand",
+      "FtsZSeptumRing"
+    ],
+    "asset_class": "energy",
+    "complex_family": "atp_synthase"
+  },
+  {
+    "gene": "ftsz_ring_polymerization_core",
+    "subsystem_targets": [
+      "FtsZSeptumRing"
+    ],
+    "asset_class": "constriction",
+    "complex_family": "divisome"
+  },
+  {
+    "gene": "septum_envelope_remodeling",
+    "subsystem_targets": [
+      "FtsZSeptumRing"
+    ],
+    "asset_class": "constriction",
+    "complex_family": "divisome"
+  },
+  {
+    "gene": "central_carbon_oxidation_core",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand"
+    ],
+    "asset_class": "energy",
+    "complex_family": "atp_synthase"
+  },
+  {
+    "gene": "chaperone_quality_control_core",
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "asset_class": "quality_control",
+    "complex_family": "chaperone_client"
+  }
+]

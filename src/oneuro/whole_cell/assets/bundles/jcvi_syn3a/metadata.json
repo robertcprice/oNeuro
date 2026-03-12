@@ -1,0 +1,18 @@
+{
+  "organism": "JCVI-syn3A",
+  "chromosome_length_bp": 543000,
+  "origin_bp": 10000,
+  "terminus_bp": 281500,
+  "geometry": {
+    "radius_nm": 200.0,
+    "chromosome_radius_fraction": 0.58,
+    "membrane_fraction": 0.24
+  },
+  "composition": {
+    "dry_mass_fg": 130.0,
+    "gc_fraction": 0.31,
+    "protein_fraction": 0.56,
+    "rna_fraction": 0.22,
+    "lipid_fraction": 0.12
+  }
+}

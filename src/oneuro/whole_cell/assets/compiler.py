@@ -372,6 +372,12 @@ def _compile_structured_bundle(
         )
         for unit in transcription_units
     ]
+    chromosome_domains = (
+        _load_optional_json(
+            manifest_path, manifest, "chromosome_domains_json", source_hashes
+        )
+        or []
+    )
     if manifest.get("require_explicit_gene_semantics"):
         _validate_explicit_gene_semantics(compiled_genes)
     if manifest.get("require_explicit_transcription_unit_semantics"):
@@ -384,7 +390,7 @@ def _compile_structured_bundle(
         "terminus_bp": int(metadata.get("terminus_bp", chromosome_length_bp // 2)),
         "geometry": metadata["geometry"],
         "composition": metadata["composition"],
-        "chromosome_domains": [],
+        "chromosome_domains": chromosome_domains,
         "pools": pools,
         "genes": compiled_genes,
         "transcription_units": compiled_transcription_units,

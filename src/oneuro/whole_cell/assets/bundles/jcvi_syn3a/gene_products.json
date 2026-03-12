@@ -1,0 +1,258 @@
+[
+  {
+    "gene": "atp_synthase_catalytic_core",
+    "essential": true,
+    "basal_expression": 1.05,
+    "translation_cost": 1.1,
+    "nucleotide_cost": 0.95,
+    "process_weights": {
+      "energy": 1.0,
+      "transcription": 0.12,
+      "translation": 0.22,
+      "replication": 0.04,
+      "segregation": 0.03,
+      "membrane": 0.82,
+      "constriction": 0.04
+    }
+  },
+  {
+    "gene": "electron_transport_membrane_module",
+    "essential": true,
+    "basal_expression": 1.0,
+    "translation_cost": 1.0,
+    "nucleotide_cost": 0.9,
+    "process_weights": {
+      "energy": 0.96,
+      "transcription": 0.1,
+      "translation": 0.18,
+      "replication": 0.03,
+      "segregation": 0.03,
+      "membrane": 0.72,
+      "constriction": 0.04
+    }
+  },
+  {
+    "gene": "ribosome_small_subunit_core",
+    "essential": true,
+    "basal_expression": 1.12,
+    "translation_cost": 1.2,
+    "nucleotide_cost": 0.78,
+    "process_weights": {
+      "energy": 0.2,
+      "transcription": 0.48,
+      "translation": 1.0,
+      "replication": 0.06,
+      "segregation": 0.03,
+      "membrane": 0.05,
+      "constriction": 0.03
+    }
+  },
+  {
+    "gene": "ribosome_large_subunit_core",
+    "essential": true,
+    "basal_expression": 1.15,
+    "translation_cost": 1.24,
+    "nucleotide_cost": 0.8,
+    "process_weights": {
+      "energy": 0.2,
+      "transcription": 0.46,
+      "translation": 1.0,
+      "replication": 0.06,
+      "segregation": 0.03,
+      "membrane": 0.05,
+      "constriction": 0.03
+    }
+  },
+  {
+    "gene": "rrna_processing_module",
+    "essential": true,
+    "basal_expression": 1.18,
+    "translation_cost": 0.86,
+    "nucleotide_cost": 0.74,
+    "process_weights": {
+      "energy": 0.1,
+      "transcription": 0.8,
+      "translation": 0.92,
+      "replication": 0.04,
+      "segregation": 0.02,
+      "membrane": 0.02,
+      "constriction": 0.02
+    }
+  },
+  {
+    "gene": "translation_factor_cycle",
+    "essential": true,
+    "basal_expression": 1.04,
+    "translation_cost": 1.12,
+    "nucleotide_cost": 0.72,
+    "process_weights": {
+      "energy": 0.18,
+      "transcription": 0.36,
+      "translation": 0.86,
+      "replication": 0.05,
+      "segregation": 0.02,
+      "membrane": 0.04,
+      "constriction": 0.03
+    }
+  },
+  {
+    "gene": "dna_initiation_module",
+    "essential": true,
+    "basal_expression": 0.88,
+    "translation_cost": 0.92,
+    "nucleotide_cost": 1.14,
+    "process_weights": {
+      "energy": 0.14,
+      "transcription": 0.2,
+      "translation": 0.2,
+      "replication": 1.0,
+      "segregation": 0.32,
+      "membrane": 0.02,
+      "constriction": 0.02
+    }
+  },
+  {
+    "gene": "dna_polymerase_processivity_module",
+    "essential": true,
+    "basal_expression": 0.92,
+    "translation_cost": 0.98,
+    "nucleotide_cost": 1.22,
+    "process_weights": {
+      "energy": 0.18,
+      "transcription": 0.16,
+      "translation": 0.22,
+      "replication": 1.0,
+      "segregation": 0.44,
+      "membrane": 0.02,
+      "constriction": 0.02
+    }
+  },
+  {
+    "gene": "nucleotide_salvage_cycle",
+    "essential": true,
+    "basal_expression": 0.84,
+    "translation_cost": 0.78,
+    "nucleotide_cost": 1.1,
+    "process_weights": {
+      "energy": 0.18,
+      "transcription": 0.14,
+      "translation": 0.14,
+      "replication": 0.82,
+      "segregation": 0.16,
+      "membrane": 0.02,
+      "constriction": 0.02
+    }
+  },
+  {
+    "gene": "chromosome_partitioning_scaffold",
+    "essential": true,
+    "basal_expression": 0.78,
+    "translation_cost": 0.72,
+    "nucleotide_cost": 0.66,
+    "process_weights": {
+      "energy": 0.1,
+      "transcription": 0.12,
+      "translation": 0.16,
+      "replication": 0.36,
+      "segregation": 1.0,
+      "membrane": 0.02,
+      "constriction": 0.02
+    }
+  },
+  {
+    "gene": "lipid_activation_module",
+    "essential": true,
+    "basal_expression": 0.96,
+    "translation_cost": 0.9,
+    "nucleotide_cost": 0.72,
+    "process_weights": {
+      "energy": 0.24,
+      "transcription": 0.18,
+      "translation": 0.22,
+      "replication": 0.04,
+      "segregation": 0.03,
+      "membrane": 1.0,
+      "constriction": 0.26
+    }
+  },
+  {
+    "gene": "membrane_transport_homeostasis",
+    "essential": true,
+    "basal_expression": 0.9,
+    "translation_cost": 0.84,
+    "nucleotide_cost": 0.68,
+    "process_weights": {
+      "energy": 0.28,
+      "transcription": 0.16,
+      "translation": 0.18,
+      "replication": 0.02,
+      "segregation": 0.02,
+      "membrane": 0.94,
+      "constriction": 0.18
+    }
+  },
+  {
+    "gene": "ftsz_ring_polymerization_core",
+    "essential": true,
+    "basal_expression": 0.92,
+    "translation_cost": 0.96,
+    "nucleotide_cost": 0.7,
+    "process_weights": {
+      "energy": 0.16,
+      "transcription": 0.18,
+      "translation": 0.28,
+      "replication": 0.02,
+      "segregation": 0.04,
+      "membrane": 0.56,
+      "constriction": 1.0
+    }
+  },
+  {
+    "gene": "septum_envelope_remodeling",
+    "essential": true,
+    "basal_expression": 0.86,
+    "translation_cost": 0.88,
+    "nucleotide_cost": 0.66,
+    "process_weights": {
+      "energy": 0.14,
+      "transcription": 0.16,
+      "translation": 0.26,
+      "replication": 0.02,
+      "segregation": 0.03,
+      "membrane": 0.88,
+      "constriction": 0.92
+    }
+  },
+  {
+    "gene": "central_carbon_oxidation_core",
+    "essential": true,
+    "basal_expression": 1.02,
+    "translation_cost": 0.82,
+    "nucleotide_cost": 0.72,
+    "process_weights": {
+      "energy": 0.94,
+      "transcription": 0.18,
+      "translation": 0.22,
+      "replication": 0.04,
+      "segregation": 0.03,
+      "membrane": 0.12,
+      "constriction": 0.04
+    }
+  },
+  {
+    "gene": "chaperone_quality_control_core",
+    "essential": true,
+    "basal_expression": 0.82,
+    "translation_cost": 0.78,
+    "nucleotide_cost": 0.6,
+    "process_weights": {
+      "energy": 0.2,
+      "transcription": 0.22,
+      "translation": 0.42,
+      "replication": 0.08,
+      "segregation": 0.06,
+      "membrane": 0.06,
+      "constriction": 0.06
+    }
+  }
+]

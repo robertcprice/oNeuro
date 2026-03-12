@@ -1,0 +1,153 @@
+[
+  {
+    "name": "energy_membrane_operon",
+    "genes": [
+      "atp_synthase_catalytic_core",
+      "electron_transport_membrane_module"
+    ],
+    "basal_activity": 1.0,
+    "process_weights": {
+      "energy": 0.96,
+      "transcription": 0.18,
+      "translation": 0.24,
+      "replication": 0.04,
+      "segregation": 0.03,
+      "membrane": 0.82,
+      "constriction": 0.05
+    }
+  },
+  {
+    "name": "ribosome_biogenesis_operon",
+    "genes": [
+      "ribosome_small_subunit_core",
+      "ribosome_large_subunit_core",
+      "rrna_processing_module"
+    ],
+    "basal_activity": 1.12,
+    "process_weights": {
+      "energy": 0.16,
+      "transcription": 0.78,
+      "translation": 1.0,
+      "replication": 0.05,
+      "segregation": 0.02,
+      "membrane": 0.03,
+      "constriction": 0.02
+    }
+  },
+  {
+    "name": "translation_factor_operon",
+    "genes": [
+      "translation_factor_cycle"
+    ],
+    "basal_activity": 1.0,
+    "process_weights": {
+      "energy": 0.16,
+      "transcription": 0.34,
+      "translation": 0.84,
+      "replication": 0.04,
+      "segregation": 0.02,
+      "membrane": 0.03,
+      "constriction": 0.02
+    }
+  },
+  {
+    "name": "replication_cycle_operon",
+    "genes": [
+      "dna_initiation_module",
+      "dna_polymerase_processivity_module",
+      "nucleotide_salvage_cycle"
+    ],
+    "basal_activity": 0.9,
+    "process_weights": {
+      "energy": 0.16,
+      "transcription": 0.16,
+      "translation": 0.2,
+      "replication": 1.0,
+      "segregation": 0.34,
+      "membrane": 0.02,
+      "constriction": 0.02
+    }
+  },
+  {
+    "name": "partitioning_unit",
+    "genes": [
+      "chromosome_partitioning_scaffold"
+    ],
+    "basal_activity": 0.78,
+    "process_weights": {
+      "energy": 0.08,
+      "transcription": 0.1,
+      "translation": 0.14,
+      "replication": 0.24,
+      "segregation": 1.0,
+      "membrane": 0.02,
+      "constriction": 0.02
+    }
+  },
+  {
+    "name": "membrane_homeostasis_operon",
+    "genes": [
+      "lipid_activation_module",
+      "membrane_transport_homeostasis"
+    ],
+    "basal_activity": 0.94,
+    "process_weights": {
+      "energy": 0.26,
+      "transcription": 0.16,
+      "translation": 0.2,
+      "replication": 0.03,
+      "segregation": 0.02,
+      "membrane": 1.0,
+      "constriction": 0.22
+    }
+  },
+  {
+    "name": "division_ring_operon",
+    "genes": [
+      "ftsz_ring_polymerization_core",
+      "septum_envelope_remodeling"
+    ],
+    "basal_activity": 0.9,
+    "process_weights": {
+      "energy": 0.14,
+      "transcription": 0.16,
+      "translation": 0.24,
+      "replication": 0.02,
+      "segregation": 0.03,
+      "membrane": 0.7,
+      "constriction": 1.0
+    }
+  },
+  {
+    "name": "carbon_energy_unit",
+    "genes": [
+      "central_carbon_oxidation_core"
+    ],
+    "basal_activity": 1.0,
+    "process_weights": {
+      "energy": 1.0,
+      "transcription": 0.18,
+      "translation": 0.2,
+      "replication": 0.04,
+      "segregation": 0.02,
+      "membrane": 0.1,
+      "constriction": 0.03
+    }
+  },
+  {
+    "name": "quality_control_unit",
+    "genes": [
+      "chaperone_quality_control_core"
+    ],
+    "basal_activity": 0.82,
+    "process_weights": {
+      "energy": 0.18,
+      "transcription": 0.2,
+      "translation": 0.38,
+      "replication": 0.08,
+      "segregation": 0.04,
+      "membrane": 0.04,
+      "constriction": 0.04
+    }
+  }
+]

@@ -974,3 +974,34 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the export path now makes monolithic organism specs convertible into strict structured bundles, but the upstream reference assets still need to be actually migrated and checked into source-bundle form before the monolithic path can stop being the default for richer organisms`
+
+### 2026-03-11 - Phase 7 / Structured Syn3A Source Migration Slice
+
+- Summary:
+  - migrated the bundled Syn3A reference from the monolithic `organism_spec_json` path to an explicit structured source bundle with dedicated `metadata`, `gene_features`, `gene_products`, `gene_semantics`, `transcription_units`, `transcription_unit_semantics`, `chromosome_domains`, and `pools` sources
+  - fixed the Python structured-bundle compiler so declared `chromosome_domains_json` is part of the authoritative source contract instead of being silently recomputed and omitted from source-hash provenance
+  - updated Python and Rust validation to assert the structured-source provenance shape directly, so the checked-in Syn3A bundle now exercises the same explicit-source workflow as the newer bundles
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/chromosome_domains.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/gene_features.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/gene_products.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/gene_semantics.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/manifest.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/metadata.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/pools.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/transcription_unit_semantics.json`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/transcription_units.json`
+  - `src/oneuro/whole_cell/assets/compiler.py`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `python3 -m py_compile src/oneuro/whole_cell/assets/compiler.py tests/test_whole_cell_assets.py`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `Syn3A now compiles through explicit structured sources, but the remaining monolithic compatibility path still exists for older organism specs and should keep shrinking until explicit bundles are the default ingestion form`

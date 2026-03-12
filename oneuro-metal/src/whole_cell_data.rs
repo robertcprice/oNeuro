@@ -6245,7 +6245,7 @@ mod tests {
         assert!(assets.complexes.len() >= organism.transcription_units.len());
         assert_eq!(
             spec.provenance.source_dataset.as_deref(),
-            Some("bundled_syn3a_organism_spec")
+            Some("bundled_syn3a_structured_bundle")
         );
         assert!(spec.provenance.organism_asset_hash.is_some());
     }

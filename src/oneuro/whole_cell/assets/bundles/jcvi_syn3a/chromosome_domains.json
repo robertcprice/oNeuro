@@ -1,0 +1,88 @@
+[
+  {
+    "id": "chromosome_domain_0",
+    "start_bp": 0,
+    "end_bp": 135749,
+    "axial_center_fraction": 0.12499907918968692,
+    "axial_spread_fraction": 0.1875,
+    "genes": [
+      "atp_synthase_catalytic_core",
+      "electron_transport_membrane_module",
+      "ribosome_large_subunit_core",
+      "ribosome_small_subunit_core",
+      "rrna_processing_module",
+      "translation_factor_cycle"
+    ],
+    "transcription_units": [
+      "energy_membrane_operon",
+      "ribosome_biogenesis_operon",
+      "translation_factor_operon"
+    ],
+    "operons": [
+      "energy_membrane_operon",
+      "ribosome_biogenesis_operon",
+      "translation_factor_operon"
+    ]
+  },
+  {
+    "id": "chromosome_domain_1",
+    "start_bp": 135750,
+    "end_bp": 271499,
+    "axial_center_fraction": 0.37499907918968695,
+    "axial_spread_fraction": 0.1875,
+    "genes": [
+      "chromosome_partitioning_scaffold",
+      "dna_initiation_module",
+      "dna_polymerase_processivity_module",
+      "nucleotide_salvage_cycle"
+    ],
+    "transcription_units": [
+      "partitioning_unit",
+      "replication_cycle_operon"
+    ],
+    "operons": [
+      "partitioning_unit",
+      "replication_cycle_operon"
+    ]
+  },
+  {
+    "id": "chromosome_domain_2",
+    "start_bp": 271500,
+    "end_bp": 407249,
+    "axial_center_fraction": 0.6249990791896869,
+    "axial_spread_fraction": 0.1875,
+    "genes": [
+      "ftsz_ring_polymerization_core",
+      "lipid_activation_module",
+      "membrane_transport_homeostasis",
+      "septum_envelope_remodeling"
+    ],
+    "transcription_units": [
+      "division_ring_operon",
+      "membrane_homeostasis_operon"
+    ],
+    "operons": [
+      "division_ring_operon",
+      "membrane_homeostasis_operon"
+    ]
+  },
+  {
+    "id": "chromosome_domain_3",
+    "start_bp": 407250,
+    "end_bp": 542999,
+    "axial_center_fraction": 0.8749990791896869,
+    "axial_spread_fraction": 0.1875,
+    "genes": [
+      "central_carbon_oxidation_core",
+      "chaperone_quality_control_core"
+    ],
+    "transcription_units": [
+      "carbon_energy_unit",
+      "quality_control_unit"
+    ],
+    "operons": [
+      "carbon_energy_unit",
+      "quality_control_unit"
+    ]
+  }
+]

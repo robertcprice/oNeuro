@@ -1,0 +1,98 @@
+[
+  {
+    "gene": "atp_synthase_catalytic_core",
+    "start_bp": 12000,
+    "end_bp": 16800,
+    "strand": 1
+  },
+  {
+    "gene": "electron_transport_membrane_module",
+    "start_bp": 17200,
+    "end_bp": 23800,
+    "strand": 1
+  },
+  {
+    "gene": "ribosome_small_subunit_core",
+    "start_bp": 60100,
+    "end_bp": 68200,
+    "strand": 1
+  },
+  {
+    "gene": "ribosome_large_subunit_core",
+    "start_bp": 68800,
+    "end_bp": 78100,
+    "strand": 1
+  },
+  {
+    "gene": "rrna_processing_module",
+    "start_bp": 78600,
+    "end_bp": 83600,
+    "strand": -1
+  },
+  {
+    "gene": "translation_factor_cycle",
+    "start_bp": 84200,
+    "end_bp": 90600,
+    "strand": 1
+  },
+  {
+    "gene": "dna_initiation_module",
+    "start_bp": 158000,
+    "end_bp": 162300,
+    "strand": 1
+  },
+  {
+    "gene": "dna_polymerase_processivity_module",
+    "start_bp": 162900,
+    "end_bp": 171800,
+    "strand": -1
+  },
+  {
+    "gene": "nucleotide_salvage_cycle",
+    "start_bp": 173400,
+    "end_bp": 179100,
+    "strand": 1
+  },
+  {
+    "gene": "chromosome_partitioning_scaffold",
+    "start_bp": 181500,
+    "end_bp": 187900,
+    "strand": 1
+  },
+  {
+    "gene": "lipid_activation_module",
+    "start_bp": 270800,
+    "end_bp": 276400,
+    "strand": -1
+  },
+  {
+    "gene": "membrane_transport_homeostasis",
+    "start_bp": 277200,
+    "end_bp": 286000,
+    "strand": 1
+  },
+  {
+    "gene": "ftsz_ring_polymerization_core",
+    "start_bp": 344500,
+    "end_bp": 350300,
+    "strand": 1
+  },
+  {
+    "gene": "septum_envelope_remodeling",
+    "start_bp": 351100,
+    "end_bp": 359900,
+    "strand": -1
+  },
+  {
+    "gene": "central_carbon_oxidation_core",
+    "start_bp": 410200,
+    "end_bp": 418900,
+    "strand": 1
+  },
+  {
+    "gene": "chaperone_quality_control_core",
+    "start_bp": 468500,
+    "end_bp": 475700,
+    "strand": 1
+  }
+]

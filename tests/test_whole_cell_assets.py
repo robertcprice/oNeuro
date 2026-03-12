@@ -26,6 +26,17 @@ def test_compile_syn3a_bundle_matches_current_runtime_shape():
     bulk_fields = {pool.get("bulk_field") for pool in bundle.organism_spec["pools"]}
     transcription_units = bundle.organism_spec["transcription_units"]
     genes = bundle.organism_spec["genes"]
+    expected_source_keys = {
+        "manifest.json",
+        "metadata_json",
+        "gene_features_json",
+        "gene_products_json",
+        "gene_semantics_json",
+        "transcription_units_json",
+        "transcription_unit_semantics_json",
+        "chromosome_domains_json",
+        "pools_json",
+    }
 
     assert bundle.organism == "JCVI-syn3A"
     assert summary["gene_count"] >= 10
@@ -63,7 +74,7 @@ def test_compile_syn3a_bundle_matches_current_runtime_shape():
         semantic.get("asset_class") and semantic.get("family")
         for semantic in bundle.genome_asset_package["complex_semantics"]
     )
-    assert "organism_spec_json" in bundle.source_hashes
+    assert set(bundle.source_hashes) == expected_source_keys
 
 
 def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
@@ -171,6 +182,7 @@ def test_structured_bundle_export_round_trips_syn3a_python(tmp_path):
     ]
     assert "gene_semantics_json" in round_tripped.source_hashes
     assert "transcription_unit_semantics_json" in round_tripped.source_hashes
+    assert "chromosome_domains_json" in round_tripped.source_hashes
 
 
 def test_structured_bundle_export_round_trips_syn3a_rust_if_available(tmp_path):
