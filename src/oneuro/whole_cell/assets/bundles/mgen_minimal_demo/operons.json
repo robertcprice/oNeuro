@@ -1,0 +1,76 @@
+[
+  {
+    "name": "bioenergetics_operon",
+    "genes": [
+      "energy_module",
+      "transport_module"
+    ],
+    "promoter_bp": 120,
+    "terminator_bp": 1680,
+    "basal_activity": 0.98,
+    "polycistronic": true,
+    "process_weights": {
+      "energy": 0.7,
+      "transcription": 0.12,
+      "translation": 0.2,
+      "replication": 0.03,
+      "segregation": 0.03,
+      "membrane": 0.76,
+      "constriction": 0.05
+    },
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand",
+      "FtsZSeptumRing"
+    ],
+    "asset_class": "energy",
+    "complex_family": "atp_synthase"
+  },
+  {
+    "name": "ribosome_operon",
+    "genes": [
+      "ribosome_module"
+    ],
+    "promoter_bp": 760,
+    "terminator_bp": 1190,
+    "basal_activity": 1.1,
+    "polycistronic": false,
+    "process_weights": {
+      "energy": 0.18,
+      "transcription": 0.42,
+      "translation": 1.0,
+      "replication": 0.04,
+      "segregation": 0.02,
+      "membrane": 0.03,
+      "constriction": 0.02
+    },
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "asset_class": "translation",
+    "complex_family": "ribosome"
+  },
+  {
+    "name": "division_operon",
+    "genes": [
+      "division_module"
+    ],
+    "promoter_bp": 2400,
+    "terminator_bp": 3010,
+    "basal_activity": 0.9,
+    "polycistronic": false,
+    "process_weights": {
+      "energy": 0.14,
+      "transcription": 0.2,
+      "translation": 0.22,
+      "replication": 0.08,
+      "segregation": 0.2,
+      "membrane": 0.64,
+      "constriction": 0.92
+    },
+    "subsystem_targets": [
+      "FtsZSeptumRing"
+    ],
+    "asset_class": "constriction",
+    "complex_family": "divisome"
+  }
+]

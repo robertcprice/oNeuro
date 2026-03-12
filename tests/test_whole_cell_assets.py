@@ -92,6 +92,26 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
     bulk_fields = {pool.get("bulk_field") for pool in bundle.organism_spec["pools"]}
     transcription_units = bundle.organism_spec["transcription_units"]
     genes = bundle.organism_spec["genes"]
+    expected_source_keys = {
+        "manifest.json",
+        "metadata_json",
+        "genome_fasta",
+        "gene_features_gff",
+        "gene_products_json",
+        "gene_semantics_json",
+        "transcription_units_json",
+        "transcription_unit_semantics_json",
+        "chromosome_domains_json",
+        "pools_json",
+        "operons_json",
+        "rnas_json",
+        "proteins_json",
+        "complexes_json",
+        "operon_semantics_json",
+        "protein_semantics_json",
+        "complex_semantics_json",
+        "program_defaults_json",
+    }
 
     assert bundle.organism == "Mgen-minimal-demo"
     assert bundle.organism_spec["chromosome_length_bp"] > 1000
@@ -127,10 +147,7 @@ def test_compile_demo_bundle_from_fasta_and_gff_sources(tmp_path):
         semantic.get("asset_class") and semantic.get("family")
         for semantic in bundle.genome_asset_package["complex_semantics"]
     )
-    assert "genome_fasta" in bundle.source_hashes
-    assert "gene_features_gff" in bundle.source_hashes
-    assert "gene_semantics_json" in bundle.source_hashes
-    assert "transcription_unit_semantics_json" in bundle.source_hashes
+    assert set(bundle.source_hashes) == expected_source_keys
     assert Path(written["organism_spec"]).exists()
     assert Path(written["genome_assets"]).exists()
     assert Path(written["summary"]).exists()
@@ -231,9 +248,18 @@ def test_explicit_semantic_bundle_rejects_missing_gene_overlay(tmp_path):
         "genome.fasta",
         "features.gff3",
         "gene_products.json",
+        "chromosome_domains.json",
         "transcription_units.json",
         "transcription_unit_semantics.json",
         "pools.json",
+        "operons.json",
+        "rnas.json",
+        "proteins.json",
+        "complexes.json",
+        "operon_semantics.json",
+        "protein_semantics.json",
+        "complex_semantics.json",
+        "program_defaults.json",
     ]:
         (bundle_dir / name).write_text((source_dir / name).read_text(), encoding="ascii")
     manifest = json.loads((source_dir / "manifest.json").read_text(encoding="ascii"))

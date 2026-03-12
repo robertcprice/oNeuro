@@ -1,0 +1,52 @@
+[
+  {
+    "id": "chromosome_domain_0",
+    "start_bp": 0,
+    "end_bp": 359,
+    "axial_center_fraction": 0.12465277777777778,
+    "axial_spread_fraction": 0.1875,
+    "genes": [
+      "energy_module"
+    ],
+    "transcription_units": [],
+    "operons": []
+  },
+  {
+    "id": "chromosome_domain_1",
+    "start_bp": 360,
+    "end_bp": 719,
+    "axial_center_fraction": 0.3746527777777778,
+    "axial_spread_fraction": 0.1875,
+    "genes": [],
+    "transcription_units": [],
+    "operons": []
+  },
+  {
+    "id": "chromosome_domain_2",
+    "start_bp": 720,
+    "end_bp": 1079,
+    "axial_center_fraction": 0.6246527777777777,
+    "axial_spread_fraction": 0.1875,
+    "genes": [
+      "ribosome_module"
+    ],
+    "transcription_units": [
+      "bioenergetics_operon",
+      "ribosome_operon"
+    ],
+    "operons": [
+      "bioenergetics_operon",
+      "ribosome_operon"
+    ]
+  },
+  {
+    "id": "chromosome_domain_3",
+    "start_bp": 1080,
+    "end_bp": 1439,
+    "axial_center_fraction": 0.8746527777777777,
+    "axial_spread_fraction": 0.1875,
+    "genes": [],
+    "transcription_units": [],
+    "operons": []
+  }
+]

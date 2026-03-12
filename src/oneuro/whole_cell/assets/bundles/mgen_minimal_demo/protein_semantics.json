@@ -1,0 +1,31 @@
+[
+  {
+    "id": "energy_module_protein",
+    "asset_class": "energy",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand"
+    ]
+  },
+  {
+    "id": "ribosome_module_protein",
+    "asset_class": "translation",
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ]
+  },
+  {
+    "id": "transport_module_protein",
+    "asset_class": "energy",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand",
+      "FtsZSeptumRing"
+    ]
+  },
+  {
+    "id": "division_module_protein",
+    "asset_class": "constriction",
+    "subsystem_targets": [
+      "FtsZSeptumRing"
+    ]
+  }
+]

@@ -1383,3 +1383,31 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the remaining explicit compatibility hook is the manual registry rebuild helper in the simulator, and any other live-path repair utilities should be pushed behind legacy-only or explicitly named migration paths`
+
+### 2026-03-12 - Phase 1 / Promote Demo Bundle To Explicit Asset Sources
+
+- Summary:
+  - added explicit chromosome-domain, operon, RNA, protein, complex, and asset-semantic source files to `mgen_minimal_demo`, so both shipped organism bundles now carry declared asset entities and semantics instead of one demo bundle still relying on derived asset metadata
+  - tightened the demo manifest to require structured bundle sources, explicit organism sources, explicit asset entities, explicit asset semantics, and explicit program defaults while still preserving the FASTA/GFF ingestion path for gene features
+  - updated asset/compiler tests so the demo bundle now asserts the full explicit source-hash contract on both the Python compiler path and the native Rust bundle-ingestion path
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/manifest.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/chromosome_domains.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/operons.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/rnas.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/proteins.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/complexes.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/operon_semantics.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/protein_semantics.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/complex_semantics.json`
+  - `src/oneuro/whole_cell/assets/bundles/mgen_minimal_demo/program_defaults.json`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && PYTHONPATH=src pytest -q tests/test_whole_cell_assets.py`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `the remaining compiler shortcut is the generic Python bundle compiler fallback that still derives asset entities when a source bundle omits them, so the next step is either eliminating that fallback or confining it to an explicitly legacy bundle mode`

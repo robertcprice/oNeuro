@@ -1,0 +1,70 @@
+[
+  {
+    "id": "energy_module_rna",
+    "gene": "energy_module",
+    "operon": "bioenergetics_operon",
+    "length_nt": 421,
+    "basal_abundance": 10.3,
+    "asset_class": "energy",
+    "process_weights": {
+      "energy": 1.0,
+      "transcription": 0.1,
+      "translation": 0.2,
+      "replication": 0.05,
+      "segregation": 0.03,
+      "membrane": 0.8,
+      "constriction": 0.02
+    }
+  },
+  {
+    "id": "ribosome_module_rna",
+    "gene": "ribosome_module",
+    "operon": "ribosome_operon",
+    "length_nt": 431,
+    "basal_abundance": 10.72,
+    "asset_class": "translation",
+    "process_weights": {
+      "energy": 0.18,
+      "transcription": 0.45,
+      "translation": 1.0,
+      "replication": 0.06,
+      "segregation": 0.03,
+      "membrane": 0.04,
+      "constriction": 0.02
+    }
+  },
+  {
+    "id": "transport_module_rna",
+    "gene": "transport_module",
+    "operon": "bioenergetics_operon",
+    "length_nt": 431,
+    "basal_abundance": 9.280000000000001,
+    "asset_class": "energy",
+    "process_weights": {
+      "energy": 0.22,
+      "transcription": 0.18,
+      "translation": 0.22,
+      "replication": 0.04,
+      "segregation": 0.04,
+      "membrane": 0.72,
+      "constriction": 0.08
+    }
+  },
+  {
+    "id": "division_module_rna",
+    "gene": "division_module",
+    "operon": "division_operon",
+    "length_nt": 611,
+    "basal_abundance": 9.58,
+    "asset_class": "constriction",
+    "process_weights": {
+      "energy": 0.16,
+      "transcription": 0.18,
+      "translation": 0.24,
+      "replication": 0.1,
+      "segregation": 0.22,
+      "membrane": 0.7,
+      "constriction": 1.0
+    }
+  }
+]

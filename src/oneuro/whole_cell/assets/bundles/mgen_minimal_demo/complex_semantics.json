@@ -1,0 +1,36 @@
+[
+  {
+    "id": "bioenergetics_operon_complex",
+    "asset_class": "energy",
+    "family": "atp_synthase",
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand",
+      "FtsZSeptumRing"
+    ],
+    "membrane_inserted": true,
+    "chromosome_coupled": false,
+    "division_coupled": false
+  },
+  {
+    "id": "ribosome_operon_complex",
+    "asset_class": "translation",
+    "family": "ribosome",
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "membrane_inserted": false,
+    "chromosome_coupled": false,
+    "division_coupled": false
+  },
+  {
+    "id": "division_operon_complex",
+    "asset_class": "constriction",
+    "family": "divisome",
+    "subsystem_targets": [
+      "FtsZSeptumRing"
+    ],
+    "membrane_inserted": true,
+    "chromosome_coupled": false,
+    "division_coupled": true
+  }
+]

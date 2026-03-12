@@ -1,0 +1,94 @@
+[
+  {
+    "id": "bioenergetics_operon_complex",
+    "name": "bioenergetics_operon complex",
+    "operon": "bioenergetics_operon",
+    "components": [
+      {
+        "protein_id": "energy_module_protein",
+        "stoichiometry": 1
+      },
+      {
+        "protein_id": "transport_module_protein",
+        "stoichiometry": 1
+      }
+    ],
+    "basal_abundance": 12.701505037879432,
+    "asset_class": "energy",
+    "family": "atp_synthase",
+    "process_weights": {
+      "energy": 1.1269999999999998,
+      "transcription": 0.218,
+      "translation": 0.34700000000000003,
+      "replication": 0.0615,
+      "segregation": 0.05449999999999999,
+      "membrane": 1.292,
+      "constriction": 0.08499999999999999
+    },
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand",
+      "FtsZSeptumRing"
+    ],
+    "membrane_inserted": true,
+    "chromosome_coupled": false,
+    "division_coupled": false
+  },
+  {
+    "id": "ribosome_operon_complex",
+    "name": "ribosome_operon complex",
+    "operon": "ribosome_operon",
+    "components": [
+      {
+        "protein_id": "ribosome_module_protein",
+        "stoichiometry": 1
+      }
+    ],
+    "basal_abundance": 10.700000000000001,
+    "asset_class": "translation",
+    "family": "ribosome",
+    "process_weights": {
+      "energy": 0.243,
+      "transcription": 0.5775,
+      "translation": 1.35,
+      "replication": 0.061,
+      "segregation": 0.0305,
+      "membrane": 0.044,
+      "constriction": 0.027
+    },
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ],
+    "membrane_inserted": false,
+    "chromosome_coupled": false,
+    "division_coupled": false
+  },
+  {
+    "id": "division_operon_complex",
+    "name": "division_operon complex",
+    "operon": "division_operon",
+    "components": [
+      {
+        "protein_id": "division_module_protein",
+        "stoichiometry": 1
+      }
+    ],
+    "basal_abundance": 9.3,
+    "asset_class": "constriction",
+    "family": "divisome",
+    "process_weights": {
+      "energy": 0.196,
+      "transcription": 0.263,
+      "translation": 0.304,
+      "replication": 0.11499999999999999,
+      "segregation": 0.277,
+      "membrane": 0.885,
+      "constriction": 1.27
+    },
+    "subsystem_targets": [
+      "FtsZSeptumRing"
+    ],
+    "membrane_inserted": true,
+    "chromosome_coupled": false,
+    "division_coupled": true
+  }
+]

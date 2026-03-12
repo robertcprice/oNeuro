@@ -1,8 +1,13 @@
 {
   "organism": "Mgen-minimal-demo",
   "source_dataset": "mgen_minimal_demo",
+  "require_structured_bundle": true,
+  "require_explicit_organism_sources": true,
   "require_explicit_gene_semantics": true,
   "require_explicit_transcription_unit_semantics": true,
+  "require_explicit_asset_entities": true,
+  "require_explicit_asset_semantics": true,
+  "require_explicit_program_defaults": true,
   "metadata_json": "metadata.json",
   "genome_fasta": "genome.fasta",
   "gene_features_gff": "features.gff3",
@@ -10,5 +15,14 @@
   "gene_semantics_json": "gene_semantics.json",
   "transcription_units_json": "transcription_units.json",
   "transcription_unit_semantics_json": "transcription_unit_semantics.json",
-  "pools_json": "pools.json"
+  "chromosome_domains_json": "chromosome_domains.json",
+  "pools_json": "pools.json",
+  "operons_json": "operons.json",
+  "rnas_json": "rnas.json",
+  "proteins_json": "proteins.json",
+  "complexes_json": "complexes.json",
+  "operon_semantics_json": "operon_semantics.json",
+  "protein_semantics_json": "protein_semantics.json",
+  "complex_semantics_json": "complex_semantics.json",
+  "program_defaults_json": "program_defaults.json"
 }

@@ -1,0 +1,95 @@
+[
+  {
+    "id": "energy_module_protein",
+    "gene": "energy_module",
+    "operon": "bioenergetics_operon",
+    "rna_id": "energy_module_rna",
+    "aa_length": 140,
+    "basal_abundance": 18.5,
+    "translation_cost": 1.1,
+    "nucleotide_cost": 0.9,
+    "asset_class": "energy",
+    "process_weights": {
+      "energy": 1.0,
+      "transcription": 0.1,
+      "translation": 0.2,
+      "replication": 0.05,
+      "segregation": 0.03,
+      "membrane": 0.8,
+      "constriction": 0.02
+    },
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand"
+    ]
+  },
+  {
+    "id": "ribosome_module_protein",
+    "gene": "ribosome_module",
+    "operon": "ribosome_operon",
+    "rna_id": "ribosome_module_rna",
+    "aa_length": 143,
+    "basal_abundance": 19.200000000000003,
+    "translation_cost": 1.18,
+    "nucleotide_cost": 0.78,
+    "asset_class": "translation",
+    "process_weights": {
+      "energy": 0.18,
+      "transcription": 0.45,
+      "translation": 1.0,
+      "replication": 0.06,
+      "segregation": 0.03,
+      "membrane": 0.04,
+      "constriction": 0.02
+    },
+    "subsystem_targets": [
+      "RibosomePolysomeCluster"
+    ]
+  },
+  {
+    "id": "transport_module_protein",
+    "gene": "transport_module",
+    "operon": "bioenergetics_operon",
+    "rna_id": "transport_module_rna",
+    "aa_length": 143,
+    "basal_abundance": 16.8,
+    "translation_cost": 0.84,
+    "nucleotide_cost": 0.7,
+    "asset_class": "energy",
+    "process_weights": {
+      "energy": 0.22,
+      "transcription": 0.18,
+      "translation": 0.22,
+      "replication": 0.04,
+      "segregation": 0.04,
+      "membrane": 0.72,
+      "constriction": 0.08
+    },
+    "subsystem_targets": [
+      "AtpSynthaseMembraneBand",
+      "FtsZSeptumRing"
+    ]
+  },
+  {
+    "id": "division_module_protein",
+    "gene": "division_module",
+    "operon": "division_operon",
+    "rna_id": "division_module_rna",
+    "aa_length": 203,
+    "basal_abundance": 17.3,
+    "translation_cost": 0.9,
+    "nucleotide_cost": 0.74,
+    "asset_class": "constriction",
+    "process_weights": {
+      "energy": 0.16,
+      "transcription": 0.18,
+      "translation": 0.24,
+      "replication": 0.1,
+      "segregation": 0.22,
+      "membrane": 0.7,
+      "constriction": 1.0
+    },
+    "subsystem_targets": [
+      "FtsZSeptumRing"
+    ]
+  }
+]

@@ -1,0 +1,39 @@
+{
+  "program_name": "mgen_minimal_demo_structured_bundle_native",
+  "config": {
+    "x_dim": 24,
+    "y_dim": 24,
+    "z_dim": 12,
+    "voxel_size_nm": 20.0,
+    "dt_ms": 0.25,
+    "cme_interval": 4,
+    "ode_interval": 1,
+    "bd_interval": 2,
+    "geometry_interval": 4,
+    "use_gpu": true
+  },
+  "initial_lattice": {
+    "atp": 1.1,
+    "amino_acids": 0.85,
+    "nucleotides": 0.72,
+    "membrane_precursors": 0.31
+  },
+  "initial_state": {
+    "adp_mm": 0.2,
+    "glucose_mm": 1.0,
+    "oxygen_mm": 0.78,
+    "genome_bp": 1440,
+    "replicated_bp": 0,
+    "chromosome_separation_nm": 105.45,
+    "radius_nm": 185.0,
+    "division_progress": 0.0,
+    "metabolic_load": 1.0
+  },
+  "quantum_profile": {
+    "oxphos_efficiency": 1.0,
+    "translation_efficiency": 1.0,
+    "nucleotide_polymerization_efficiency": 1.0,
+    "membrane_synthesis_efficiency": 1.0,
+    "chromosome_segregation_efficiency": 1.0
+  }
+}
