@@ -8,14 +8,16 @@ from typing import Any, Dict
 
 from .compiler import (
     CompiledOrganismBundle,
-    _compile_chromosome_domains,
-    _merge_transcription_unit_semantics,
 )
 from .derived_assets import (
     _compile_genome_asset_package,
     _default_subsystem_targets_for_asset_class,
     _infer_asset_class,
     _infer_complex_family,
+)
+from .source_normalization import (
+    _compile_chromosome_domains,
+    _merge_transcription_unit_semantics,
 )
 
 
