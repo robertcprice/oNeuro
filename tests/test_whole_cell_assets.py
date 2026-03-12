@@ -312,6 +312,41 @@ def test_explicit_asset_bundle_rejects_missing_operon_source(tmp_path):
         compile_bundle_manifest(bundle_dir / "manifest.json")
 
 
+def test_strict_structured_bundle_rejects_missing_transcription_unit_source(tmp_path):
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    source_dir = Path("src/oneuro/whole_cell/assets/bundles/jcvi_syn3a").resolve()
+    for name in [
+        "metadata.json",
+        "gene_features.json",
+        "gene_products.json",
+        "gene_semantics.json",
+        "transcription_unit_semantics.json",
+        "chromosome_domains.json",
+        "pools.json",
+        "operons.json",
+        "rnas.json",
+        "proteins.json",
+        "complexes.json",
+        "operon_semantics.json",
+        "protein_semantics.json",
+        "complex_semantics.json",
+        "program_defaults.json",
+    ]:
+        (bundle_dir / name).write_text((source_dir / name).read_text(), encoding="ascii")
+    manifest = json.loads((source_dir / "manifest.json").read_text(encoding="ascii"))
+    manifest.pop("transcription_units_json", None)
+    (bundle_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2), encoding="ascii"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="requires explicit organism sources but is missing transcription_units_json",
+    ):
+        compile_bundle_manifest(bundle_dir / "manifest.json")
+
+
 def test_strict_structured_bundle_rejects_missing_program_defaults(tmp_path):
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()

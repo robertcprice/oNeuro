@@ -1472,6 +1472,8 @@ pub struct WholeCellOrganismBundleManifest {
     #[serde(default)]
     pub require_structured_bundle: bool,
     #[serde(default)]
+    pub require_explicit_organism_sources: bool,
+    #[serde(default)]
     pub require_explicit_gene_semantics: bool,
     #[serde(default)]
     pub require_explicit_transcription_unit_semantics: bool,
@@ -4974,6 +4976,33 @@ fn validate_bundle_manifest_mode(manifest: &WholeCellOrganismBundleManifest) -> 
         return Err(
             "bundle requires structured sources and may not define organism_spec_json".to_string(),
         );
+    }
+    if manifest.require_explicit_organism_sources {
+        let mut missing = Vec::new();
+        if manifest.metadata_json.is_none() {
+            missing.push("metadata_json");
+        }
+        if manifest.gene_features_json.is_none() && manifest.gene_features_gff.is_none() {
+            missing.push("gene_features_json|gene_features_gff");
+        }
+        if manifest.gene_products_json.is_none() {
+            missing.push("gene_products_json");
+        }
+        if manifest.transcription_units_json.is_none() {
+            missing.push("transcription_units_json");
+        }
+        if manifest.chromosome_domains_json.is_none() {
+            missing.push("chromosome_domains_json");
+        }
+        if manifest.pools_json.is_none() {
+            missing.push("pools_json");
+        }
+        if !missing.is_empty() {
+            return Err(format!(
+                "bundle requires explicit organism sources but is missing {}",
+                missing.join(", ")
+            ));
+        }
     }
     Ok(())
 }

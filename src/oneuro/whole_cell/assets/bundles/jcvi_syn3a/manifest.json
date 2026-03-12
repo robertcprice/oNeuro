@@ -2,6 +2,7 @@
   "organism": "JCVI-syn3A",
   "source_dataset": "bundled_syn3a_structured_bundle",
   "require_structured_bundle": true,
+  "require_explicit_organism_sources": true,
   "require_explicit_gene_semantics": true,
   "require_explicit_transcription_unit_semantics": true,
   "require_explicit_asset_entities": true,

@@ -199,6 +199,7 @@ def write_structured_bundle_sources(
     *,
     source_dataset: str | None = None,
     require_structured_bundle: bool = True,
+    require_explicit_organism_sources: bool = True,
     require_explicit_gene_semantics: bool = True,
     require_explicit_transcription_unit_semantics: bool = True,
     require_explicit_asset_entities: bool = True,
@@ -282,6 +283,7 @@ def write_structured_bundle_sources(
         "source_dataset": source_dataset
         or f"{organism_spec['organism'].lower().replace(' ', '_').replace('-', '_')}_structured",
         "require_structured_bundle": require_structured_bundle,
+        "require_explicit_organism_sources": require_explicit_organism_sources,
         "require_explicit_gene_semantics": require_explicit_gene_semantics,
         "require_explicit_transcription_unit_semantics": require_explicit_transcription_unit_semantics,
         "require_explicit_asset_entities": require_explicit_asset_entities,
@@ -354,6 +356,25 @@ def _validate_manifest_mode(manifest: Dict[str, Any]) -> None:
         raise ValueError(
             "bundle requires structured sources and may not define organism_spec_json"
         )
+    if manifest.get("require_explicit_organism_sources"):
+        missing = []
+        if "metadata_json" not in manifest:
+            missing.append("metadata_json")
+        if "gene_features_json" not in manifest and "gene_features_gff" not in manifest:
+            missing.append("gene_features_json|gene_features_gff")
+        if "gene_products_json" not in manifest:
+            missing.append("gene_products_json")
+        if "transcription_units_json" not in manifest:
+            missing.append("transcription_units_json")
+        if "chromosome_domains_json" not in manifest:
+            missing.append("chromosome_domains_json")
+        if "pools_json" not in manifest:
+            missing.append("pools_json")
+        if missing:
+            raise ValueError(
+                "bundle requires explicit organism sources but is missing "
+                + ", ".join(missing)
+            )
 
 
 def _validate_explicit_asset_contracts(

@@ -1144,3 +1144,27 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `strict structured bundles now carry explicit program defaults, but the broader compatibility layer still supports legacy organism_spec_json ingestion for older bundles and more downstream state surfaces still need explicit structured-source contracts before inference becomes compatibility-only`
+
+### 2026-03-12 - Phase 7 / Explicit Organism-Source Contract Slice
+
+- Summary:
+  - extended the structured bundle contract so strict bundles can require the core organism-level source files (`metadata`, gene features, gene products, transcription units, chromosome domains, and pools) instead of only checking semantic overlays and downstream asset files
+  - wired that stricter contract through both the Python bundle compiler and the native Rust manifest validator, so strict bundles fail fast when any of those core structured-source entries are omitted from the manifest
+  - enabled the stricter contract on the checked-in Syn3A bundle and added a regression covering the missing transcription-unit source rejection path
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell_data.rs`
+  - `src/oneuro/whole_cell/assets/bundles/jcvi_syn3a/manifest.json`
+  - `src/oneuro/whole_cell/assets/compiler.py`
+  - `tests/test_whole_cell_assets.py`
+- Tests run:
+  - `python3 -m py_compile src/oneuro/whole_cell/assets/compiler.py tests/test_whole_cell_assets.py`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+  - `rustfmt oneuro-metal/src/whole_cell_data.rs`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `strict structured bundles now require explicit core organism sources, but the broader compatibility layer still supports legacy organism_spec_json ingestion for older bundles and some downstream state surfaces still default to inferred descriptions when explicit structured sources are absent`
