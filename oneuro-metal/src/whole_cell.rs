@@ -8255,19 +8255,8 @@ impl WholeCellSimulator {
         simulator.provenance = spec.provenance.clone();
         simulator.organism_data_ref = spec.organism_data_ref.clone();
         simulator.organism_data = spec.organism_data.clone();
-        simulator.organism_assets = spec.organism_assets.clone().or_else(|| {
-            simulator
-                .organism_data
-                .as_ref()
-                .map(compile_genome_asset_package)
-        });
-        simulator.organism_process_registry =
-            spec.organism_process_registry.clone().or_else(|| {
-                simulator
-                    .organism_assets
-                    .as_ref()
-                    .map(compile_genome_process_registry)
-            });
+        simulator.organism_assets = spec.organism_assets.clone();
+        simulator.organism_process_registry = spec.organism_process_registry.clone();
 
         simulator
             .lattice
@@ -12126,5 +12115,19 @@ mod tests {
         assert!(baseline_membrane.ring_tension > constrained_membrane.ring_tension);
         assert!(baseline_snapshot.division_progress >= constrained_snapshot.division_progress);
         assert!(baseline_snapshot.surface_area_nm2 > constrained_snapshot.surface_area_nm2);
+    }
+
+    #[test]
+    fn test_from_program_spec_preserves_missing_assets_and_registry() {
+        let mut spec = bundled_syn3a_program_spec().expect("bundled Syn3A program spec");
+        spec.organism_data_ref = None;
+        spec.organism_assets = None;
+        spec.organism_process_registry = None;
+
+        let simulator = WholeCellSimulator::from_program_spec(spec);
+
+        assert!(simulator.organism_data.is_some());
+        assert!(simulator.organism_assets.is_none());
+        assert!(simulator.organism_process_registry.is_none());
     }
 }

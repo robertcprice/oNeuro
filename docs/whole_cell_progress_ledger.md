@@ -1320,3 +1320,25 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the live parser path is now cleaner, but bundled/reference resolvers and any remaining compatibility loaders still need the same explicit-vs-legacy separation so no current-state path depends on inferred metadata`
+
+### 2026-03-12 - Phase 7 / Split Explicit And Legacy Program-Spec Loading
+
+- Summary:
+  - changed `parse_program_spec_json` to preserve explicit program specs as-authored, so inline organism-only specs no longer silently derive genome assets or process registries during parse
+  - moved the old program-spec repair behavior behind `parse_legacy_program_spec_json`, preserving compatibility for older specs that still need chromosome-domain compilation, asset compilation, and registry regeneration from organism data
+  - removed simulator-side asset and registry derivation from `WholeCellSimulator::from_program_spec`, making the live constructor trust explicit program-spec state instead of rebuilding missing runtime inputs behind the caller's back
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/lib.rs`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `rustfmt oneuro-metal/src/whole_cell_data.rs oneuro-metal/src/lib.rs oneuro-metal/src/whole_cell.rs`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+  - `source /Users/bobbyprice/projects/oNeuro/.venv-codex/bin/activate && maturin develop -m oneuro-metal/Cargo.toml`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `saved-state restore and simulator bootstrap still contain later compatibility fallbacks for missing assets and registries, and those remaining live-path repair points need the same explicit-vs-legacy split`

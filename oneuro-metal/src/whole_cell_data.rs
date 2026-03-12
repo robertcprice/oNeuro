@@ -5377,7 +5377,7 @@ fn build_program_spec_from_organism(
         quantum_profile: WholeCellQuantumProfile::default(),
         local_chemistry: None,
     };
-    hydrate_program_spec(&mut spec)?;
+    finalize_parsed_program_spec(&mut spec)?;
     Ok(spec)
 }
 
@@ -5927,7 +5927,7 @@ pub fn compile_program_spec_from_bundle_manifest_path(
     spec.organism_assets = Some(assets);
     spec.organism_process_registry = Some(registry);
     apply_bundle_program_defaults(&manifest_path_obj, &manifest, &mut spec)?;
-    hydrate_program_spec(&mut spec)?;
+    finalize_parsed_program_spec(&mut spec)?;
     Ok(spec)
 }
 
@@ -5964,26 +5964,15 @@ pub fn compile_genome_process_registry_json_from_bundle_manifest_path(
         .map_err(|error| format!("failed to serialize compiled genome process registry: {error}"))
 }
 
-fn hydrate_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
+fn finalize_parsed_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
     if spec.organism_data.is_none() {
         if let Some(reference) = spec.organism_data_ref.as_deref() {
             spec.organism_data = Some(resolve_bundled_organism_spec(reference)?);
         }
     }
-    if let Some(organism) = spec.organism_data.take() {
-        spec.organism_data = Some(with_compiled_chromosome_domains(organism));
-    }
     if spec.organism_assets.is_none() {
-        if let Some(organism) = spec.organism_data.as_ref() {
-            spec.organism_assets = Some(compile_genome_asset_package(organism));
-        } else if let Some(reference) = spec.organism_data_ref.as_deref() {
+        if let Some(reference) = spec.organism_data_ref.as_deref() {
             spec.organism_assets = Some(resolve_bundled_genome_asset_package(reference)?);
-        }
-    } else if let (Some(organism), Some(assets)) =
-        (spec.organism_data.as_ref(), spec.organism_assets.as_mut())
-    {
-        if assets.chromosome_domains.is_empty() {
-            *assets = compile_genome_asset_package(organism);
         }
     }
     let refresh_registry = match (
@@ -6018,7 +6007,28 @@ fn hydrate_program_spec(spec: &mut WholeCellProgramSpec) -> Result<(), String> {
 pub fn parse_program_spec_json(spec_json: &str) -> Result<WholeCellProgramSpec, String> {
     let mut spec: WholeCellProgramSpec = serde_json::from_str(spec_json)
         .map_err(|error| format!("failed to parse program spec: {error}"))?;
-    hydrate_program_spec(&mut spec)?;
+    finalize_parsed_program_spec(&mut spec)?;
+    Ok(spec)
+}
+
+pub fn parse_legacy_program_spec_json(spec_json: &str) -> Result<WholeCellProgramSpec, String> {
+    let mut spec: WholeCellProgramSpec = serde_json::from_str(spec_json)
+        .map_err(|error| format!("failed to parse program spec: {error}"))?;
+    if let Some(organism) = spec.organism_data.take() {
+        spec.organism_data = Some(with_compiled_chromosome_domains(organism));
+    }
+    if spec.organism_assets.is_none() {
+        if let Some(organism) = spec.organism_data.as_ref() {
+            spec.organism_assets = Some(compile_genome_asset_package(organism));
+        }
+    } else if let (Some(organism), Some(assets)) =
+        (spec.organism_data.as_ref(), spec.organism_assets.as_mut())
+    {
+        if assets.chromosome_domains.is_empty() {
+            *assets = compile_genome_asset_package(organism);
+        }
+    }
+    finalize_parsed_program_spec(&mut spec)?;
     Ok(spec)
 }
 
@@ -6451,6 +6461,56 @@ mod tests {
         );
         assert!(spec.provenance.organism_asset_hash.is_some());
         assert!(spec.provenance.run_manifest_hash.is_some());
+    }
+
+    #[test]
+    fn parse_program_spec_json_keeps_inline_organism_specs_explicit() {
+        let mut spec = bundled_syn3a_program_spec().expect("bundled Syn3A program spec");
+        spec.organism_data_ref = None;
+        spec.organism_assets = None;
+        spec.organism_process_registry = None;
+
+        let parsed = parse_program_spec_json(
+            &serde_json::to_string(&spec).expect("serialize explicit program spec"),
+        )
+        .expect("parse explicit program spec");
+
+        assert!(parsed.organism_data.is_some());
+        assert!(parsed.organism_assets.is_none());
+        assert!(parsed.organism_process_registry.is_none());
+        assert_eq!(
+            parsed.contract.contract_version,
+            WHOLE_CELL_CONTRACT_VERSION
+        );
+        assert_eq!(
+            parsed.contract.program_schema_version,
+            WHOLE_CELL_PROGRAM_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
+    fn parse_legacy_program_spec_json_derives_inline_organism_assets() {
+        let mut spec = bundled_syn3a_program_spec().expect("bundled Syn3A program spec");
+        spec.organism_data_ref = None;
+        spec.organism_assets = None;
+        spec.organism_process_registry = None;
+
+        let parsed = parse_legacy_program_spec_json(
+            &serde_json::to_string(&spec).expect("serialize legacy program spec"),
+        )
+        .expect("parse legacy program spec");
+
+        assert!(parsed.organism_data.is_some());
+        assert!(parsed.organism_assets.is_some());
+        assert!(parsed.organism_process_registry.is_some());
+        assert_eq!(
+            parsed.contract.contract_version,
+            WHOLE_CELL_CONTRACT_VERSION
+        );
+        assert_eq!(
+            parsed.contract.program_schema_version,
+            WHOLE_CELL_PROGRAM_SCHEMA_VERSION
+        );
     }
 
     #[test]
