@@ -1517,3 +1517,21 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the exporter now owns the implementation, but the next cleanup target is isolating any remaining migration-only normalization helpers that still live in compiler.py for explicit/legacy compatibility`
+
+### 2026-03-12 - Phase 1 / Derived Asset Helper Split
+
+- Summary:
+  - moved legacy-derived genome asset construction and semantic inference helpers out of `assets/compiler.py` and into `assets/derived_assets.py`, so the explicit structured-bundle compiler keeps ownership of manifest parsing and explicit source validation while export and legacy-derived paths share a separate compatibility helper layer
+- Files changed:
+  - `docs/whole_cell_progress_ledger.md`
+  - `src/oneuro/whole_cell/assets/compiler.py`
+  - `src/oneuro/whole_cell/assets/derived_assets.py`
+  - `src/oneuro/whole_cell/assets/exporter.py`
+- Tests run:
+  - `python3 -m py_compile src/oneuro/whole_cell/assets/compiler.py src/oneuro/whole_cell/assets/derived_assets.py src/oneuro/whole_cell/assets/exporter.py src/oneuro/whole_cell/assets/__init__.py src/oneuro/whole_cell/__init__.py tests/test_whole_cell_assets.py`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell_assets.py`
+  - `PYTHONPATH=src pytest -q tests/test_whole_cell.py tests/test_whole_cell_assets.py`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy-normalizing bundle migration helpers still live in compiler.py, so the next cleanup target is pushing the remaining compatibility transforms behind explicit migration-only entrypoints`
