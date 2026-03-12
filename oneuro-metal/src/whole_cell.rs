@@ -2475,6 +2475,13 @@ impl WholeCellSimulator {
         membrane_flux: f32,
         constriction_flux: f32,
     ) {
+        if self.organism_assets.is_some() {
+            self.active_rnap = inventory.rnap_complexes.clamp(8.0, 256.0);
+            self.active_ribosomes = inventory.ribosome_complexes.clamp(12.0, 320.0);
+            self.dnaa = inventory.dnaa_activity.clamp(8.0, 256.0);
+            self.ftsz = inventory.ftsz_polymer.clamp(12.0, 384.0);
+            return;
+        }
         let replisome_scale =
             Self::finite_scale(self.replisome_replication_scale(), 1.0, 0.70, 1.45);
         let ftsz_translation_scale =
@@ -10452,6 +10459,31 @@ mod tests {
         assert!(perturbed_snapshot.active_ribosomes < 320.0);
         assert!(perturbed_snapshot.dnaa < 256.0);
         assert!(perturbed_snapshot.ftsz < 384.0);
+    }
+
+    #[test]
+    fn test_explicit_asset_diagnostics_follow_inventory_not_flux_surrogates() {
+        let mut sim =
+            WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A simulator");
+        sim.named_complexes.clear();
+        sim.complex_assembly = WholeCellComplexAssemblyState {
+            atp_band_complexes: 2.0,
+            ribosome_complexes: 15.0,
+            rnap_complexes: 9.0,
+            replisome_complexes: 4.0,
+            membrane_complexes: 7.0,
+            ftsz_polymer: 21.0,
+            dnaa_activity: 6.0,
+            ..WholeCellComplexAssemblyState::default()
+        };
+
+        let inventory = sim.assembly_inventory();
+        sim.refresh_surrogate_pool_diagnostics(inventory, 10.0, 9.0, 8.0, 7.0, 6.0);
+
+        assert!((sim.active_rnap - 9.0_f32.clamp(8.0, 256.0)).abs() < 1.0e-6);
+        assert!((sim.active_ribosomes - 15.0_f32.clamp(12.0, 320.0)).abs() < 1.0e-6);
+        assert!((sim.dnaa - 6.0_f32.clamp(8.0, 256.0)).abs() < 1.0e-6);
+        assert!((sim.ftsz - 21.0_f32.clamp(12.0, 384.0)).abs() < 1.0e-6);
     }
 
     #[test]

@@ -1786,3 +1786,21 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `the explicit assembly path no longer regenerates derived targets, but legacy fallback inventory targets and several derived summary rollups still need to be pushed behind compatibility-only boundaries`
+
+### 2026-03-12 - Phase 7 / Explicit Diagnostic Summary Narrowing
+
+- Summary:
+  - removed the flux-blended surrogate refresh from the explicit asset path, so RNAP, ribosome, DnaA, and FtsZ diagnostic summaries now mirror explicit complex inventory instead of derived stage rollups
+  - kept the blended surrogate refresh only for legacy non-asset runtimes where explicit complex inventory is not available
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_explicit_asset_diagnostics_follow_inventory_not_flux_surrogates --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_surrogate_pools_are_diagnostics_not_stage_drivers --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `explicit diagnostic summaries now follow explicit inventory, but legacy fallback inventory targets and the remaining compatibility-only derived summary rollups still need to be collapsed or isolated behind legacy-only boundaries`
