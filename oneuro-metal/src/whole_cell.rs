@@ -6132,6 +6132,10 @@ impl WholeCellSimulator {
             WholeCellAssemblyFamily::Replisome => {
                 (0.70 + 0.50 * (1.0 - replicated_fraction)).clamp(0.55, 1.25)
             }
+            WholeCellAssemblyFamily::ReplicationInitiator => {
+                (0.86 + 0.28 * (1.0 - replicated_fraction) + 0.12 * division_progress)
+                    .clamp(0.70, 1.30)
+            }
             WholeCellAssemblyFamily::AtpSynthase => Self::finite_scale(
                 0.55 * self.chemistry_report.atp_support
                     + 0.25 * self.organism_expression.membrane_support
@@ -6542,8 +6546,7 @@ impl WholeCellSimulator {
                     shares.ribosome += 1.0;
                 }
                 Syn3ASubsystemPreset::ReplisomeTrack => {
-                    shares.replisome += 0.78;
-                    shares.dnaa += 0.22;
+                    shares.replisome += 1.0;
                 }
                 Syn3ASubsystemPreset::FtsZSeptumRing => {
                     shares.ftsz += 1.0;
@@ -6564,8 +6567,11 @@ impl WholeCellSimulator {
                 ..WholeCellAssemblyChannelShares::default()
             },
             WholeCellAssemblyFamily::Replisome => WholeCellAssemblyChannelShares {
-                replisome: 0.78,
-                dnaa: 0.22,
+                replisome: 1.0,
+                ..WholeCellAssemblyChannelShares::default()
+            },
+            WholeCellAssemblyFamily::ReplicationInitiator => WholeCellAssemblyChannelShares {
+                dnaa: 1.0,
                 ..WholeCellAssemblyChannelShares::default()
             },
             WholeCellAssemblyFamily::AtpSynthase => WholeCellAssemblyChannelShares {
@@ -6602,8 +6608,7 @@ impl WholeCellSimulator {
             },
             WholeCellAssetClass::Replication | WholeCellAssetClass::Segregation => {
                 WholeCellAssemblyChannelShares {
-                    replisome: 0.78,
-                    dnaa: 0.22,
+                    replisome: 1.0,
                     ..WholeCellAssemblyChannelShares::default()
                 }
             }
@@ -13410,6 +13415,24 @@ mod tests {
                     chromosome_coupled: false,
                     division_coupled: false,
                 },
+                WholeCellComplexSpec {
+                    id: "dnaa_complex".to_string(),
+                    name: "dnaa complex".to_string(),
+                    operon: "dnaa_operon".to_string(),
+                    components: Vec::new(),
+                    basal_abundance: 5.0,
+                    asset_class: WholeCellAssetClass::Replication,
+                    family: WholeCellAssemblyFamily::ReplicationInitiator,
+                    process_weights: WholeCellProcessWeights {
+                        replication: 3.0,
+                        segregation: 1.0,
+                        ..WholeCellProcessWeights::default()
+                    },
+                    subsystem_targets: Vec::new(),
+                    membrane_inserted: false,
+                    chromosome_coupled: true,
+                    division_coupled: false,
+                },
             ],
             pools: Vec::new(),
         };
@@ -13493,6 +13516,32 @@ mod tests {
                 insertion_progress: 1.0,
                 failure_count: 0.0,
             },
+            WholeCellNamedComplexState {
+                id: "dnaa_complex".to_string(),
+                operon: "dnaa_operon".to_string(),
+                asset_class: WholeCellAssetClass::Replication,
+                family: WholeCellAssemblyFamily::ReplicationInitiator,
+                subsystem_targets: Vec::new(),
+                subunit_pool: 0.0,
+                nucleation_intermediate: 0.0,
+                elongation_intermediate: 0.0,
+                abundance: 5.0,
+                target_abundance: 6.0,
+                assembly_rate: 1.2,
+                degradation_rate: 0.3,
+                nucleation_rate: 0.0,
+                elongation_rate: 0.0,
+                maturation_rate: 0.0,
+                component_satisfaction: 1.0,
+                structural_support: 1.0,
+                assembly_progress: 1.0,
+                stalled_intermediate: 0.0,
+                damaged_abundance: 0.0,
+                limiting_component_signal: 1.0,
+                shared_component_pressure: 0.0,
+                insertion_progress: 1.0,
+                failure_count: 0.0,
+            },
         ];
 
         let aggregate = sim.aggregate_named_complex_assembly_state(&assets);
@@ -13509,6 +13558,10 @@ mod tests {
         assert!((aggregate.ftsz_target - 9.0).abs() < 1.0e-6);
         assert!((aggregate.ftsz_assembly_rate - 2.0).abs() < 1.0e-6);
         assert!((aggregate.ftsz_degradation_rate - 0.5).abs() < 1.0e-6);
+        assert!((aggregate.dnaa_activity - 5.0).abs() < 1.0e-6);
+        assert!((aggregate.dnaa_target - 6.0).abs() < 1.0e-6);
+        assert!((aggregate.dnaa_assembly_rate - 1.2).abs() < 1.0e-6);
+        assert!((aggregate.dnaa_degradation_rate - 0.3).abs() < 1.0e-6);
         assert!(aggregate.replisome_complexes.abs() < 1.0e-6);
         assert!(aggregate.atp_band_complexes.abs() < 1.0e-6);
     }
@@ -14729,6 +14782,10 @@ mod tests {
             .named_complexes_state()
             .iter()
             .any(|complex| complex.family == WholeCellAssemblyFamily::RnaPolymerase));
+        assert!(restored
+            .named_complexes_state()
+            .iter()
+            .any(|complex| complex.family == WholeCellAssemblyFamily::ReplicationInitiator));
         let chemistry = restored
             .local_chemistry_report()
             .expect("promoted legacy local chemistry report");

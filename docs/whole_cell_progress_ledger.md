@@ -2148,7 +2148,7 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Artifacts produced:
   - `none`
 - Remaining blockers:
-  - `legacy compatibility is narrower again, but persisted MD-probe or probe-schedule detail and a few remaining fine-grained expression or assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
+  - `legacy compatibility is narrower again, but persisted MD-probe or probe-schedule detail and a few remaining fine-grained expression or generic assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
 
 ### 2026-03-12 - Phase 7 / Legacy Local-Chemistry Promotion
 
@@ -2169,7 +2169,7 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Artifacts produced:
   - `none`
 - Remaining blockers:
-  - `legacy compatibility is narrower again, but persisted MD-probe or probe-schedule detail and a few remaining expression or assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
+  - `legacy compatibility is narrower again, but persisted MD-probe or probe-schedule detail and a few remaining expression or generic assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
 
 ### 2026-03-12 - Phase 7 / Legacy Local-Chemistry Site Promotion
 
@@ -2191,4 +2191,26 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
 - Artifacts produced:
   - `none`
 - Remaining blockers:
-  - `legacy compatibility is narrower again, but persisted MD-probe or probe-schedule detail and a few remaining expression or assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
+  - `legacy compatibility is narrower again, but persisted MD-probe or probe-schedule detail and a few remaining expression or generic assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
+
+### 2026-03-12 - Phase 7 / Direct DnaA Named-Complex Carrier
+
+- Summary:
+  - split `DnaA` activity out of the mixed replisome compatibility channel and into a direct explicit `ReplicationInitiator` assembly family
+  - updated bundle-less named-complex aggregation so replisome carriers stay replisome-specific while `DnaA` carriers map directly to `dnaa_activity`, reducing the remaining aggregate fallback surface on compatibility payloads
+  - extended the legacy saved-state promotion and aggregation regressions so promoted named-complex state now includes a direct `DnaA` carrier and preserves that channel without relying on coarse aggregate assembly totals
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q test_named_complex_aggregation_prefers_explicit_family_channels --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q parse_legacy_saved_state_json_promotes_core_summary_to_explicit_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_promotes_core_summary_to_explicit_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but persisted MD-probe or probe-schedule detail and a few remaining expression or generic assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`

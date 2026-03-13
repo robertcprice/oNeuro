@@ -464,6 +464,7 @@ pub enum WholeCellAssemblyFamily {
     Ribosome,
     RnaPolymerase,
     Replisome,
+    ReplicationInitiator,
     AtpSynthase,
     Transporter,
     MembraneEnzyme,
@@ -2207,6 +2208,9 @@ fn inferred_complex_family(
     {
         return WholeCellAssemblyFamily::Ribosome;
     }
+    if lowered.contains("dnaa") || lowered.contains("initiator") {
+        return WholeCellAssemblyFamily::ReplicationInitiator;
+    }
     if subsystem_targets.contains(&Syn3ASubsystemPreset::ReplisomeTrack)
         || lowered.contains("replisome")
         || lowered.contains("replication")
@@ -2610,7 +2614,7 @@ fn normalize_asset_package_semantic_metadata(package: &mut WholeCellGenomeAssetP
             }
             if !complex.membrane_inserted {
                 complex.membrane_inserted = matches!(
-                    complex.family,
+                complex.family,
                     WholeCellAssemblyFamily::AtpSynthase
                         | WholeCellAssemblyFamily::Transporter
                         | WholeCellAssemblyFamily::MembraneEnzyme
@@ -2620,7 +2624,9 @@ fn normalize_asset_package_semantic_metadata(package: &mut WholeCellGenomeAssetP
             if !complex.chromosome_coupled {
                 complex.chromosome_coupled = matches!(
                     complex.family,
-                    WholeCellAssemblyFamily::Replisome | WholeCellAssemblyFamily::RnaPolymerase
+                    WholeCellAssemblyFamily::Replisome
+                        | WholeCellAssemblyFamily::ReplicationInitiator
+                        | WholeCellAssemblyFamily::RnaPolymerase
                 );
             }
             if !complex.division_coupled {
@@ -3698,7 +3704,9 @@ pub fn compile_genome_asset_package(spec: &WholeCellOrganismSpec) -> WholeCellGe
             ),
             chromosome_coupled: matches!(
                 family,
-                WholeCellAssemblyFamily::Replisome | WholeCellAssemblyFamily::RnaPolymerase
+                WholeCellAssemblyFamily::Replisome
+                    | WholeCellAssemblyFamily::ReplicationInitiator
+                    | WholeCellAssemblyFamily::RnaPolymerase
             ),
             division_coupled: matches!(family, WholeCellAssemblyFamily::Divisome),
         });
@@ -7449,6 +7457,7 @@ fn legacy_complex_primary_channel_from_family(
         WholeCellAssemblyFamily::Ribosome => Some(LegacyAssemblyChannel::Ribosome),
         WholeCellAssemblyFamily::RnaPolymerase => Some(LegacyAssemblyChannel::Rnap),
         WholeCellAssemblyFamily::Replisome => Some(LegacyAssemblyChannel::Replisome),
+        WholeCellAssemblyFamily::ReplicationInitiator => Some(LegacyAssemblyChannel::Dnaa),
         WholeCellAssemblyFamily::Transporter | WholeCellAssemblyFamily::MembraneEnzyme => {
             Some(LegacyAssemblyChannel::Membrane)
         }
@@ -7580,8 +7589,8 @@ fn legacy_channel_named_complex_metadata(
         LegacyAssemblyChannel::Dnaa => (
             "legacy_dnaa_complex",
             WholeCellAssetClass::Replication,
-            WholeCellAssemblyFamily::Replisome,
-            vec![Syn3ASubsystemPreset::ReplisomeTrack],
+            WholeCellAssemblyFamily::ReplicationInitiator,
+            Vec::new(),
         ),
     }
 }
@@ -7726,6 +7735,7 @@ fn synthesize_legacy_named_complexes_from_assembly(
         LegacyAssemblyChannel::Replisome,
         LegacyAssemblyChannel::Membrane,
         LegacyAssemblyChannel::Ftsz,
+        LegacyAssemblyChannel::Dnaa,
     ] {
         let (abundance, target, assembly_rate, degradation_rate) =
             legacy_channel_amounts(assembly, channel);
@@ -7745,10 +7755,6 @@ fn synthesize_legacy_named_complexes_from_assembly(
             degradation_rate.max(0.0),
         ));
     }
-    // Keep DnaA-like activity on the persisted aggregate compatibility channel
-    // until there is a richer explicit named-complex carrier for it. The
-    // current family/subsystem semantics represent replisome-like occupancy
-    // well, but not a standalone DnaA activity channel.
     states
 }
 
@@ -9575,6 +9581,10 @@ mod tests {
             .named_complexes
             .iter()
             .any(|complex| complex.family == WholeCellAssemblyFamily::RnaPolymerase));
+        assert!(reparsed
+            .named_complexes
+            .iter()
+            .any(|complex| complex.family == WholeCellAssemblyFamily::ReplicationInitiator));
         assert_ne!(reparsed.chemistry_report, LocalChemistryReport::default());
         assert!((reparsed.chemistry_report.mean_glucose - 2.4).abs() < 1.0e-6);
         assert!((reparsed.chemistry_report.mean_oxygen - 1.8).abs() < 1.0e-6);
