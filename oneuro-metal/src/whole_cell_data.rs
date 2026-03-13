@@ -6,7 +6,7 @@
 use crate::whole_cell::{WholeCellConfig, WholeCellQuantumProfile};
 use crate::whole_cell_submodels::{
     LocalChemistryReport, LocalChemistrySiteReport, LocalMDProbeReport, ScheduledSubsystemProbe,
-    Syn3ASubsystemPreset, WholeCellSubsystemState,
+    Syn3ASubsystemPreset, WholeCellChemistrySite, WholeCellSubsystemState,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -7192,6 +7192,16 @@ fn synthesize_legacy_scheduled_subsystem_probes_from_state(
         .collect()
 }
 
+fn legacy_preset_for_probe_site(site: WholeCellChemistrySite) -> Option<Syn3ASubsystemPreset> {
+    match site {
+        WholeCellChemistrySite::AtpSynthaseBand => Some(Syn3ASubsystemPreset::AtpSynthaseMembraneBand),
+        WholeCellChemistrySite::RibosomeCluster => Some(Syn3ASubsystemPreset::RibosomePolysomeCluster),
+        WholeCellChemistrySite::ChromosomeTrack => Some(Syn3ASubsystemPreset::ReplisomeTrack),
+        WholeCellChemistrySite::SeptumRing => Some(Syn3ASubsystemPreset::FtsZSeptumRing),
+        WholeCellChemistrySite::Cytosol => None,
+    }
+}
+
 // Coarsely reconstruct the last MD probe from persisted local chemistry and
 // subsystem state so legacy compatibility payloads can round-trip an explicit
 // probe record without requiring a live chemistry bridge.
@@ -7391,6 +7401,37 @@ fn synthesize_legacy_md_probe_report_from_state(
         recommended_membrane_scale,
         recommended_constriction_scale,
     })
+}
+
+fn promote_legacy_last_md_probe_into_subsystem_state(state: &mut WholeCellSavedState) {
+    let Some(report) = state.last_md_probe else {
+        return;
+    };
+    let Some(preset) = legacy_preset_for_probe_site(report.site) else {
+        return;
+    };
+    let step_count = state.core.step_count;
+    if let Some(existing) = state
+        .subsystem_states
+        .iter_mut()
+        .find(|subsystem| subsystem.preset == preset)
+    {
+        existing.apply_probe_report(report, step_count);
+        return;
+    }
+    let mut synthesized = WholeCellSubsystemState::new(preset);
+    if let Some(site_report) = state
+        .chemistry_site_reports
+        .iter()
+        .find(|site_report| site_report.preset == preset)
+        .copied()
+    {
+        synthesized.apply_site_report(site_report);
+    } else {
+        synthesized.apply_chemistry_report(state.chemistry_report);
+    }
+    synthesized.apply_probe_report(report, step_count);
+    state.subsystem_states.push(synthesized);
 }
 
 #[derive(Default)]
@@ -8866,6 +8907,7 @@ fn hydrate_legacy_saved_state_explicit_state(state: &mut WholeCellSavedState) {
             &state.chemistry_site_reports,
         );
     }
+    promote_legacy_last_md_probe_into_subsystem_state(state);
     if state.scheduled_subsystem_probes.is_empty() {
         state.scheduled_subsystem_probes =
             synthesize_legacy_scheduled_subsystem_probes_from_state(state);
@@ -10804,6 +10846,68 @@ mod tests {
 
         assert_eq!(reparsed.chemistry_report, expected_report);
         assert_eq!(reparsed.chemistry_site_reports, saved.chemistry_site_reports);
+    }
+
+    #[test]
+    fn parse_legacy_saved_state_json_promotes_last_md_probe_into_subsystem_state() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.subsystem_states.clear();
+        saved.scheduled_subsystem_probes.clear();
+        saved.last_md_probe = Some(LocalMDProbeReport {
+            site: WholeCellChemistrySite::ChromosomeTrack,
+            mean_temperature: 304.0,
+            mean_total_energy: -18.0,
+            mean_vdw_energy: -7.0,
+            mean_electrostatic_energy: -4.5,
+            structural_order: 0.91,
+            crowding_penalty: 0.79,
+            compactness: 0.73,
+            shell_order: 0.69,
+            axis_anisotropy: 0.41,
+            thermal_stability: 0.84,
+            electrostatic_order: 0.66,
+            vdw_cohesion: 0.71,
+            polar_fraction: 0.24,
+            phosphate_fraction: 0.31,
+            hydrogen_fraction: 0.27,
+            bond_density: 0.46,
+            angle_density: 0.39,
+            dihedral_density: 0.28,
+            charge_density: 0.21,
+            recommended_atp_scale: 1.08,
+            recommended_translation_scale: 0.94,
+            recommended_replication_scale: 1.29,
+            recommended_segregation_scale: 1.18,
+            recommended_membrane_scale: 0.91,
+            recommended_constriction_scale: 0.88,
+        });
+
+        let mut control = saved.clone();
+        control.last_md_probe = None;
+        let control_reparsed =
+            parse_legacy_saved_state_json(&saved_state_to_json(&control).expect("saved json"))
+                .expect("control reparsed legacy saved state");
+        let mut expected_replisome = control_reparsed
+            .subsystem_states
+            .iter()
+            .find(|state| state.preset == Syn3ASubsystemPreset::ReplisomeTrack)
+            .cloned()
+            .expect("control replisome subsystem");
+        expected_replisome.apply_probe_report(saved.last_md_probe.expect("probe"), saved.core.step_count);
+
+        let reparsed =
+            parse_legacy_saved_state_json(&saved_state_to_json(&saved).expect("saved json"))
+                .expect("reparsed legacy saved state");
+        let replisome = reparsed
+            .subsystem_states
+            .iter()
+            .find(|state| state.preset == Syn3ASubsystemPreset::ReplisomeTrack)
+            .cloned()
+            .expect("promoted replisome subsystem");
+
+        assert_eq!(replisome, expected_replisome);
+        assert_eq!(replisome.last_probe_step, Some(saved.core.step_count));
     }
 
     #[test]

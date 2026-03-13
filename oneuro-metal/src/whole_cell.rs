@@ -15311,6 +15311,67 @@ mod tests {
     }
 
     #[test]
+    fn test_from_legacy_saved_state_json_promotes_last_md_probe_into_subsystem_state() {
+        let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
+        let mut saved = parse_saved_state_json(
+            &simulator
+                .save_state_json()
+                .expect("serialize explicit saved state"),
+        )
+        .expect("parse explicit saved state");
+        saved.subsystem_states.clear();
+        saved.scheduled_subsystem_probes.clear();
+        saved.last_md_probe = Some(LocalMDProbeReport {
+            site: WholeCellChemistrySite::ChromosomeTrack,
+            mean_temperature: 304.0,
+            mean_total_energy: -18.0,
+            mean_vdw_energy: -7.0,
+            mean_electrostatic_energy: -4.5,
+            structural_order: 0.91,
+            crowding_penalty: 0.79,
+            compactness: 0.73,
+            shell_order: 0.69,
+            axis_anisotropy: 0.41,
+            thermal_stability: 0.84,
+            electrostatic_order: 0.66,
+            vdw_cohesion: 0.71,
+            polar_fraction: 0.24,
+            phosphate_fraction: 0.31,
+            hydrogen_fraction: 0.27,
+            bond_density: 0.46,
+            angle_density: 0.39,
+            dihedral_density: 0.28,
+            charge_density: 0.21,
+            recommended_atp_scale: 1.08,
+            recommended_translation_scale: 0.94,
+            recommended_replication_scale: 1.29,
+            recommended_segregation_scale: 1.18,
+            recommended_membrane_scale: 0.91,
+            recommended_constriction_scale: 0.88,
+        });
+
+        let saved_json = saved_state_to_json(&saved).expect("serialize legacy saved state");
+        let expected_saved =
+            parse_legacy_saved_state_json(&saved_json).expect("parse promoted legacy saved state");
+        let restored =
+            WholeCellSimulator::from_legacy_saved_state_json(&saved_json).expect("restore legacy saved state");
+
+        let replisome = restored
+            .subsystem_states()
+            .into_iter()
+            .find(|state| state.preset == Syn3ASubsystemPreset::ReplisomeTrack)
+            .expect("promoted replisome subsystem");
+        let expected_replisome = expected_saved
+            .subsystem_states
+            .into_iter()
+            .find(|state| state.preset == Syn3ASubsystemPreset::ReplisomeTrack)
+            .expect("expected replisome subsystem");
+
+        assert_eq!(replisome, expected_replisome);
+        assert_eq!(replisome.last_probe_step, Some(saved.core.step_count));
+    }
+
+    #[test]
     fn test_restore_saved_state_refreshes_subsystem_state_from_explicit_site_reports() {
         let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
         let mut saved = parse_saved_state_json(

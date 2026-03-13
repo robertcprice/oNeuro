@@ -2320,3 +2320,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but the remaining residual chemistry or probe cases now mostly reduce to payloads that provide neither explicit site chemistry nor richer persisted probe state, plus the final expression cases with no runtime chemistry, registry, or structured asset bundle`
+
+### 2026-03-13 - Phase 7 / Probe-Coupled Legacy Subsystem Promotion
+
+- Summary:
+  - extended the legacy probe promotion path so an explicit persisted `last_md_probe` now feeds back into the matching subsystem state during parser repair, updating probe-coupled scales and `last_probe_step` instead of remaining only as a detached summary payload
+  - applied that promotion before scheduled-probe recovery so compatibility restore can retain the probe-coupled subsystem preset on the explicit state path and keep the scheduler boundary aligned with the promoted subsystem state
+  - added focused data-layer and runtime regressions that compare the promoted replisome subsystem against the parser-expected probe-applied state
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q parse_legacy_saved_state_json_promotes_last_md_probe_into_subsystem_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_promotes_last_md_probe_into_subsystem_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but the remaining residual probe or chemistry cases now mostly reduce to payloads that provide neither explicit site chemistry nor a persisted probe payload that can be promoted into subsystem state, plus the final expression cases with no runtime chemistry, registry, or structured asset bundle`
