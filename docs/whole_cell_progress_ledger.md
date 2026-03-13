@@ -1873,3 +1873,20 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `explicit-asset restore now ignores stale synchronized core summaries, but the remaining non-explicit compatibility paths still preserve synchronized scalar summaries and need to be pushed behind legacy-only boundaries`
+
+### 2026-03-12 - Phase 7 / Bundle-Less Restore State Preservation
+
+- Summary:
+  - changed the non-explicit, bundle-less restore path to preserve explicit saved chromosome and membrane state when present instead of always reseeding those subsystems from coarse core summary scalars
+  - added a regression proving that a saved state with no organism bundle still restores from explicit saved chromosome, membrane, and complex state even when the legacy core summaries are stale
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_from_saved_state_json_without_organism_prefers_explicit_saved_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `bundle-less restore now preserves explicit chromosome and membrane state, but the remaining compatibility-only serialization payloads still carry synchronized scalar summaries and need further narrowing`
