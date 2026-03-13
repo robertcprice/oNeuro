@@ -7436,8 +7436,111 @@ fn legacy_expression_support_level(
     legacy_saved_state_finite_scale(raw * (0.85 + 0.15 * localized_supply), 1.0, 0.55, 1.55)
 }
 
+fn legacy_expression_unit_weights(
+    process_weights: WholeCellProcessWeights,
+    asset_class: WholeCellAssetClass,
+) -> WholeCellProcessWeights {
+    if process_weights.total() > 1.0e-6 {
+        process_weights.clamped()
+    } else {
+        legacy_expression_asset_class_process_template(asset_class)
+    }
+}
+
 fn legacy_saved_state_has_explicit_expression_state(state: &WholeCellSavedState) -> bool {
     state.organism_expression != WholeCellOrganismExpressionState::default()
+}
+
+fn synthesize_legacy_expression_summaries_from_assets(
+    state: &WholeCellSavedState,
+    summaries: &mut HashMap<String, LegacyOperonRuntimeSummary>,
+) {
+    let Some(assets) = state.organism_assets.as_ref() else {
+        return;
+    };
+
+    for operon in &assets.operons {
+        let entry = summaries.entry(operon.name.clone()).or_default();
+        let weights = legacy_expression_unit_weights(
+            operon.process_weights,
+            operon.asset_class.unwrap_or(WholeCellAssetClass::Generic),
+        );
+        let activity_weight = (0.65 + 1.35 * operon.basal_activity.max(0.0))
+            * (operon.genes.len().max(1) as f32).sqrt();
+        entry.process_signal.add_weighted(weights, activity_weight);
+        entry.transcription_flux += 0.18 * activity_weight;
+        entry.translation_flux += 0.10 * activity_weight;
+    }
+
+    for rna in &assets.rnas {
+        let entry = summaries.entry(rna.operon.clone()).or_default();
+        let abundance = rna.basal_abundance.max(0.0);
+        let abundance_weight = (1.0 + abundance).sqrt();
+        entry.rna_species_count += 1;
+        entry.transcript_abundance += abundance;
+        entry.transcription_flux += 0.22 * abundance_weight;
+        entry.transcript_turnover_rate += 0.08 * abundance_weight;
+        entry.process_signal.add_weighted(
+            legacy_expression_unit_weights(rna.process_weights, rna.asset_class),
+            0.28 * abundance_weight,
+        );
+        entry.process_signal.transcription += 0.10 * abundance_weight;
+    }
+
+    for protein in &assets.proteins {
+        let entry = summaries.entry(protein.operon.clone()).or_default();
+        let abundance = protein.basal_abundance.max(0.0);
+        let abundance_weight = (1.0 + abundance).sqrt();
+        entry.protein_species_count += 1;
+        entry.protein_abundance += abundance;
+        entry.translation_flux += 0.24 * abundance_weight;
+        entry.protein_turnover_rate += 0.07 * abundance_weight;
+        entry.process_signal.add_weighted(
+            legacy_expression_unit_weights(protein.process_weights, protein.asset_class),
+            0.32 * abundance_weight,
+        );
+        entry.process_signal.translation += 0.12 * abundance_weight;
+    }
+
+    for complex in &assets.complexes {
+        let entry = summaries.entry(complex.operon.clone()).or_default();
+        let abundance = complex.basal_abundance.max(0.0);
+        let component_pressure = complex
+            .components
+            .iter()
+            .map(|component| component.stoichiometry.max(1) as f32)
+            .sum::<f32>()
+            .max(1.0);
+        let abundance_weight = (1.0 + abundance).sqrt() * component_pressure.sqrt();
+        entry.process_signal.add_weighted(
+            legacy_expression_unit_weights(complex.process_weights, complex.asset_class),
+            0.26 * abundance_weight,
+        );
+        entry.translation_flux += 0.08 * abundance_weight;
+        entry.protein_turnover_rate += 0.03 * abundance_weight;
+        entry.stress_flux += 0.01 * abundance_weight;
+        match complex.family {
+            WholeCellAssemblyFamily::RnaPolymerase => {
+                entry.process_signal.transcription += 0.12 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Ribosome => {
+                entry.process_signal.translation += 0.12 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Replisome
+            | WholeCellAssemblyFamily::ReplicationInitiator => {
+                entry.process_signal.replication += 0.10 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Divisome => {
+                entry.process_signal.constriction += 0.10 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Transporter
+            | WholeCellAssemblyFamily::MembraneEnzyme
+            | WholeCellAssemblyFamily::AtpSynthase => {
+                entry.process_signal.membrane += 0.10 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::ChaperoneClient | WholeCellAssemblyFamily::Generic => {}
+        }
+    }
 }
 
 // Reconstruct an explicit coarse expression payload from runtime species,
@@ -7723,6 +7826,13 @@ fn synthesize_legacy_expression_state_from_saved_state(
                 }
             }
         }
+    }
+
+    // If a legacy payload never serialized runtime chemistry or a compiled
+    // registry, fall back to the explicit asset bundle before giving up. This
+    // keeps structured bundle assets authoritative on compatibility paths too.
+    if summaries.is_empty() {
+        synthesize_legacy_expression_summaries_from_assets(state, &mut summaries);
     }
 
     if summaries.is_empty() {
@@ -10503,6 +10613,39 @@ mod tests {
         assert_eq!(cme.base_interval_steps, saved.config.cme_interval.max(1));
         assert!(cme.run_count > 0);
         assert!(cme.last_run_step.is_some());
+    }
+
+    #[test]
+    fn synthesize_legacy_expression_state_from_assets_without_runtime_or_registry() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.organism_data_ref = None;
+        saved.organism_data = None;
+        saved.organism_process_registry = None;
+        saved.organism_species.clear();
+        saved.organism_reactions.clear();
+        saved.organism_expression = WholeCellOrganismExpressionState::default();
+        saved.chemistry_report = LocalChemistryReport::default();
+        saved.chemistry_site_reports.clear();
+        saved.core.metabolic_load = 1.22;
+        saved.lattice.atp.fill(2.9);
+        saved.lattice.amino_acids.fill(2.3);
+        saved.lattice.nucleotides.fill(2.0);
+        saved.lattice.membrane_precursors.fill(1.5);
+
+        let expression =
+            synthesize_legacy_expression_state_from_saved_state(&saved).expect("asset expression");
+
+        assert!(saved.organism_process_registry.is_none());
+        assert!(saved.organism_species.is_empty());
+        assert!(saved.organism_reactions.is_empty());
+        assert!(!expression.transcription_units.is_empty());
+        assert!(expression.total_transcript_abundance > 0.0);
+        assert!(expression.total_protein_abundance > 0.0);
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.gene_count > 0 && unit.process_drive.total() > 0.0));
     }
 
     #[test]

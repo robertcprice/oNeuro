@@ -2278,3 +2278,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but the remaining residual expression cases now mostly reduce to payloads that provide neither runtime chemistry nor process registries, plus the last summary-only probe or chemistry outputs that still need direct explicit persisted carriers`
+
+### 2026-03-13 - Phase 7 / Asset-Backed Legacy Expression Promotion
+
+- Summary:
+  - extended the legacy expression promotion path so older payloads that still carry structured organism assets but no runtime species, runtime reactions, or compiled process registry now synthesize explicit operon expression directly from the explicit operon, RNA, protein, and complex bundle assets
+  - kept the asset-backed recovery at the parser boundary so compatibility restore continues to prefer source-authoritative biology instead of leaving expression empty until later runtime refresh code tries to infer it
+  - added focused data-layer and runtime regressions covering the asset-only compatibility path and updated the helper comments so the fallback order between runtime chemistry, registry priors, and explicit bundle assets is explicit in code
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q synthesize_legacy_expression_state_from_assets_without_runtime_or_registry --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_promotes_expression_from_assets_without_runtime_or_registry --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but the remaining residual expression cases now mostly reduce to payloads that provide neither runtime chemistry, process registries, nor structured bundle assets, plus the last summary-only probe or chemistry outputs that still need direct explicit persisted carriers`

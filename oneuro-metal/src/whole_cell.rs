@@ -15179,6 +15179,45 @@ mod tests {
     }
 
     #[test]
+    fn test_from_legacy_saved_state_json_promotes_expression_from_assets_without_runtime_or_registry(
+    ) {
+        let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
+        let mut saved = parse_saved_state_json(
+            &simulator
+                .save_state_json()
+                .expect("serialize explicit saved state"),
+        )
+        .expect("parse explicit saved state");
+        saved.organism_data_ref = None;
+        saved.organism_data = None;
+        saved.organism_process_registry = None;
+        saved.organism_species.clear();
+        saved.organism_reactions.clear();
+        saved.organism_expression = WholeCellOrganismExpressionState::default();
+        saved.chemistry_report = LocalChemistryReport::default();
+        saved.chemistry_site_reports.clear();
+        saved.core.metabolic_load = 1.22;
+        saved.lattice.atp.fill(2.9);
+        saved.lattice.amino_acids.fill(2.3);
+        saved.lattice.nucleotides.fill(2.0);
+        saved.lattice.membrane_precursors.fill(1.5);
+
+        let saved_json = saved_state_to_json(&saved).expect("serialize legacy saved state");
+        let expected_saved =
+            parse_legacy_saved_state_json(&saved_json).expect("parse promoted legacy saved state");
+        let restored =
+            WholeCellSimulator::from_legacy_saved_state_json(&saved_json).expect("restore legacy saved state");
+
+        assert!(restored.organism_assets.is_some());
+        assert_eq!(
+            restored
+                .organism_expression_state()
+                .expect("asset-promoted legacy expression state"),
+            expected_saved.organism_expression
+        );
+    }
+
+    #[test]
     fn test_restore_saved_state_refreshes_subsystem_state_from_explicit_site_reports() {
         let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
         let mut saved = parse_saved_state_json(
