@@ -7701,6 +7701,71 @@ fn synthesize_legacy_expression_summaries_from_assets(
     }
 }
 
+fn synthesize_legacy_expression_summaries_from_named_complexes(
+    state: &WholeCellSavedState,
+    summaries: &mut HashMap<String, LegacyOperonRuntimeSummary>,
+) {
+    let named_complexes = if state.named_complexes.is_empty() {
+        synthesize_legacy_named_complexes_from_assembly(state)
+    } else {
+        state.named_complexes.clone()
+    };
+
+    for complex in named_complexes {
+        let operon = if complex.operon.is_empty() {
+            complex.id.clone()
+        } else {
+            complex.operon.clone()
+        };
+        let entry = summaries.entry(operon).or_default();
+        let abundance = complex.abundance.max(0.0);
+        let target_abundance = complex.target_abundance.max(abundance).max(0.0);
+        let assembly_flux = complex.assembly_rate.max(0.0)
+            + complex.nucleation_rate.max(0.0)
+            + complex.elongation_rate.max(0.0)
+            + complex.maturation_rate.max(0.0);
+        let degradation_flux = complex.degradation_rate.max(0.0);
+        let abundance_weight = (1.0 + abundance + 0.35 * target_abundance).sqrt();
+        entry.protein_species_count += 1;
+        entry.protein_abundance += abundance;
+        entry.translation_flux += 0.20 * abundance_weight + 0.18 * assembly_flux;
+        entry.protein_turnover_rate += 0.10 * degradation_flux;
+        entry.process_signal.add_weighted(
+            legacy_expression_unit_weights(
+                WholeCellProcessWeights::default(),
+                complex.asset_class,
+            ),
+            0.34 * abundance_weight + 0.16 * assembly_flux.max(0.0),
+        );
+        match complex.family {
+            WholeCellAssemblyFamily::RnaPolymerase => {
+                entry.process_signal.transcription += 0.18 * abundance_weight;
+                entry.transcription_flux += 0.08 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Ribosome => {
+                entry.process_signal.translation += 0.18 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Replisome
+            | WholeCellAssemblyFamily::ReplicationInitiator => {
+                entry.process_signal.replication += 0.16 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Divisome => {
+                entry.process_signal.constriction += 0.18 * abundance_weight;
+                entry.process_signal.membrane += 0.08 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::Transporter
+            | WholeCellAssemblyFamily::MembraneEnzyme
+            | WholeCellAssemblyFamily::AtpSynthase => {
+                entry.process_signal.membrane += 0.18 * abundance_weight;
+                entry.process_signal.energy += 0.08 * abundance_weight;
+            }
+            WholeCellAssemblyFamily::ChaperoneClient | WholeCellAssemblyFamily::Generic => {
+                entry.process_signal.energy += 0.06 * abundance_weight;
+            }
+        }
+    }
+}
+
 // Reconstruct an explicit coarse expression payload from runtime species,
 // runtime reactions, or registry fallbacks so legacy restore can carry
 // operon-level expression state at the parser boundary instead of waiting for
@@ -7991,6 +8056,15 @@ fn synthesize_legacy_expression_state_from_saved_state(
     // keeps structured bundle assets authoritative on compatibility paths too.
     if summaries.is_empty() {
         synthesize_legacy_expression_summaries_from_assets(state, &mut summaries);
+    }
+
+    // If runtime chemistry, registries, and structured assets are all absent,
+    // keep leaning on persisted explicit biology instead of dropping to an
+    // empty expression payload. Named complexes and aggregate assembly state
+    // are still explicit serialized inventory, so they are a better legacy
+    // boundary than giving up to a summary-free default.
+    if summaries.is_empty() {
+        synthesize_legacy_expression_summaries_from_named_complexes(state, &mut summaries);
     }
 
     if summaries.is_empty() {
@@ -10827,6 +10901,52 @@ mod tests {
             .transcription_units
             .iter()
             .any(|unit| unit.gene_count > 0 && unit.process_drive.total() > 0.0));
+    }
+
+    #[test]
+    fn synthesize_legacy_expression_state_from_assembly_without_runtime_registry_or_assets() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.organism_data_ref = None;
+        saved.organism_data = None;
+        saved.organism_assets = None;
+        saved.organism_process_registry = None;
+        saved.organism_species.clear();
+        saved.organism_reactions.clear();
+        saved.organism_expression = WholeCellOrganismExpressionState::default();
+        saved.named_complexes.clear();
+        saved.complex_assembly = WholeCellComplexAssemblyState {
+            rnap_complexes: 12.0,
+            ribosome_complexes: 18.0,
+            dnaa_activity: 7.0,
+            ftsz_polymer: 9.0,
+            rnap_target: 14.0,
+            ribosome_target: 20.0,
+            dnaa_target: 8.0,
+            ftsz_target: 11.0,
+            rnap_assembly_rate: 1.2,
+            ribosome_assembly_rate: 1.5,
+            dnaa_assembly_rate: 0.8,
+            ftsz_assembly_rate: 0.7,
+            ..WholeCellComplexAssemblyState::default()
+        };
+
+        let expression = synthesize_legacy_expression_state_from_saved_state(&saved)
+            .expect("assembly-backed expression");
+
+        assert!(expression.total_protein_abundance > 0.0);
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_rnap_complex" && unit.process_drive.transcription > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_ribosome_complex" && unit.process_drive.translation > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_dnaa_complex" && unit.process_drive.replication > 0.0));
     }
 
     #[test]

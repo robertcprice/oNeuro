@@ -2384,3 +2384,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but the remaining residual probe or chemistry cases now mostly reduce to payloads that provide neither explicit site chemistry, richer persisted probe state, explicit local schedules, nor explicit chemistry-site probe subsets, plus the final expression cases with no runtime chemistry, registry, or structured asset bundle`
+
+### 2026-03-13 - Phase 7 / Assembly-Backed Legacy Expression Recovery
+
+- Summary:
+  - extended legacy expression promotion so parser repair now falls back to explicit named-complex and aggregate assembly inventory when runtime species, runtime reactions, process registries, and structured asset bundles are all absent
+  - kept that fallback on explicit persisted biology instead of summary scalars, using direct assembly families like RNAP, ribosome, DnaA, and divisome carriers to rebuild coarse operon-like expression activity
+  - added focused data-layer and runtime regressions proving compatibility restore now keeps expression alive on assembly-only legacy payloads instead of dropping to an empty expression state
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q synthesize_legacy_expression_state_from_assembly_without_runtime_registry_or_assets --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_promotes_expression_from_assembly_without_assets --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but the remaining residual expression cases now mostly reduce to payloads that provide neither runtime chemistry, process registries, structured asset bundles, nor explicit assembly inventory, plus the last summary-only probe or chemistry outputs on the coarsest legacy payloads`
