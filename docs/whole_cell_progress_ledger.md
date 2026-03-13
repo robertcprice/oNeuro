@@ -2405,3 +2405,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but the remaining residual expression cases now mostly reduce to payloads that provide neither runtime chemistry, process registries, structured asset bundles, nor explicit assembly inventory, plus the last summary-only probe or chemistry outputs on the coarsest legacy payloads`
+
+### 2026-03-13 - Phase 7 / Core-Backed Legacy Expression Recovery
+
+- Summary:
+  - extended legacy expression promotion one more step down so parser repair now falls back through aggregate assembly reconstructed from coarse core summary channels when runtime chemistry, registries, structured assets, and explicit assembly inventory are all absent
+  - kept that fallback on explicit reconstructed biology rather than direct scalar-summary execution, using the same legacy RNAP, ribosome, DnaA, and divisome assembly carriers to rebuild coarse operon-like expression state on the coarsest compatibility payloads
+  - added focused data-layer and runtime regressions proving legacy restore now keeps expression alive even on core-summary-only payloads
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q synthesize_legacy_expression_state_from_core_without_runtime_registry_assets_or_assembly --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_promotes_expression_from_core_without_assets --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, and the remaining compatibility-only summary surface is now concentrated in the last summary-only probe or chemistry outputs on the coarsest legacy payloads`

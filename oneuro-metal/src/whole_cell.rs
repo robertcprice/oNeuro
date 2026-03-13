@@ -15276,6 +15276,58 @@ mod tests {
     }
 
     #[test]
+    fn test_from_legacy_saved_state_json_promotes_expression_from_core_without_assets() {
+        let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
+        let mut saved = parse_saved_state_json(
+            &simulator
+                .save_state_json()
+                .expect("serialize explicit saved state"),
+        )
+        .expect("parse explicit saved state");
+        saved.organism_data_ref = None;
+        saved.organism_data = None;
+        saved.organism_assets = None;
+        saved.organism_process_registry = None;
+        saved.organism_species.clear();
+        saved.organism_reactions.clear();
+        saved.organism_expression = WholeCellOrganismExpressionState::default();
+        saved.named_complexes.clear();
+        saved.complex_assembly = WholeCellComplexAssemblyState::default();
+        saved.core.active_rnap = 11.0;
+        saved.core.active_ribosomes = 17.0;
+        saved.core.dnaa = 6.0;
+        saved.core.ftsz = 8.0;
+
+        let saved_json = saved_state_to_json(&saved).expect("serialize legacy saved state");
+        let expected_saved =
+            parse_legacy_saved_state_json(&saved_json).expect("parse promoted legacy saved state");
+        let restored =
+            WholeCellSimulator::from_legacy_saved_state_json(&saved_json).expect("restore legacy saved state");
+        let expression = restored
+            .organism_expression_state()
+            .expect("core-promoted legacy expression state");
+
+        assert!(restored.organism_assets.is_none());
+        assert_eq!(expression, expected_saved.organism_expression);
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_rnap_complex" && unit.process_drive.transcription > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_ribosome_complex" && unit.process_drive.translation > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_dnaa_complex" && unit.process_drive.replication > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_divisome_complex" && unit.process_drive.constriction > 0.0));
+    }
+
+    #[test]
     fn test_from_legacy_saved_state_json_prefers_site_reports_for_missing_chemistry_report() {
         let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
         let mut saved = parse_saved_state_json(

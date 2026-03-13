@@ -10950,6 +10950,46 @@ mod tests {
     }
 
     #[test]
+    fn synthesize_legacy_expression_state_from_core_without_runtime_registry_assets_or_assembly() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.organism_data_ref = None;
+        saved.organism_data = None;
+        saved.organism_assets = None;
+        saved.organism_process_registry = None;
+        saved.organism_species.clear();
+        saved.organism_reactions.clear();
+        saved.organism_expression = WholeCellOrganismExpressionState::default();
+        saved.named_complexes.clear();
+        saved.complex_assembly = WholeCellComplexAssemblyState::default();
+        saved.core.active_rnap = 11.0;
+        saved.core.active_ribosomes = 17.0;
+        saved.core.dnaa = 6.0;
+        saved.core.ftsz = 8.0;
+
+        let expression = synthesize_legacy_expression_state_from_saved_state(&saved)
+            .expect("core-backed expression");
+
+        assert!(expression.total_protein_abundance > 0.0);
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_rnap_complex" && unit.process_drive.transcription > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_ribosome_complex" && unit.process_drive.translation > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_dnaa_complex" && unit.process_drive.replication > 0.0));
+        assert!(expression
+            .transcription_units
+            .iter()
+            .any(|unit| unit.name == "legacy_divisome_complex" && unit.process_drive.constriction > 0.0));
+    }
+
+    #[test]
     fn parse_legacy_saved_state_json_prefers_site_reports_for_missing_chemistry_report() {
         let spec = bundled_syn3a_program_spec().expect("bundled spec");
         let mut saved = minimal_saved_state_from_spec(&spec);
