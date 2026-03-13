@@ -1987,3 +1987,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `program-spec bootstrap now preserves explicit local chemistry, expression, assembly, runtime chemistry, and scheduler state, but the remaining compatibility-only serialization paths still need richer explicit payloads for the last legacy-only biology layers before synchronized scalar summaries can disappear completely`
+
+### 2026-03-12 - Phase 7 / Program-Spec Explicit Spatial Field Bootstrap
+
+- Summary:
+  - extended `WholeCellProgramSpec` so bootstrap payloads can also carry explicit spatial fields rather than always regenerating membrane, septum, nucleoid, membrane-band, and pole locality from chromosome and membrane summaries
+  - added a dedicated spatial-field application helper and updated both restore-time and program-spec bootstrap paths to use it, so explicit field payloads land after chromosome and membrane normalization but before RDME drive refresh and downstream chemistry-aware bootstrap stages consume locality
+  - added comments in the bootstrap path documenting why explicit spatial fields have to land before RDME and the later chemistry, expression, assembly, runtime-chemistry, and scheduler precedence chain
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q test_from_program_spec_preserves_explicit_spatial_fields --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `program-spec bootstrap now preserves explicit spatial fields, local chemistry, expression, assembly, runtime chemistry, and scheduler state, but the remaining compatibility-only serialization paths still need richer explicit payloads for the last legacy-only biology layers before synchronized scalar summaries can disappear completely`

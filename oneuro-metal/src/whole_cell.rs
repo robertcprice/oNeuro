@@ -7333,6 +7333,27 @@ impl WholeCellSimulator {
             .set_field(IntracellularSpatialField::PoleZone, &poles);
     }
 
+    fn apply_spatial_field_state(&mut self, spatial: &WholeCellSpatialFieldState) {
+        let _ = self.spatial_fields.set_field(
+            IntracellularSpatialField::MembraneAdjacency,
+            &spatial.membrane_adjacency,
+        );
+        let _ = self
+            .spatial_fields
+            .set_field(IntracellularSpatialField::SeptumZone, &spatial.septum_zone);
+        let _ = self.spatial_fields.set_field(
+            IntracellularSpatialField::NucleoidOccupancy,
+            &spatial.nucleoid_occupancy,
+        );
+        let _ = self.spatial_fields.set_field(
+            IntracellularSpatialField::MembraneBandZone,
+            &spatial.membrane_band_zone,
+        );
+        let _ = self
+            .spatial_fields
+            .set_field(IntracellularSpatialField::PoleZone, &spatial.pole_zone);
+    }
+
     fn spatial_species_mean(
         &self,
         species: IntracellularSpecies,
@@ -7544,24 +7565,7 @@ impl WholeCellSimulator {
             &saved.lattice.membrane_precursors,
         )?;
         if let Some(spatial) = saved.spatial_fields {
-            let _ = self.spatial_fields.set_field(
-                IntracellularSpatialField::MembraneAdjacency,
-                &spatial.membrane_adjacency,
-            );
-            let _ = self
-                .spatial_fields
-                .set_field(IntracellularSpatialField::SeptumZone, &spatial.septum_zone);
-            let _ = self.spatial_fields.set_field(
-                IntracellularSpatialField::NucleoidOccupancy,
-                &spatial.nucleoid_occupancy,
-            );
-            let _ = self.spatial_fields.set_field(
-                IntracellularSpatialField::MembraneBandZone,
-                &spatial.membrane_band_zone,
-            );
-            let _ = self
-                .spatial_fields
-                .set_field(IntracellularSpatialField::PoleZone, &spatial.pole_zone);
+            self.apply_spatial_field_state(&spatial);
         }
         self.sync_from_lattice();
 
@@ -7913,7 +7917,14 @@ impl WholeCellSimulator {
             .unwrap_or_else(|| simulator.seeded_membrane_division_state());
         simulator.synchronize_membrane_division_summary();
 
+        // Preserve explicit spatial fields after chromosome and membrane state have
+        // been normalized, but before RDME drives and later chemistry-aware bootstrap
+        // stages read locality from those fields. This keeps compiled or persisted
+        // locality state authoritative when the caller already has it.
         simulator.refresh_spatial_fields();
+        if let Some(spatial) = spec.spatial_fields.as_ref() {
+            simulator.apply_spatial_field_state(spatial);
+        }
         simulator.refresh_rdme_drive_fields();
 
         simulator.disable_local_chemistry();
@@ -13019,6 +13030,57 @@ mod tests {
         );
         assert!((simulator.md_translation_scale() - 1.18).abs() < 1.0e-6);
         assert!((simulator.md_membrane_scale() - 0.93).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_from_program_spec_preserves_explicit_spatial_fields() {
+        let mut spec = bundled_syn3a_program_spec().expect("bundled Syn3A program spec");
+        let total_voxels = spec.config.x_dim * spec.config.y_dim * spec.config.z_dim;
+        let spatial = WholeCellSpatialFieldState {
+            membrane_adjacency: (0..total_voxels)
+                .map(|index| 0.05 + 0.0005 * index as f32)
+                .collect(),
+            septum_zone: (0..total_voxels)
+                .map(|index| 0.15 + 0.0004 * index as f32)
+                .collect(),
+            nucleoid_occupancy: (0..total_voxels)
+                .map(|index| 0.25 + 0.0003 * index as f32)
+                .collect(),
+            membrane_band_zone: (0..total_voxels)
+                .map(|index| 0.35 + 0.0002 * index as f32)
+                .collect(),
+            pole_zone: (0..total_voxels)
+                .map(|index| 0.45 + 0.0001 * index as f32)
+                .collect(),
+        };
+        spec.spatial_fields = Some(spatial.clone());
+
+        let simulator = WholeCellSimulator::from_program_spec(spec);
+        let membrane = simulator
+            .spatial_fields
+            .field_slice(IntracellularSpatialField::MembraneAdjacency);
+        let septum = simulator
+            .spatial_fields
+            .field_slice(IntracellularSpatialField::SeptumZone);
+        let nucleoid = simulator
+            .spatial_fields
+            .field_slice(IntracellularSpatialField::NucleoidOccupancy);
+        let membrane_band = simulator
+            .spatial_fields
+            .field_slice(IntracellularSpatialField::MembraneBandZone);
+        let poles = simulator
+            .spatial_fields
+            .field_slice(IntracellularSpatialField::PoleZone);
+
+        assert_eq!(membrane.len(), total_voxels);
+        assert!((membrane[0] - spatial.membrane_adjacency[0]).abs() < 1.0e-6);
+        assert!((septum[17] - spatial.septum_zone[17]).abs() < 1.0e-6);
+        assert!(
+            (nucleoid[total_voxels - 1] - spatial.nucleoid_occupancy[total_voxels - 1]).abs()
+                < 1.0e-6
+        );
+        assert!((membrane_band[9] - spatial.membrane_band_zone[9]).abs() < 1.0e-6);
+        assert!((poles[23] - spatial.pole_zone[23]).abs() < 1.0e-6);
     }
 
     #[test]

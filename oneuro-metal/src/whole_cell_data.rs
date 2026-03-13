@@ -1438,6 +1438,8 @@ pub struct WholeCellProgramSpec {
     #[serde(default)]
     pub membrane_division_state: Option<WholeCellMembraneDivisionState>,
     #[serde(default)]
+    pub spatial_fields: Option<WholeCellSpatialFieldState>,
+    #[serde(default)]
     pub organism_expression: Option<WholeCellOrganismExpressionState>,
     #[serde(default)]
     pub organism_species: Option<Vec<WholeCellSpeciesRuntimeState>>,
@@ -5476,6 +5478,7 @@ fn build_program_spec_from_organism(
         organism_process_registry: Some(process_registry),
         chromosome_state: None,
         membrane_division_state: None,
+        spatial_fields: None,
         organism_expression: None,
         organism_species: None,
         organism_reactions: None,
