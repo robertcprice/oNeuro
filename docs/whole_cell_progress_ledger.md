@@ -2007,3 +2007,21 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `program-spec bootstrap now preserves explicit spatial fields, local chemistry, expression, assembly, runtime chemistry, and scheduler state, but the remaining compatibility-only serialization paths still need richer explicit payloads for the last legacy-only biology layers before synchronized scalar summaries can disappear completely`
+
+### 2026-03-12 - Phase 7 / Explicit Local Chemistry Boundary Visibility
+
+- Summary:
+  - added a boundary helper so persisted explicit local-chemistry state is treated as real state even when no live chemistry bridge is attached
+  - updated `local_chemistry_report()`, `local_chemistry_sites()`, and snapshot export so explicit chemistry reports, site reports, subsystem coupling state, and MD scales supplied through program-spec or saved-state bootstrap are no longer hidden behind `chemistry_bridge.is_some()`
+  - added a regression proving a program-spec can carry explicit chemistry state without a live bridge and still expose that state through the public getters and snapshot boundary
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_local_chemistry_getters_expose_explicit_state_without_bridge --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `explicit persisted chemistry state is now visible at public boundaries without a live bridge, but the remaining compatibility-only serialization paths still need richer explicit payloads for the last legacy-only biology layers before synchronized scalar summaries can disappear completely`

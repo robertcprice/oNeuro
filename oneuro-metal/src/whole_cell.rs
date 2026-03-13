@@ -801,6 +801,25 @@ impl WholeCellSimulator {
             .find(|clock| clock.stage == stage)
     }
 
+    fn has_explicit_local_chemistry_state(&self) -> bool {
+        if self.chemistry_bridge.is_some()
+            || !self.chemistry_site_reports.is_empty()
+            || self.last_md_probe.is_some()
+            || !self.scheduled_subsystem_probes.is_empty()
+        {
+            return true;
+        }
+        if self.chemistry_report != LocalChemistryReport::default()
+            || (self.md_translation_scale - 1.0).abs() > 1.0e-6
+            || (self.md_membrane_scale - 1.0).abs() > 1.0e-6
+        {
+            return true;
+        }
+        self.subsystem_states
+            .iter()
+            .any(|state| *state != WholeCellSubsystemState::new(state.preset))
+    }
+
     fn average_unit_stress_penalty(&self) -> f32 {
         if self.organism_expression.transcription_units.is_empty() {
             1.0
@@ -8326,14 +8345,16 @@ impl WholeCellSimulator {
 
     /// Latest local chemistry report, if enabled.
     pub fn local_chemistry_report(&self) -> Option<LocalChemistryReport> {
-        self.chemistry_bridge
-            .as_ref()
-            .map(|_| self.chemistry_report)
+        if self.has_explicit_local_chemistry_state() {
+            Some(self.chemistry_report)
+        } else {
+            None
+        }
     }
 
     /// Latest per-subsystem local chemistry reports, if enabled.
     pub fn local_chemistry_sites(&self) -> Vec<LocalChemistrySiteReport> {
-        if self.chemistry_bridge.is_some() {
+        if self.has_explicit_local_chemistry_state() {
             self.chemistry_site_reports.clone()
         } else {
             Vec::new()
@@ -13030,6 +13051,101 @@ mod tests {
         );
         assert!((simulator.md_translation_scale() - 1.18).abs() < 1.0e-6);
         assert!((simulator.md_membrane_scale() - 0.93).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_local_chemistry_getters_expose_explicit_state_without_bridge() {
+        let mut spec = bundled_syn3a_program_spec().expect("bundled Syn3A program spec");
+        spec.local_chemistry = None;
+        spec.chemistry_report = Some(LocalChemistryReport {
+            atp_support: 0.84,
+            translation_support: 0.88,
+            nucleotide_support: 0.86,
+            membrane_support: 0.93,
+            crowding_penalty: 0.77,
+            mean_glucose: 0.22,
+            mean_oxygen: 0.18,
+            mean_atp_flux: 0.36,
+            mean_carbon_dioxide: 0.11,
+        });
+        spec.chemistry_site_reports = vec![LocalChemistrySiteReport {
+            preset: Syn3ASubsystemPreset::AtpSynthaseMembraneBand,
+            site: WholeCellChemistrySite::AtpSynthaseBand,
+            patch_radius: 2,
+            site_x: 6,
+            site_y: 3,
+            site_z: 2,
+            localization_score: 0.91,
+            atp_support: 0.94,
+            translation_support: 0.83,
+            nucleotide_support: 0.80,
+            membrane_support: 0.89,
+            crowding_penalty: 0.78,
+            mean_glucose: 0.29,
+            mean_oxygen: 0.31,
+            mean_atp_flux: 0.45,
+            mean_carbon_dioxide: 0.12,
+            mean_nitrate: 0.08,
+            mean_ammonium: 0.07,
+            mean_proton: 0.03,
+            mean_phosphorus: 0.05,
+            assembly_component_availability: 0.90,
+            assembly_occupancy: 0.68,
+            assembly_stability: 0.74,
+            assembly_turnover: 0.16,
+            substrate_draw: 0.20,
+            energy_draw: 0.34,
+            biosynthetic_draw: 0.18,
+            byproduct_load: 0.10,
+            demand_satisfaction: 0.81,
+        }];
+        spec.subsystem_states = vec![WholeCellSubsystemState {
+            preset: Syn3ASubsystemPreset::AtpSynthaseMembraneBand,
+            site: WholeCellChemistrySite::AtpSynthaseBand,
+            site_x: 6,
+            site_y: 3,
+            site_z: 2,
+            localization_score: 0.91,
+            structural_order: 0.82,
+            crowding_penalty: 0.78,
+            assembly_component_availability: 0.90,
+            assembly_occupancy: 0.68,
+            assembly_stability: 0.74,
+            assembly_turnover: 0.16,
+            substrate_draw: 0.20,
+            energy_draw: 0.34,
+            biosynthetic_draw: 0.18,
+            byproduct_load: 0.10,
+            demand_satisfaction: 0.81,
+            atp_scale: 1.14,
+            translation_scale: 1.03,
+            replication_scale: 1.00,
+            segregation_scale: 1.00,
+            membrane_scale: 1.08,
+            constriction_scale: 0.98,
+            last_probe_step: Some(8),
+        }];
+        spec.md_translation_scale = Some(1.07);
+        spec.md_membrane_scale = Some(1.09);
+
+        let simulator = WholeCellSimulator::from_program_spec(spec);
+        let report = simulator
+            .local_chemistry_report()
+            .expect("explicit chemistry report");
+        let sites = simulator.local_chemistry_sites();
+        let snapshot = simulator.snapshot();
+
+        assert!(simulator.chemistry_bridge.is_none());
+        assert!((report.atp_support - 0.84).abs() < 1.0e-6);
+        assert_eq!(sites.len(), 1);
+        assert_eq!(
+            sites[0].preset,
+            Syn3ASubsystemPreset::AtpSynthaseMembraneBand
+        );
+        assert!(snapshot.local_chemistry.is_some());
+        assert_eq!(snapshot.local_chemistry_sites.len(), 1);
+        assert!((simulator.md_translation_scale() - 1.07).abs() < 1.0e-6);
+        assert!((simulator.md_membrane_scale() - 1.09).abs() < 1.0e-6);
     }
 
     #[test]
