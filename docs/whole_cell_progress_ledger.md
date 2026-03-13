@@ -2129,3 +2129,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but expression and local-chemistry detail still lack equally rich promotion on the remaining non-explicit migration and serialization paths, and some assembly channels still need richer direct named-complex carriers before persisted aggregate assembly can disappear completely`
+
+### 2026-03-12 - Phase 7 / Bundle-Less Expression Promotion
+
+- Summary:
+  - added a native bundle-less expression synthesis path so restore and execution can rebuild explicit operon expression state directly from persisted runtime species and reactions when bundled organism descriptors are absent
+  - wired the bundle-less expression refresh and restore paths to prefer that synthesized operon state over empty defaults, keeping runtime chemistry and expression coupled even on stripped compatibility payloads
+  - added a regression that clears explicit expression from a stripped saved state, keeps operon-tagged runtime species and reactions, and proves restore plus a subsequent `step()` still expose explicit operon expression through save-state and getter boundaries
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_bundleless_restore_synthesizes_expression_from_runtime_process_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_bundleless_restore_preserves_explicit_expression_runtime_and_named_complex_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but local-chemistry detail and a few remaining fine-grained expression or assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
