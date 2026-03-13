@@ -15372,6 +15372,58 @@ mod tests {
     }
 
     #[test]
+    fn test_from_legacy_saved_state_json_prefers_explicit_local_probe_schedule() {
+        let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
+        let mut saved = parse_saved_state_json(
+            &simulator
+                .save_state_json()
+                .expect("serialize explicit saved state"),
+        )
+        .expect("parse explicit saved state");
+        saved.chemistry_site_reports.clear();
+        saved.subsystem_states.clear();
+        saved.last_md_probe = None;
+        saved.scheduled_subsystem_probes.clear();
+        saved.local_chemistry = Some(WholeCellLocalChemistrySpec {
+            x_dim: 10,
+            y_dim: 8,
+            z_dim: 4,
+            voxel_size_au: 0.5,
+            use_gpu: true,
+            enable_default_syn3a_subsystems: false,
+            scheduled_subsystem_probes: vec![
+                ScheduledSubsystemProbe {
+                    preset: Syn3ASubsystemPreset::ReplisomeTrack,
+                    interval_steps: 17,
+                },
+                ScheduledSubsystemProbe {
+                    preset: Syn3ASubsystemPreset::FtsZSeptumRing,
+                    interval_steps: 11,
+                },
+            ],
+        });
+
+        let saved_json = saved_state_to_json(&saved).expect("serialize legacy saved state");
+        let expected_saved =
+            parse_legacy_saved_state_json(&saved_json).expect("parse promoted legacy saved state");
+        let restored =
+            WholeCellSimulator::from_legacy_saved_state_json(&saved_json).expect("restore legacy saved state");
+
+        assert_eq!(
+            restored.scheduled_syn3a_subsystem_probes(),
+            expected_saved.scheduled_subsystem_probes
+        );
+        assert_eq!(
+            restored.scheduled_syn3a_subsystem_probes(),
+            saved
+                .local_chemistry
+                .as_ref()
+                .expect("local chemistry")
+                .scheduled_subsystem_probes
+        );
+    }
+
+    #[test]
     fn test_restore_saved_state_refreshes_subsystem_state_from_explicit_site_reports() {
         let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
         let mut saved = parse_saved_state_json(

@@ -2341,3 +2341,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but the remaining residual probe or chemistry cases now mostly reduce to payloads that provide neither explicit site chemistry nor a persisted probe payload that can be promoted into subsystem state, plus the final expression cases with no runtime chemistry, registry, or structured asset bundle`
+
+### 2026-03-13 - Phase 7 / Explicit Local Probe-Schedule Preservation
+
+- Summary:
+  - extended the legacy scheduled-probe recovery path so payloads that already carry an explicit subset schedule in `local_chemistry.scheduled_subsystem_probes` now keep that exact schedule instead of being widened to the old all-presets fallback
+  - kept that preservation at the parser boundary so legacy restore and runtime scheduling stay aligned with the explicit local-chemistry contract instead of discarding the saved subset schedule during compatibility repair
+  - added focused data-layer and runtime regressions covering the explicit local schedule path
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q parse_legacy_saved_state_json_prefers_explicit_local_probe_schedule --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_prefers_explicit_local_probe_schedule --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but the remaining residual probe or chemistry cases now mostly reduce to payloads that provide neither explicit site chemistry, a persisted probe payload, nor an explicit local schedule that can be promoted through the parser boundary, plus the final expression cases with no runtime chemistry, registry, or structured asset bundle`

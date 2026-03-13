@@ -7183,6 +7183,18 @@ fn legacy_saved_state_probe_presets(state: &WholeCellSavedState) -> Vec<Syn3ASub
 fn synthesize_legacy_scheduled_subsystem_probes_from_state(
     state: &WholeCellSavedState,
 ) -> Vec<ScheduledSubsystemProbe> {
+    if let Some(local) = state.local_chemistry.as_ref() {
+        if !local.scheduled_subsystem_probes.is_empty() {
+            let mut probes = Vec::new();
+            for probe in &local.scheduled_subsystem_probes {
+                if !probes.iter().any(|existing: &ScheduledSubsystemProbe| existing.preset == probe.preset)
+                {
+                    probes.push(*probe);
+                }
+            }
+            return probes;
+        }
+    }
     legacy_saved_state_probe_presets(state)
         .into_iter()
         .map(|preset| ScheduledSubsystemProbe {
@@ -10908,6 +10920,47 @@ mod tests {
 
         assert_eq!(replisome, expected_replisome);
         assert_eq!(replisome.last_probe_step, Some(saved.core.step_count));
+    }
+
+    #[test]
+    fn parse_legacy_saved_state_json_prefers_explicit_local_probe_schedule() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.chemistry_site_reports.clear();
+        saved.subsystem_states.clear();
+        saved.last_md_probe = None;
+        saved.scheduled_subsystem_probes.clear();
+        saved.local_chemistry = Some(WholeCellLocalChemistrySpec {
+            x_dim: 10,
+            y_dim: 8,
+            z_dim: 4,
+            voxel_size_au: 0.5,
+            use_gpu: true,
+            enable_default_syn3a_subsystems: false,
+            scheduled_subsystem_probes: vec![
+                ScheduledSubsystemProbe {
+                    preset: Syn3ASubsystemPreset::ReplisomeTrack,
+                    interval_steps: 17,
+                },
+                ScheduledSubsystemProbe {
+                    preset: Syn3ASubsystemPreset::FtsZSeptumRing,
+                    interval_steps: 11,
+                },
+            ],
+        });
+
+        let reparsed =
+            parse_legacy_saved_state_json(&saved_state_to_json(&saved).expect("saved json"))
+                .expect("reparsed legacy saved state");
+
+        assert_eq!(
+            reparsed.scheduled_subsystem_probes,
+            saved
+                .local_chemistry
+                .as_ref()
+                .expect("local chemistry")
+                .scheduled_subsystem_probes
+        );
     }
 
     #[test]
