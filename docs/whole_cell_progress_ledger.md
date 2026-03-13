@@ -2299,3 +2299,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but the remaining residual expression cases now mostly reduce to payloads that provide neither runtime chemistry, process registries, nor structured bundle assets, plus the last summary-only probe or chemistry outputs that still need direct explicit persisted carriers`
+
+### 2026-03-13 - Phase 7 / Site-First Legacy Chemistry Report Promotion
+
+- Summary:
+  - extended the legacy chemistry promotion path so older payloads with explicit site chemistry but no persisted coarse `chemistry_report` now aggregate the whole-cell chemistry report directly from the serialized site reports before any core or lattice fallback runs
+  - updated the legacy hydration boundary so parser repair uses that same site-first chemistry aggregation, keeping compatibility restore aligned with the explicit local chemistry that was actually persisted instead of overwriting it with coarser summary chemistry
+  - added focused data-layer and runtime regressions covering the site-report-only compatibility path and kept the code comments aligned with the new fallback order
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q parse_legacy_saved_state_json_prefers_site_reports_for_missing_chemistry_report --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_prefers_site_reports_for_missing_chemistry_report --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but the remaining residual chemistry or probe cases now mostly reduce to payloads that provide neither explicit site chemistry nor richer persisted probe state, plus the final expression cases with no runtime chemistry, registry, or structured asset bundle`

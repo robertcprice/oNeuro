@@ -15218,6 +15218,99 @@ mod tests {
     }
 
     #[test]
+    fn test_from_legacy_saved_state_json_prefers_site_reports_for_missing_chemistry_report() {
+        let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
+        let mut saved = parse_saved_state_json(
+            &simulator
+                .save_state_json()
+                .expect("serialize explicit saved state"),
+        )
+        .expect("parse explicit saved state");
+        saved.chemistry_report = LocalChemistryReport::default();
+        saved.chemistry_site_reports = vec![
+            LocalChemistrySiteReport {
+                preset: Syn3ASubsystemPreset::AtpSynthaseMembraneBand,
+                site: WholeCellChemistrySite::AtpSynthaseBand,
+                patch_radius: 2,
+                site_x: 3,
+                site_y: 2,
+                site_z: 1,
+                localization_score: 0.82,
+                atp_support: 1.34,
+                translation_support: 0.88,
+                nucleotide_support: 0.91,
+                membrane_support: 1.26,
+                crowding_penalty: 0.74,
+                mean_glucose: 1.9,
+                mean_oxygen: 1.4,
+                mean_atp_flux: 1.3,
+                mean_carbon_dioxide: 0.7,
+                mean_nitrate: 0.2,
+                mean_ammonium: 0.1,
+                mean_proton: 0.3,
+                mean_phosphorus: 0.15,
+                assembly_component_availability: 0.9,
+                assembly_occupancy: 0.7,
+                assembly_stability: 0.85,
+                assembly_turnover: 0.12,
+                substrate_draw: 0.4,
+                energy_draw: 0.5,
+                biosynthetic_draw: 0.3,
+                byproduct_load: 0.2,
+                demand_satisfaction: 0.92,
+            },
+            LocalChemistrySiteReport {
+                preset: Syn3ASubsystemPreset::ReplisomeTrack,
+                site: WholeCellChemistrySite::ChromosomeTrack,
+                patch_radius: 2,
+                site_x: 4,
+                site_y: 2,
+                site_z: 1,
+                localization_score: 0.68,
+                atp_support: 0.96,
+                translation_support: 0.79,
+                nucleotide_support: 1.28,
+                membrane_support: 0.82,
+                crowding_penalty: 0.81,
+                mean_glucose: 1.1,
+                mean_oxygen: 0.9,
+                mean_atp_flux: 1.5,
+                mean_carbon_dioxide: 0.5,
+                mean_nitrate: 0.3,
+                mean_ammonium: 0.2,
+                mean_proton: 0.2,
+                mean_phosphorus: 0.18,
+                assembly_component_availability: 0.86,
+                assembly_occupancy: 0.64,
+                assembly_stability: 0.78,
+                assembly_turnover: 0.16,
+                substrate_draw: 0.45,
+                energy_draw: 0.42,
+                biosynthetic_draw: 0.48,
+                byproduct_load: 0.24,
+                demand_satisfaction: 0.88,
+            },
+        ];
+        saved.core.glucose_mm = 9.0;
+        saved.core.oxygen_mm = 8.0;
+        saved.lattice.atp.fill(0.2);
+
+        let saved_json = saved_state_to_json(&saved).expect("serialize legacy saved state");
+        let expected_saved =
+            parse_legacy_saved_state_json(&saved_json).expect("parse promoted legacy saved state");
+        let restored =
+            WholeCellSimulator::from_legacy_saved_state_json(&saved_json).expect("restore legacy saved state");
+
+        assert_eq!(
+            restored
+                .local_chemistry_report()
+                .expect("site-derived chemistry report"),
+            expected_saved.chemistry_report
+        );
+        assert_eq!(restored.local_chemistry_sites(), saved.chemistry_site_reports);
+    }
+
+    #[test]
     fn test_restore_saved_state_refreshes_subsystem_state_from_explicit_site_reports() {
         let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
         let mut saved = parse_saved_state_json(

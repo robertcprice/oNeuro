@@ -6704,9 +6704,82 @@ fn synthesize_legacy_local_chemistry_report_from_core(
     }
 }
 
+fn synthesize_legacy_local_chemistry_report_from_site_reports(
+    site_reports: &[LocalChemistrySiteReport],
+) -> Option<LocalChemistryReport> {
+    if site_reports.is_empty() {
+        return None;
+    }
+    let mut weight_total = 0.0;
+    let mut atp_support = 0.0;
+    let mut translation_support = 0.0;
+    let mut nucleotide_support = 0.0;
+    let mut membrane_support = 0.0;
+    let mut crowding_penalty = 0.0;
+    let mut mean_glucose = 0.0;
+    let mut mean_oxygen = 0.0;
+    let mut mean_atp_flux = 0.0;
+    let mut mean_carbon_dioxide = 0.0;
+
+    for report in site_reports {
+        let weight =
+            (0.45 + 0.30 * report.localization_score + 0.25 * report.demand_satisfaction).max(0.05);
+        weight_total += weight;
+        atp_support += report.atp_support * weight;
+        translation_support += report.translation_support * weight;
+        nucleotide_support += report.nucleotide_support * weight;
+        membrane_support += report.membrane_support * weight;
+        crowding_penalty += report.crowding_penalty * weight;
+        mean_glucose += report.mean_glucose * weight;
+        mean_oxygen += report.mean_oxygen * weight;
+        mean_atp_flux += report.mean_atp_flux * weight;
+        mean_carbon_dioxide += report.mean_carbon_dioxide * weight;
+    }
+
+    if weight_total <= 1.0e-6 {
+        return None;
+    }
+
+    Some(LocalChemistryReport {
+        atp_support: legacy_saved_state_finite_scale(atp_support / weight_total, 1.0, 0.45, 1.8),
+        translation_support: legacy_saved_state_finite_scale(
+            translation_support / weight_total,
+            1.0,
+            0.45,
+            1.8,
+        ),
+        nucleotide_support: legacy_saved_state_finite_scale(
+            nucleotide_support / weight_total,
+            1.0,
+            0.45,
+            1.8,
+        ),
+        membrane_support: legacy_saved_state_finite_scale(
+            membrane_support / weight_total,
+            1.0,
+            0.45,
+            1.8,
+        ),
+        crowding_penalty: legacy_saved_state_finite_scale(
+            crowding_penalty / weight_total,
+            1.0,
+            0.65,
+            1.0,
+        ),
+        mean_glucose: (mean_glucose / weight_total).max(0.0),
+        mean_oxygen: (mean_oxygen / weight_total).max(0.0),
+        mean_atp_flux: (mean_atp_flux / weight_total).max(0.0),
+        mean_carbon_dioxide: (mean_carbon_dioxide / weight_total).max(0.0),
+    })
+}
+
 fn legacy_saved_state_chemistry_report(state: &WholeCellSavedState) -> LocalChemistryReport {
     if state.chemistry_report != LocalChemistryReport::default() {
         state.chemistry_report
+    } else if let Some(report) =
+        synthesize_legacy_local_chemistry_report_from_site_reports(&state.chemistry_site_reports)
+    {
+        report
     } else {
         synthesize_legacy_local_chemistry_report_from_core(state)
     }
@@ -8781,7 +8854,7 @@ fn hydrate_legacy_saved_state_explicit_state(state: &mut WholeCellSavedState) {
         state.membrane_division_state = synthesize_legacy_membrane_state_from_core(state);
     }
     if state.chemistry_report == LocalChemistryReport::default() {
-        state.chemistry_report = synthesize_legacy_local_chemistry_report_from_core(state);
+        state.chemistry_report = legacy_saved_state_chemistry_report(state);
     }
     if state.chemistry_site_reports.is_empty() {
         state.chemistry_site_reports =
@@ -10646,6 +10719,91 @@ mod tests {
             .transcription_units
             .iter()
             .any(|unit| unit.gene_count > 0 && unit.process_drive.total() > 0.0));
+    }
+
+    #[test]
+    fn parse_legacy_saved_state_json_prefers_site_reports_for_missing_chemistry_report() {
+        let spec = bundled_syn3a_program_spec().expect("bundled spec");
+        let mut saved = minimal_saved_state_from_spec(&spec);
+        saved.chemistry_report = LocalChemistryReport::default();
+        saved.chemistry_site_reports = vec![
+            LocalChemistrySiteReport {
+                preset: Syn3ASubsystemPreset::AtpSynthaseMembraneBand,
+                site: crate::whole_cell_submodels::WholeCellChemistrySite::AtpSynthaseBand,
+                patch_radius: 2,
+                site_x: 3,
+                site_y: 2,
+                site_z: 1,
+                localization_score: 0.82,
+                atp_support: 1.34,
+                translation_support: 0.88,
+                nucleotide_support: 0.91,
+                membrane_support: 1.26,
+                crowding_penalty: 0.74,
+                mean_glucose: 1.9,
+                mean_oxygen: 1.4,
+                mean_atp_flux: 1.3,
+                mean_carbon_dioxide: 0.7,
+                mean_nitrate: 0.2,
+                mean_ammonium: 0.1,
+                mean_proton: 0.3,
+                mean_phosphorus: 0.15,
+                assembly_component_availability: 0.9,
+                assembly_occupancy: 0.7,
+                assembly_stability: 0.85,
+                assembly_turnover: 0.12,
+                substrate_draw: 0.4,
+                energy_draw: 0.5,
+                biosynthetic_draw: 0.3,
+                byproduct_load: 0.2,
+                demand_satisfaction: 0.92,
+            },
+            LocalChemistrySiteReport {
+                preset: Syn3ASubsystemPreset::ReplisomeTrack,
+                site: crate::whole_cell_submodels::WholeCellChemistrySite::ChromosomeTrack,
+                patch_radius: 2,
+                site_x: 4,
+                site_y: 2,
+                site_z: 1,
+                localization_score: 0.68,
+                atp_support: 0.96,
+                translation_support: 0.79,
+                nucleotide_support: 1.28,
+                membrane_support: 0.82,
+                crowding_penalty: 0.81,
+                mean_glucose: 1.1,
+                mean_oxygen: 0.9,
+                mean_atp_flux: 1.5,
+                mean_carbon_dioxide: 0.5,
+                mean_nitrate: 0.3,
+                mean_ammonium: 0.2,
+                mean_proton: 0.2,
+                mean_phosphorus: 0.18,
+                assembly_component_availability: 0.86,
+                assembly_occupancy: 0.64,
+                assembly_stability: 0.78,
+                assembly_turnover: 0.16,
+                substrate_draw: 0.45,
+                energy_draw: 0.42,
+                biosynthetic_draw: 0.48,
+                byproduct_load: 0.24,
+                demand_satisfaction: 0.88,
+            },
+        ];
+        let expected_report = synthesize_legacy_local_chemistry_report_from_site_reports(
+            &saved.chemistry_site_reports,
+        )
+        .expect("aggregated site chemistry report");
+        saved.core.glucose_mm = 9.0;
+        saved.core.oxygen_mm = 8.0;
+        saved.lattice.atp.fill(0.2);
+
+        let reparsed =
+            parse_legacy_saved_state_json(&saved_state_to_json(&saved).expect("saved json"))
+                .expect("reparsed legacy saved state");
+
+        assert_eq!(reparsed.chemistry_report, expected_report);
+        assert_eq!(reparsed.chemistry_site_reports, saved.chemistry_site_reports);
     }
 
     #[test]
