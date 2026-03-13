@@ -2149,3 +2149,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but local-chemistry detail and a few remaining fine-grained expression or assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`
+
+### 2026-03-12 - Phase 7 / Legacy Local-Chemistry Promotion
+
+- Summary:
+  - extended the legacy saved-state parser so older payloads with only coarse core and lattice state now regain an explicit `LocalChemistryReport` before runtime restore, instead of falling back to an empty default chemistry layer
+  - added a coarse chemistry synthesis path driven from saved glucose, oxygen, ADP, metabolic load, lattice ATP/amino-acid/nucleotide/membrane precursor means, and quantum efficiency modifiers
+  - extended both the data-layer and runtime legacy restore regressions so compatibility restore now proves the promoted chemistry report survives parser repair and runtime restore boundaries alongside explicit chromosome, membrane, complex, scheduler, and named-complex state
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell_data.rs`
+- Tests run:
+  - `cargo test -q parse_legacy_saved_state_json_promotes_core_summary_to_explicit_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_legacy_saved_state_json_promotes_core_summary_to_explicit_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but fine-grained local-chemistry site detail and a few remaining expression or assembly carriers still lack equally rich promotion on the remaining non-explicit migration and serialization paths`

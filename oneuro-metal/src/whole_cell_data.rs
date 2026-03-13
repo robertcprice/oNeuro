@@ -6578,6 +6578,135 @@ fn legacy_saved_state_has_explicit_membrane_state(state: &WholeCellSavedState) -
         || state.membrane_division_state.membrane_area_nm2 > 1.0
 }
 
+fn legacy_saved_state_has_explicit_local_chemistry_state(state: &WholeCellSavedState) -> bool {
+    state.local_chemistry.is_some()
+        || state.chemistry_report != LocalChemistryReport::default()
+        || !state.chemistry_site_reports.is_empty()
+        || state.last_md_probe.is_some()
+        || !state.scheduled_subsystem_probes.is_empty()
+        || !state.subsystem_states.is_empty()
+        || (state.md_translation_scale - 1.0).abs() > 1.0e-6
+        || (state.md_membrane_scale - 1.0).abs() > 1.0e-6
+}
+
+fn legacy_saved_state_mean(values: &[f32]) -> f32 {
+    if values.is_empty() {
+        0.0
+    } else {
+        values.iter().copied().sum::<f32>() / values.len() as f32
+    }
+}
+
+fn legacy_saved_state_saturating_signal(value: f32, half_saturation: f32) -> f32 {
+    let value = value.max(0.0);
+    let half_saturation = half_saturation.max(1.0e-6);
+    (value / (value + half_saturation)).clamp(0.0, 1.0)
+}
+
+fn legacy_saved_state_finite_scale(
+    value: f32,
+    fallback: f32,
+    min_value: f32,
+    max_value: f32,
+) -> f32 {
+    if value.is_finite() {
+        value.clamp(min_value, max_value)
+    } else {
+        fallback.clamp(min_value, max_value)
+    }
+}
+
+fn synthesize_legacy_local_chemistry_report_from_core(
+    state: &WholeCellSavedState,
+) -> LocalChemistryReport {
+    let mean_atp = legacy_saved_state_mean(&state.lattice.atp);
+    let mean_amino = legacy_saved_state_mean(&state.lattice.amino_acids);
+    let mean_nucleotide = legacy_saved_state_mean(&state.lattice.nucleotides);
+    let mean_membrane = legacy_saved_state_mean(&state.lattice.membrane_precursors);
+    let mean_glucose = state.core.glucose_mm.max(0.0);
+    let mean_oxygen = state.core.oxygen_mm.max(0.0);
+    let metabolic_load = state.core.metabolic_load.max(0.1);
+    let adenylate_ratio = mean_atp / (state.core.adp_mm + 0.25).max(0.25);
+    let oxphos_efficiency = state.core.quantum_profile.oxphos_efficiency.clamp(0.70, 1.45);
+    let translation_efficiency = state
+        .core
+        .quantum_profile
+        .translation_efficiency
+        .clamp(0.70, 1.45);
+    let nucleotide_efficiency = state
+        .core
+        .quantum_profile
+        .nucleotide_polymerization_efficiency
+        .clamp(0.70, 1.45);
+    let membrane_efficiency = state
+        .core
+        .quantum_profile
+        .membrane_synthesis_efficiency
+        .clamp(0.70, 1.45);
+    let atp_support = legacy_saved_state_finite_scale(
+        (0.52 * legacy_saved_state_saturating_signal(mean_atp, 1.2)
+            + 0.20 * legacy_saved_state_saturating_signal(adenylate_ratio, 1.0)
+            + 0.16 * legacy_saved_state_saturating_signal(mean_glucose, 0.8)
+            + 0.12 * legacy_saved_state_saturating_signal(mean_oxygen, 0.7))
+            * oxphos_efficiency,
+        1.0,
+        0.55,
+        1.55,
+    );
+    let translation_support = legacy_saved_state_finite_scale(
+        (0.58 * legacy_saved_state_saturating_signal(mean_amino, 1.0)
+            + 0.24 * atp_support
+            + 0.18 * legacy_saved_state_saturating_signal(mean_glucose, 0.9))
+            * translation_efficiency,
+        1.0,
+        0.55,
+        1.55,
+    );
+    let nucleotide_support = legacy_saved_state_finite_scale(
+        (0.60 * legacy_saved_state_saturating_signal(mean_nucleotide, 1.0)
+            + 0.24 * atp_support
+            + 0.16 * legacy_saved_state_saturating_signal(mean_glucose, 0.9))
+            * nucleotide_efficiency,
+        1.0,
+        0.55,
+        1.55,
+    );
+    let membrane_support = legacy_saved_state_finite_scale(
+        (0.60 * legacy_saved_state_saturating_signal(mean_membrane, 1.0)
+            + 0.24 * atp_support
+            + 0.16 * legacy_saved_state_saturating_signal(mean_oxygen, 0.8))
+            * membrane_efficiency,
+        1.0,
+        0.55,
+        1.55,
+    );
+    let mean_atp_flux =
+        (0.34 * mean_atp + 0.26 * atp_support + 0.16 * mean_glucose + 0.10 * mean_oxygen)
+            * oxphos_efficiency
+            / metabolic_load.max(0.25);
+    let mean_carbon_dioxide =
+        (0.18 * mean_glucose + 0.10 * metabolic_load + 0.08 * mean_atp_flux).max(0.0);
+    let crowding_penalty = legacy_saved_state_finite_scale(
+        1.0
+            - 0.08 * (metabolic_load - 1.0).max(0.0)
+            - 0.10 * legacy_saved_state_saturating_signal(mean_carbon_dioxide, 1.0),
+        1.0,
+        0.65,
+        1.0,
+    );
+    LocalChemistryReport {
+        atp_support,
+        translation_support,
+        nucleotide_support,
+        membrane_support,
+        crowding_penalty,
+        mean_glucose,
+        mean_oxygen,
+        mean_atp_flux: mean_atp_flux.max(0.0),
+        mean_carbon_dioxide,
+    }
+}
+
 fn legacy_saved_state_domain_specs(
     state: &WholeCellSavedState,
 ) -> &[WholeCellChromosomeDomainSpec] {
@@ -7333,6 +7462,9 @@ fn hydrate_legacy_saved_state_explicit_state(state: &mut WholeCellSavedState) {
     }
     if !legacy_saved_state_has_explicit_membrane_state(state) {
         state.membrane_division_state = synthesize_legacy_membrane_state_from_core(state);
+    }
+    if !legacy_saved_state_has_explicit_local_chemistry_state(state) {
+        state.chemistry_report = synthesize_legacy_local_chemistry_report_from_core(state);
     }
     // Keep legacy compatibility repair at the parser boundary: if an older saved
     // state never persisted multirate clocks, synthesize a coarse explicit
@@ -9028,6 +9160,21 @@ mod tests {
         saved.core.active_ribosomes = 18.0;
         saved.core.dnaa = 9.0;
         saved.core.ftsz = 23.0;
+        saved.core.glucose_mm = 2.4;
+        saved.core.oxygen_mm = 1.8;
+        saved.core.adp_mm = 0.6;
+        saved.core.metabolic_load = 1.35;
+        saved.chemistry_report = LocalChemistryReport::default();
+        saved.chemistry_site_reports.clear();
+        saved.last_md_probe = None;
+        saved.scheduled_subsystem_probes.clear();
+        saved.subsystem_states.clear();
+        saved.md_translation_scale = 1.0;
+        saved.md_membrane_scale = 1.0;
+        saved.lattice.atp.fill(3.2);
+        saved.lattice.amino_acids.fill(2.6);
+        saved.lattice.nucleotides.fill(2.1);
+        saved.lattice.membrane_precursors.fill(1.7);
 
         let reparsed =
             parse_legacy_saved_state_json(&saved_state_to_json(&saved).expect("saved json"))
@@ -9052,6 +9199,14 @@ mod tests {
             .named_complexes
             .iter()
             .any(|complex| complex.family == WholeCellAssemblyFamily::RnaPolymerase));
+        assert_ne!(reparsed.chemistry_report, LocalChemistryReport::default());
+        assert!((reparsed.chemistry_report.mean_glucose - 2.4).abs() < 1.0e-6);
+        assert!((reparsed.chemistry_report.mean_oxygen - 1.8).abs() < 1.0e-6);
+        assert!(reparsed.chemistry_report.atp_support > 0.55);
+        assert!(reparsed.chemistry_report.translation_support > 0.55);
+        assert!(reparsed.chemistry_report.nucleotide_support > 0.55);
+        assert!(reparsed.chemistry_report.membrane_support > 0.55);
+        assert!(reparsed.chemistry_report.mean_atp_flux > 0.0);
         assert_eq!(reparsed.scheduler_state.stage_clocks.len(), 6);
         let cme = reparsed
             .scheduler_state

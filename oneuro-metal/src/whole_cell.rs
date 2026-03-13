@@ -14672,11 +14672,28 @@ mod tests {
         saved.core.active_ribosomes = 19.0;
         saved.core.dnaa = 9.5;
         saved.core.ftsz = 24.0;
+        saved.core.glucose_mm = 2.2;
+        saved.core.oxygen_mm = 1.6;
+        saved.core.adp_mm = 0.55;
+        saved.core.metabolic_load = 1.32;
+        saved.chemistry_report = LocalChemistryReport::default();
+        saved.chemistry_site_reports.clear();
+        saved.last_md_probe = None;
+        saved.scheduled_subsystem_probes.clear();
+        saved.subsystem_states.clear();
+        saved.md_translation_scale = 1.0;
+        saved.md_membrane_scale = 1.0;
+        saved.lattice.atp.fill(3.0);
+        saved.lattice.amino_acids.fill(2.4);
+        saved.lattice.nucleotides.fill(2.0);
+        saved.lattice.membrane_precursors.fill(1.6);
 
-        let restored = WholeCellSimulator::from_legacy_saved_state_json(
-            &saved_state_to_json(&saved).expect("serialize legacy saved state"),
-        )
-        .expect("restore legacy saved state");
+        let saved_json = saved_state_to_json(&saved).expect("serialize legacy saved state");
+        let expected_saved =
+            parse_legacy_saved_state_json(&saved_json).expect("parse promoted legacy saved state");
+        let expected_chemistry = expected_saved.chemistry_report;
+        let restored =
+            WholeCellSimulator::from_legacy_saved_state_json(&saved_json).expect("restore legacy saved state");
         let snapshot = restored.snapshot();
         let chromosome = restored.chromosome_state();
         let membrane = restored.membrane_division_state();
@@ -14702,6 +14719,10 @@ mod tests {
             .named_complexes_state()
             .iter()
             .any(|complex| complex.family == WholeCellAssemblyFamily::RnaPolymerase));
+        let chemistry = restored
+            .local_chemistry_report()
+            .expect("promoted legacy local chemistry report");
+        assert_eq!(chemistry, expected_chemistry);
         assert!((snapshot.active_rnap - 12.0).abs() < 1.0e-6);
         assert!((snapshot.active_ribosomes - 19.0).abs() < 1.0e-6);
         assert!((snapshot.ftsz - 24.0).abs() < 1.0e-6);
