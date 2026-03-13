@@ -1890,3 +1890,20 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `bundle-less restore now preserves explicit chromosome and membrane state, but the remaining compatibility-only serialization payloads still carry synchronized scalar summaries and need further narrowing`
+
+### 2026-03-12 - Phase 7 / Bundle-Less Diagnostic Boundary Narrowing
+
+- Summary:
+  - changed bundle-less snapshot, save-state, and public diagnostic getters to derive RNAP, ribosome, DnaA, and FtsZ summaries from persisted explicit `complex_assembly` state when present instead of reusing stale surrogate pool scalars
+  - added a regression proving that boundary diagnostics now follow explicit complex assembly state even without bundle assets
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_bundleless_boundary_diagnostics_prefer_explicit_complex_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `bundle-less diagnostic boundaries now prefer explicit complex state, but the remaining compatibility-only serialization payloads still need further narrowing where no richer persisted explicit state exists yet`

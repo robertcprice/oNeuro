@@ -1468,7 +1468,7 @@ impl WholeCellSimulator {
     }
 
     fn current_diagnostic_pool_summaries(&self) -> (f32, f32, f32, f32) {
-        if self.organism_assets.is_some() {
+        if self.organism_assets.is_some() || self.complex_assembly.total_complexes() > 1.0e-6 {
             let inventory = self.assembly_inventory();
             (
                 inventory.ftsz_polymer.clamp(12.0, 384.0),
@@ -11265,6 +11265,36 @@ mod tests {
         assert!((saved.core.active_rnap - 11.0).abs() < 1.0e-6);
         assert!((saved.core.ftsz - 23.0).abs() < 1.0e-6);
         assert!((saved.core.dnaa - 8.0).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_bundleless_boundary_diagnostics_prefer_explicit_complex_state() {
+        let mut sim = WholeCellSimulator::new(WholeCellConfig::default());
+        sim.active_rnap = 1.0;
+        sim.active_ribosomes = 2.0;
+        sim.dnaa = 3.0;
+        sim.ftsz = 4.0;
+        sim.complex_assembly = WholeCellComplexAssemblyState {
+            ribosome_complexes: 17.0,
+            rnap_complexes: 10.0,
+            dnaa_activity: 8.5,
+            ftsz_polymer: 24.0,
+            ..WholeCellComplexAssemblyState::default()
+        };
+
+        let snapshot = sim.snapshot();
+        assert!((sim.ftsz() - 24.0).abs() < 1.0e-6);
+        assert!((snapshot.active_rnap - 10.0).abs() < 1.0e-6);
+        assert!((snapshot.active_ribosomes - 17.0).abs() < 1.0e-6);
+        assert!((snapshot.dnaa - 8.5).abs() < 1.0e-6);
+        assert!((snapshot.ftsz - 24.0).abs() < 1.0e-6);
+
+        let saved = parse_saved_state_json(&sim.save_state_json().expect("serialize saved state"))
+            .expect("parse saved state");
+        assert!((saved.core.active_rnap - 10.0).abs() < 1.0e-6);
+        assert!((saved.core.active_ribosomes - 17.0).abs() < 1.0e-6);
+        assert!((saved.core.dnaa - 8.5).abs() < 1.0e-6);
+        assert!((saved.core.ftsz - 24.0).abs() < 1.0e-6);
     }
 
     #[test]
