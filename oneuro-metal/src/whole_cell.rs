@@ -2612,6 +2612,209 @@ impl WholeCellSimulator {
         })
     }
 
+    fn bundleless_direct_channel_present(&self, channel: WholeCellAssemblyFamily) -> bool {
+        match channel {
+            WholeCellAssemblyFamily::AtpSynthase => {
+                self.named_complexes_have_direct_channel_carrier(|shares| shares.atp_band)
+            }
+            WholeCellAssemblyFamily::Ribosome => {
+                self.named_complexes_have_direct_channel_carrier(|shares| shares.ribosome)
+            }
+            WholeCellAssemblyFamily::RnaPolymerase => {
+                self.named_complexes_have_direct_channel_carrier(|shares| shares.rnap)
+            }
+            WholeCellAssemblyFamily::Replisome => {
+                self.named_complexes_have_direct_channel_carrier(|shares| shares.replisome)
+            }
+            WholeCellAssemblyFamily::Transporter | WholeCellAssemblyFamily::MembraneEnzyme => {
+                self.named_complexes_have_direct_channel_carrier(|shares| shares.membrane)
+            }
+            WholeCellAssemblyFamily::Divisome => {
+                self.named_complexes_have_direct_channel_carrier(|shares| shares.ftsz)
+            }
+            WholeCellAssemblyFamily::ReplicationInitiator => {
+                self.named_complexes_have_direct_channel_carrier(|shares| shares.dnaa)
+            }
+            WholeCellAssemblyFamily::ChaperoneClient | WholeCellAssemblyFamily::Generic => false,
+        }
+    }
+
+    fn unique_bundleless_named_complex_id(&self, base: &str) -> String {
+        if !self.named_complexes.iter().any(|state| state.id == base) {
+            return base.to_string();
+        }
+        let mut suffix = 2usize;
+        loop {
+            let candidate = format!("{base}_{suffix}");
+            if !self.named_complexes.iter().any(|state| state.id == candidate) {
+                return candidate;
+            }
+            suffix += 1;
+        }
+    }
+
+    fn bundleless_named_complex_state(
+        &self,
+        base_id: &str,
+        asset_class: WholeCellAssetClass,
+        family: WholeCellAssemblyFamily,
+        subsystem_targets: Vec<Syn3ASubsystemPreset>,
+        abundance: f32,
+        target_abundance: f32,
+        assembly_rate: f32,
+        degradation_rate: f32,
+    ) -> WholeCellNamedComplexState {
+        let id = self.unique_bundleless_named_complex_id(base_id);
+        let target_abundance = target_abundance.max(abundance);
+        let assembly_progress = if target_abundance > 1.0e-6 {
+            (abundance / target_abundance).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        WholeCellNamedComplexState {
+            id: id.clone(),
+            operon: id,
+            asset_class,
+            family,
+            subsystem_targets,
+            subunit_pool: 0.0,
+            nucleation_intermediate: 0.0,
+            elongation_intermediate: 0.0,
+            abundance,
+            target_abundance,
+            assembly_rate,
+            degradation_rate,
+            nucleation_rate: 0.0,
+            elongation_rate: 0.0,
+            maturation_rate: 0.0,
+            component_satisfaction: 1.0,
+            structural_support: 1.0,
+            assembly_progress,
+            stalled_intermediate: 0.0,
+            damaged_abundance: 0.0,
+            limiting_component_signal: 0.0,
+            shared_component_pressure: 0.0,
+            insertion_progress: 1.0,
+            failure_count: 0.0,
+        }
+    }
+
+    // Compatibility payloads can still arrive with explicit channel totals but
+    // only partial named-complex detail. Promote those missing channels into
+    // generic per-complex carriers so bundle-less execution keeps more of its
+    // state in explicit complex inventory and relies less on aggregate merges.
+    fn supplement_bundleless_named_complex_carriers_from_assembly(&mut self) -> bool {
+        if self.organism_assets.is_some() || self.complex_assembly.total_complexes() <= 1.0e-6 {
+            return false;
+        }
+        let assembly = self.complex_assembly;
+        let mut appended = false;
+        let channels = [
+            (
+                WholeCellAssemblyFamily::AtpSynthase,
+                "legacy_atp_band_complex",
+                WholeCellAssetClass::Energy,
+                vec![Syn3ASubsystemPreset::AtpSynthaseMembraneBand],
+                assembly.atp_band_complexes,
+                assembly.atp_band_target,
+                assembly.atp_band_assembly_rate,
+                assembly.atp_band_degradation_rate,
+            ),
+            (
+                WholeCellAssemblyFamily::Ribosome,
+                "legacy_ribosome_complex",
+                WholeCellAssetClass::Translation,
+                vec![Syn3ASubsystemPreset::RibosomePolysomeCluster],
+                assembly.ribosome_complexes,
+                assembly.ribosome_target,
+                assembly.ribosome_assembly_rate,
+                assembly.ribosome_degradation_rate,
+            ),
+            (
+                WholeCellAssemblyFamily::RnaPolymerase,
+                "legacy_rnap_complex",
+                WholeCellAssetClass::Homeostasis,
+                Vec::new(),
+                assembly.rnap_complexes,
+                assembly.rnap_target,
+                assembly.rnap_assembly_rate,
+                assembly.rnap_degradation_rate,
+            ),
+            (
+                WholeCellAssemblyFamily::Replisome,
+                "legacy_replisome_complex",
+                WholeCellAssetClass::Replication,
+                vec![Syn3ASubsystemPreset::ReplisomeTrack],
+                assembly.replisome_complexes,
+                assembly.replisome_target,
+                assembly.replisome_assembly_rate,
+                assembly.replisome_degradation_rate,
+            ),
+            (
+                WholeCellAssemblyFamily::MembraneEnzyme,
+                "legacy_membrane_complex",
+                WholeCellAssetClass::Membrane,
+                Vec::new(),
+                assembly.membrane_complexes,
+                assembly.membrane_target,
+                assembly.membrane_assembly_rate,
+                assembly.membrane_degradation_rate,
+            ),
+            (
+                WholeCellAssemblyFamily::Divisome,
+                "legacy_divisome_complex",
+                WholeCellAssetClass::Constriction,
+                vec![Syn3ASubsystemPreset::FtsZSeptumRing],
+                assembly.ftsz_polymer,
+                assembly.ftsz_target,
+                assembly.ftsz_assembly_rate,
+                assembly.ftsz_degradation_rate,
+            ),
+            (
+                WholeCellAssemblyFamily::ReplicationInitiator,
+                "legacy_dnaa_complex",
+                WholeCellAssetClass::Replication,
+                Vec::new(),
+                assembly.dnaa_activity,
+                assembly.dnaa_target,
+                assembly.dnaa_assembly_rate,
+                assembly.dnaa_degradation_rate,
+            ),
+        ];
+        for (
+            family,
+            base_id,
+            asset_class,
+            subsystem_targets,
+            abundance,
+            target_abundance,
+            assembly_rate,
+            degradation_rate,
+        ) in channels
+        {
+            if abundance.max(target_abundance) <= 1.0e-6
+                || self.bundleless_direct_channel_present(family)
+            {
+                continue;
+            }
+            self.named_complexes.push(self.bundleless_named_complex_state(
+                base_id,
+                asset_class,
+                family,
+                subsystem_targets,
+                abundance,
+                target_abundance,
+                assembly_rate,
+                degradation_rate,
+            ));
+            appended = true;
+        }
+        if appended {
+            self.complex_assembly = self.aggregate_named_complex_assembly_state_without_assets();
+        }
+        appended
+    }
+
     fn merge_bundleless_assembly_channels(
         &self,
         primary: WholeCellComplexAssemblyState,
@@ -8366,6 +8569,8 @@ impl WholeCellSimulator {
         let saved_has_explicit_membrane_state =
             self.membrane_division_state.preferred_membrane_area_nm2 > 1.0
                 || self.membrane_division_state.membrane_area_nm2 > 1.0;
+        let saved_has_explicit_complex_assembly = self.complex_assembly.total_complexes() > 1.0e-6;
+        let saved_has_explicit_named_complexes = !self.named_complexes.is_empty();
 
         self.time_ms = saved.core.time_ms.max(0.0);
         self.step_count = saved.core.step_count;
@@ -8468,6 +8673,9 @@ impl WholeCellSimulator {
                 };
             } else if self.complex_assembly.total_complexes() <= 1.0e-6 {
                 self.initialize_complex_assembly_state();
+            }
+            if saved_has_explicit_named_complexes || saved_has_explicit_complex_assembly {
+                self.supplement_bundleless_named_complex_carriers_from_assembly();
             }
         }
         self.refresh_spatial_fields();
@@ -8663,6 +8871,12 @@ impl WholeCellSimulator {
     pub fn from_program_spec(spec: WholeCellProgramSpec) -> Self {
         let config = spec.config.clone();
         let local_chemistry = spec.local_chemistry.clone();
+        let spec_has_explicit_named_complexes = !spec.named_complexes.is_empty();
+        let spec_has_explicit_complex_assembly = spec
+            .complex_assembly
+            .as_ref()
+            .map(|state| state.total_complexes() > 1.0e-6)
+            .unwrap_or(false);
         let mut simulator = Self::new(config);
         simulator.program_name = spec.program_name.clone();
         simulator.contract = spec.contract.clone();
@@ -8819,6 +9033,11 @@ impl WholeCellSimulator {
             }
         } else if simulator.complex_assembly.total_complexes() <= 1.0e-6 {
             simulator.initialize_complex_assembly_state();
+        }
+        if simulator.organism_assets.is_none()
+            && (spec_has_explicit_named_complexes || spec_has_explicit_complex_assembly)
+        {
+            simulator.supplement_bundleless_named_complex_carriers_from_assembly();
         }
 
         // Preserve explicit runtime chemistry state when the caller already has
@@ -14508,6 +14727,124 @@ mod tests {
     }
 
     #[test]
+    fn test_bundleless_restore_supplements_missing_named_complex_carriers_from_assembly() {
+        let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
+        let mut saved = parse_saved_state_json(
+            &simulator
+                .save_state_json()
+                .expect("serialize explicit saved state"),
+        )
+        .expect("parse explicit saved state");
+        saved.organism_data_ref = None;
+        saved.organism_data = None;
+        saved.organism_assets = None;
+        saved.named_complexes = vec![WholeCellNamedComplexState {
+            id: "rnap".to_string(),
+            operon: "rnap".to_string(),
+            asset_class: WholeCellAssetClass::Homeostasis,
+            family: WholeCellAssemblyFamily::RnaPolymerase,
+            subsystem_targets: Vec::new(),
+            subunit_pool: 0.0,
+            nucleation_intermediate: 0.0,
+            elongation_intermediate: 0.0,
+            abundance: 11.0,
+            target_abundance: 12.0,
+            assembly_rate: 0.9,
+            degradation_rate: 0.15,
+            nucleation_rate: 0.0,
+            elongation_rate: 0.0,
+            maturation_rate: 0.0,
+            component_satisfaction: 1.0,
+            structural_support: 1.0,
+            assembly_progress: 0.0,
+            stalled_intermediate: 0.0,
+            damaged_abundance: 0.0,
+            limiting_component_signal: 0.0,
+            shared_component_pressure: 0.0,
+            insertion_progress: 1.0,
+            failure_count: 0.0,
+        }];
+        saved.complex_assembly = WholeCellComplexAssemblyState {
+            atp_band_complexes: 7.0,
+            ribosome_complexes: 18.0,
+            rnap_complexes: 11.0,
+            replisome_complexes: 6.5,
+            membrane_complexes: 9.0,
+            ftsz_polymer: 23.0,
+            dnaa_activity: 8.0,
+            atp_band_target: 8.0,
+            ribosome_target: 19.0,
+            rnap_target: 12.0,
+            replisome_target: 7.0,
+            membrane_target: 10.0,
+            ftsz_target: 24.0,
+            dnaa_target: 8.5,
+            atp_band_assembly_rate: 0.7,
+            ribosome_assembly_rate: 1.1,
+            rnap_assembly_rate: 0.9,
+            replisome_assembly_rate: 0.8,
+            membrane_assembly_rate: 0.6,
+            ftsz_assembly_rate: 1.0,
+            dnaa_assembly_rate: 0.5,
+            atp_band_degradation_rate: 0.1,
+            ribosome_degradation_rate: 0.2,
+            rnap_degradation_rate: 0.15,
+            replisome_degradation_rate: 0.1,
+            membrane_degradation_rate: 0.08,
+            ftsz_degradation_rate: 0.12,
+            dnaa_degradation_rate: 0.05,
+        };
+
+        let restored = WholeCellSimulator::from_saved_state_json(
+            &saved_state_to_json(&saved).expect("serialize stripped saved state"),
+        )
+        .expect("restore stripped saved state");
+
+        assert!(restored.organism_assets.is_none());
+        assert!(restored.named_complexes_state().len() > saved.named_complexes.len());
+        assert!(restored
+            .named_complexes_state()
+            .iter()
+            .any(|state| state.id == "legacy_ribosome_complex"));
+        assert!(restored
+            .named_complexes_state()
+            .iter()
+            .any(|state| state.id == "legacy_replisome_complex"));
+        assert!(restored
+            .named_complexes_state()
+            .iter()
+            .any(|state| state.id == "legacy_membrane_complex"));
+        assert!(restored
+            .named_complexes_state()
+            .iter()
+            .any(|state| state.id == "legacy_divisome_complex"));
+        assert!(restored
+            .named_complexes_state()
+            .iter()
+            .any(|state| state.id == "legacy_dnaa_complex"));
+
+        let aggregate = restored.aggregate_named_complex_assembly_state_without_assets();
+        let inventory = restored.assembly_inventory();
+        assert!((inventory.ribosome_complexes - aggregate.ribosome_complexes).abs() < 1.0e-6);
+        assert!((inventory.replisome_complexes - aggregate.replisome_complexes).abs() < 1.0e-6);
+        assert!((inventory.membrane_complexes - aggregate.membrane_complexes).abs() < 1.0e-6);
+        assert!((inventory.ftsz_polymer - aggregate.ftsz_polymer).abs() < 1.0e-6);
+        assert!((inventory.dnaa_activity - aggregate.dnaa_activity).abs() < 1.0e-6);
+
+        let boundary = parse_saved_state_json(
+            &restored
+                .save_state_json()
+                .expect("serialize restored bundle-less state"),
+        )
+        .expect("parse restored bundle-less state");
+        assert!(boundary.named_complexes.len() > saved.named_complexes.len());
+        assert!(boundary
+            .named_complexes
+            .iter()
+            .any(|state| state.id == "legacy_dnaa_complex"));
+    }
+
+    #[test]
     fn test_bundleless_restore_synthesizes_expression_from_runtime_process_state() {
         let simulator = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
         let mut saved = parse_saved_state_json(
@@ -14537,15 +14874,20 @@ mod tests {
                 _ => {}
             }
         }
-        let target_operon = operon_rna_counts
+        let mut operon_candidates = operon_rna_counts
             .iter()
-            .find_map(|(operon, rna_count)| {
+            .filter_map(|(operon, rna_count)| {
                 if *rna_count > 0 && operon_protein_counts.get(operon).copied().unwrap_or(0) > 0 {
                     Some(operon.clone())
                 } else {
                     None
                 }
             })
+            .collect::<Vec<_>>();
+        operon_candidates.sort();
+        let target_operon = operon_candidates
+            .into_iter()
+            .next()
             .expect("runtime operon with RNA and protein species");
 
         let mut expected_transcript = 0.0f32;

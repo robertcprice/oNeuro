@@ -2236,3 +2236,24 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `legacy compatibility is narrower again, but a few generic assembly or expression carriers and the last summary-only probe or chemistry outputs still need direct explicit persisted carriers before synchronized summary payloads disappear completely`
+
+### 2026-03-13 - Phase 7 / Bundle-Less Named-Complex Carrier Promotion
+
+- Summary:
+  - added a bundle-less runtime promotion path that supplements missing direct named-complex carriers from explicit aggregate `complex_assembly` channels when bundle assets are absent, so partial compatibility payloads keep more assembly inventory in explicit per-complex state instead of merge-time aggregate fallback
+  - applied that promotion during both program-spec bootstrap and saved-state restore, then re-aggregated explicit bundle-less assembly inventory from the resulting per-complex carriers so asset-free compatibility paths persist richer assembly state across runtime and serialization boundaries
+  - stabilized the bundle-less expression regression by making its target-operon selection deterministic, removing the hash-order-dependent full-suite flake while keeping the runtime behavior under test unchanged
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+- Tests run:
+  - `cargo test -q test_bundleless_restore_supplements_missing_named_complex_carriers_from_assembly --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_from_program_spec_preserves_explicit_complex_assembly_without_assets --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_bundleless_restore_preserves_explicit_expression_runtime_and_named_complex_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q test_bundleless_restore_synthesizes_expression_from_runtime_process_state --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `legacy compatibility is narrower again, but a few residual expression carriers and the last summary-only probe or chemistry outputs still need direct explicit persisted carriers before synchronized summary payloads disappear completely`
