@@ -1440,9 +1440,15 @@ pub struct WholeCellProgramSpec {
     #[serde(default)]
     pub organism_expression: Option<WholeCellOrganismExpressionState>,
     #[serde(default)]
+    pub organism_species: Option<Vec<WholeCellSpeciesRuntimeState>>,
+    #[serde(default)]
+    pub organism_reactions: Option<Vec<WholeCellReactionRuntimeState>>,
+    #[serde(default)]
     pub complex_assembly: Option<WholeCellComplexAssemblyState>,
     #[serde(default)]
     pub named_complexes: Vec<WholeCellNamedComplexState>,
+    #[serde(default)]
+    pub scheduler_state: Option<WholeCellSchedulerState>,
     pub config: WholeCellConfig,
     pub initial_lattice: WholeCellInitialLatticeSpec,
     pub initial_state: WholeCellInitialStateSpec,
@@ -5457,8 +5463,11 @@ fn build_program_spec_from_organism(
         chromosome_state: None,
         membrane_division_state: None,
         organism_expression: None,
+        organism_species: None,
+        organism_reactions: None,
         complex_assembly: None,
         named_complexes: Vec::new(),
+        scheduler_state: None,
         config: WholeCellConfig::default(),
         initial_lattice: WholeCellInitialLatticeSpec {
             atp: pool_concentration_for_field(&organism.pools, WholeCellBulkField::ATP, 1.2),

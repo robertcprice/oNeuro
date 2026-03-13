@@ -7970,8 +7970,27 @@ impl WholeCellSimulator {
         } else if simulator.complex_assembly.total_complexes() <= 1.0e-6 {
             simulator.initialize_complex_assembly_state();
         }
-        simulator.initialize_runtime_process_state();
-        simulator.refresh_multirate_scheduler();
+
+        // Preserve explicit runtime chemistry state when the caller already has
+        // concrete species and reaction counts. If either side is missing, fall back
+        // to registry-driven bootstrap so the pair stays internally consistent.
+        simulator.organism_species = spec.organism_species.unwrap_or_default();
+        simulator.normalize_runtime_species_bulk_fields();
+        simulator.organism_reactions = spec.organism_reactions.unwrap_or_default();
+        if simulator.organism_species.is_empty() || simulator.organism_reactions.is_empty() {
+            simulator.initialize_runtime_process_state();
+        }
+
+        // Preserve explicit multirate clocks when they are supplied with the program
+        // spec. Unlike the descriptor-driven default path, these clocks may already
+        // encode caller-managed due steps and run counts, so we only recompute them
+        // when the program spec omits a scheduler payload entirely.
+        if let Some(scheduler_state) = spec.scheduler_state {
+            simulator.scheduler_state =
+                Self::normalized_scheduler_state(&simulator.config, scheduler_state);
+        } else {
+            simulator.refresh_multirate_scheduler();
+        }
         simulator.initialize_surrogate_pool_diagnostics();
         simulator
     }
@@ -12753,6 +12772,63 @@ mod tests {
         assert_eq!(restored.transcription_units.len(), 1);
         assert_eq!(restored.transcription_units[0].name, "synthetic_unit");
         assert!((restored.transcription_units[0].transcript_abundance - 7.0).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn test_from_program_spec_preserves_explicit_runtime_process_and_scheduler_state() {
+        let mut spec = bundled_syn3a_program_spec().expect("bundled Syn3A program spec");
+        let seeded = WholeCellSimulator::bundled_syn3a_reference().expect("bundled Syn3A");
+
+        let mut species = seeded.organism_species.clone();
+        species[0].count = 123.0;
+        species[0].anchor_count = 17.0;
+        species[0].synthesis_rate = 0.44;
+        species[0].turnover_rate = 0.12;
+
+        let mut reactions = seeded.organism_reactions.clone();
+        reactions[0].current_flux = 0.81;
+        reactions[0].cumulative_extent = 4.5;
+        reactions[0].reactant_satisfaction = 0.73;
+        reactions[0].catalyst_support = 1.24;
+
+        let mut scheduler_state = seeded.scheduler_state.clone();
+        let cme_clock = scheduler_state
+            .stage_clocks
+            .iter_mut()
+            .find(|clock| clock.stage == WholeCellSolverStage::Cme)
+            .expect("CME clock");
+        cme_clock.dynamic_interval_steps = 7;
+        cme_clock.next_due_step = 19;
+        cme_clock.run_count = 3;
+        cme_clock.last_run_step = Some(12);
+        cme_clock.last_run_time_ms = 6.5;
+
+        spec.organism_species = Some(species.clone());
+        spec.organism_reactions = Some(reactions.clone());
+        spec.scheduler_state = Some(scheduler_state.clone());
+
+        let simulator = WholeCellSimulator::from_program_spec(spec);
+        let restored_cme_clock = simulator
+            .scheduler_clock(WholeCellSolverStage::Cme)
+            .expect("restored CME clock");
+
+        assert_eq!(simulator.organism_species.len(), species.len());
+        assert_eq!(simulator.organism_reactions.len(), reactions.len());
+        assert_eq!(simulator.organism_species[0].id, species[0].id);
+        assert!((simulator.organism_species[0].count - 123.0).abs() < 1.0e-6);
+        assert!((simulator.organism_species[0].anchor_count - 17.0).abs() < 1.0e-6);
+        assert!((simulator.organism_species[0].synthesis_rate - 0.44).abs() < 1.0e-6);
+        assert!((simulator.organism_species[0].turnover_rate - 0.12).abs() < 1.0e-6);
+        assert_eq!(simulator.organism_reactions[0].id, reactions[0].id);
+        assert!((simulator.organism_reactions[0].current_flux - 0.81).abs() < 1.0e-6);
+        assert!((simulator.organism_reactions[0].cumulative_extent - 4.5).abs() < 1.0e-6);
+        assert!((simulator.organism_reactions[0].reactant_satisfaction - 0.73).abs() < 1.0e-6);
+        assert!((simulator.organism_reactions[0].catalyst_support - 1.24).abs() < 1.0e-6);
+        assert_eq!(restored_cme_clock.dynamic_interval_steps, 7);
+        assert_eq!(restored_cme_clock.next_due_step, 19);
+        assert_eq!(restored_cme_clock.run_count, 3);
+        assert_eq!(restored_cme_clock.last_run_step, Some(12));
+        assert!((restored_cme_clock.last_run_time_ms - 6.5).abs() < 1.0e-6);
     }
 
     #[test]

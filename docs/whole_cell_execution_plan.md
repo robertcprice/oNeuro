@@ -52,6 +52,7 @@ What is already built on the active path:
 - bundle-less snapshot, save-state, and public diagnostic getters now also derive RNAP, ribosome, DnaA, and FtsZ summaries from persisted explicit `complex_assembly` state instead of stale surrogate pool scalars when no bundle assets are present
 - program-spec bootstrap can now carry and preserve explicit `complex_assembly` or per-complex `named_complexes`, so non-saved-state initialization no longer has to reseed assembly and diagnostic state when explicit inventory is already provided
 - program-spec bootstrap can now also carry explicit organism-expression state, so transcription-unit execution state and cached process-scale support no longer have to be regenerated from organism descriptors when a caller already has explicit expression state
+- program-spec bootstrap can now also carry explicit runtime species, runtime reactions, and scheduler clocks, so non-saved-state initialization no longer has to regenerate runtime chemistry state or multirate clock state when those layers are already available
 
 What is still not at the target:
 
@@ -160,7 +161,7 @@ These rules are operational, not aspirational.
 
 This is the direct task ladder from the current runtime to the full vision. The detailed work packages below remain authoritative; this section is the execution-facing todo.
 
-1. Remove the remaining compatibility-only summary payload rollups and legacy serialization bridges, so synchronized scalar summaries become boundary serialization or diagnostics only and not live execution state even on compatibility paths without bundle assets or saved-state payloads.
+1. Remove the remaining compatibility-only summary payload rollups and legacy serialization bridges, so synchronized scalar summaries become boundary serialization or diagnostics only and not live execution state even on compatibility paths without bundle assets or saved-state payloads. Program-spec bootstrap now preserves explicit expression, assembly, runtime chemistry, and scheduler state; the remaining work is the narrower legacy compatibility surface.
 2. Replace any remaining uses of scalar-rule inventory priors in non-asset compatibility code with persisted explicit state or explicit local inventories wherever possible.
 3. Expand compiled species/reaction coverage for metabolites, ions, cofactors, lipids, damage states, repair states, and membrane-local species beyond the current narrow bundle set.
 4. Move more reaction execution from generic process scales into explicit registry-driven reaction families with direct ownership of pools, transcripts, proteins, complexes, and local fields.
