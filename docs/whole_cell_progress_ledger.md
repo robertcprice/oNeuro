@@ -2467,3 +2467,23 @@ Use this ledger to record completed work packages from `docs/whole_cell_executio
   - `none`
 - Remaining blockers:
   - `whole_cell.rs is still too large, with chromosome/polymer dynamics, assembly/runtime-chemistry execution, and bootstrap/serialization boundaries still concentrated in the main runtime file`
+
+### 2026-03-14 - Phase 7 / Whole-Cell Runtime Chromosome Modularization
+
+- Summary:
+  - extracted chromosome and polymer-state mechanics into `oneuro-metal/src/whole_cell/chromosome.rs`, so fork progression, chromosome-domain lookup, and locus-state logic no longer sit inline in the main runtime file
+  - moved chromosome-derived geometry support and chromosome accessors behind the same subsystem boundary, keeping explicit chromosome state and its derived genome, replication, and separation signals together
+  - updated the execution plan so the active modularization ladder now reflects that chromosome/polymer is split out and the next remaining structural cuts are assembly/runtime chemistry and bootstrap/serialization
+- Files changed:
+  - `docs/whole_cell_execution_plan.md`
+  - `docs/whole_cell_progress_ledger.md`
+  - `oneuro-metal/src/whole_cell.rs`
+  - `oneuro-metal/src/whole_cell/chromosome.rs`
+- Tests run:
+  - `cargo fmt --all --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell_data --manifest-path oneuro-metal/Cargo.toml`
+  - `cargo test -q whole_cell --manifest-path oneuro-metal/Cargo.toml`
+- Artifacts produced:
+  - `none`
+- Remaining blockers:
+  - `whole_cell.rs is still too large, with assembly/runtime-chemistry execution and bootstrap/serialization boundaries still concentrated in the main runtime file`
